@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2
+
+- Fix on-device OCR model path staging on Windows so the downloaded PP-OCR
+  ONNX model resolves correctly.
+
 ## 1.2.1
 
 - Add a package example and shorten the pubspec description for pub.dev
