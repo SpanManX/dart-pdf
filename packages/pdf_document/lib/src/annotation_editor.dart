@@ -1262,12 +1262,24 @@ extension PdfAnnotationEditing on PdfEditor {
     String? author,
     String? name,
   }) {
+    // When the text contains non-Latin-1 characters and the font is a
+    // standard base-14 face (which only supports WinAnsi encoding), wrap it
+    // in a PdfUnicodeFont — a lightweight Type0 Identity-H font that encodes
+    // characters as 2-byte Unicode code points. The renderer substitutes a
+    // system font that covers the full Unicode range.
+    PdfUnicodeFont? unicodeFont;
+    if (font is PdfStandardFont &&
+        text.codeUnits.any((c) => c > 0xFF)) {
+      unicodeFont = PdfUnicodeFont(font);
+      unicodeFont.resetUsage();
+    }
+    final effectiveFont = unicodeFont ?? font;
     // The font accumulates which glyphs the appearance shows (so an
     // embedded font's /W and /ToUnicode cover exactly them); start fresh.
     if (font is PdfEmbeddedFont) font.resetUsage();
     final w = _freeTextContent(rect, text,
         fontSize: fontSize,
-        font: font,
+        font: effectiveFont,
         textDirection: textDirection,
         color: color,
         fillColor: fillColor,
@@ -1279,7 +1291,7 @@ extension PdfAnnotationEditing on PdfEditor {
         ContentWriter.rgbComponents(c).map(ContentWriter.fmt).join(' ');
     final da = '${rgb(color)} rg '
         '${borderColor != null ? '${rgb(borderColor)} RG ' : ''}'
-        '/${font.resourceName} ${ContentWriter.fmt(fontSize)} Tf';
+        '/${effectiveFont.resourceName} ${ContentWriter.fmt(fontSize)} Tf';
     final dict = _markupDict('FreeText', rect, fillColor ?? color, text, author)
       ..['DA'] = CosString.fromText(da)
       ..['Q'] = CosInteger(
@@ -1287,9 +1299,14 @@ extension PdfAnnotationEditing on PdfEditor {
     if (borderColor != null && borderWidth > 0) {
       dict['BS'] = _borderStyle(borderWidth);
     }
-    final fontResource = font is PdfEmbeddedFont
-        ? font.buildResource(_updater.addObject)
-        : _standardFont(font as PdfStandardFont);
+    final CosDictionary fontResource;
+    if (unicodeFont != null) {
+      fontResource = unicodeFont.buildResource(_updater.addObject);
+    } else if (font is PdfEmbeddedFont) {
+      fontResource = font.buildResource(_updater.addObject);
+    } else {
+      fontResource = _standardFont(font as PdfStandardFont);
+    }
     _addAnnotation(
       pageIndex,
       dict,
@@ -1323,17 +1340,30 @@ extension PdfAnnotationEditing on PdfEditor {
     ];
     if (nonEmpty.isEmpty) return;
     final text = nonEmpty.map((run) => run.text).join();
-    for (final font in _richFonts(nonEmpty)) {
+    // Wrap standard fonts in PdfUnicodeFont for runs with non-Latin text.
+    final effective = [
+      for (final run in nonEmpty)
+        if (run.font is PdfStandardFont &&
+            run.text.codeUnits.any((c) => c > 0xFF))
+          PdfFreeTextRun(run.text,
+              font: PdfUnicodeFont(run.font as PdfStandardFont)
+                ..resetUsage(),
+              fontSize: run.fontSize,
+              color: run.color)
+        else
+          run,
+    ];
+    for (final font in _richFonts(effective)) {
       if (font is PdfEmbeddedFont) font.resetUsage();
     }
-    final w = _freeTextRichContent(rect, nonEmpty,
+    final w = _freeTextRichContent(rect, effective,
         textDirection: textDirection,
         fillColor: fillColor,
         borderColor: borderColor,
         borderWidth: borderWidth,
         pageRotation: pageRotation);
 
-    final first = nonEmpty.first;
+    final first = effective.first;
     String rgb(int c) =>
         ContentWriter.rgbComponents(c).map(ContentWriter.fmt).join(' ');
     final da = '${rgb(first.color)} rg '
@@ -1350,7 +1380,8 @@ extension PdfAnnotationEditing on PdfEditor {
     _addAnnotation(
       pageIndex,
       dict,
-      _form(rect, w, resources: _resources(font: _richFontResources(nonEmpty))),
+      _form(rect, w,
+          resources: _resources(font: _richFontResources(effective))),
       name: name,
     );
   }
@@ -1412,11 +1443,18 @@ extension PdfAnnotationEditing on PdfEditor {
           : vr.left + pad;
       final y = firstY - i * fontSize * 1.2;
       w.textAt(x - prevX, y - prevY);
-      final visual = pdfVisualText(line, resolvedDirection);
-      if (font is PdfEmbeddedFont) {
-        w.showGlyphHex(font.encodeHex(visual));
+      if (font is PdfUnicodeFont) {
+        // Logical order: our renderer's TextPainter applies BiDi and shaping
+        // correctly; visual-order text would double-reverse and break Arabic
+        // contextual forms.
+        w.showGlyphHex(font.encodeHex(line));
       } else {
-        w.showText(visual);
+        final visual = pdfVisualText(line, resolvedDirection);
+        if (font is PdfEmbeddedFont) {
+          w.showGlyphHex(font.encodeHex(visual));
+        } else {
+          w.showText(visual);
+        }
       }
       prevX = x;
       prevY = y;
@@ -1489,13 +1527,17 @@ extension PdfAnnotationEditing on PdfEditor {
           : line.runs;
       for (final run in drawRuns) {
         final style = run.style;
-        final visual = pdfVisualText(run.text, resolvedDirection);
+        final isUnicode = style.font is PdfUnicodeFont;
+        final visual =
+            isUnicode ? run.text : pdfVisualText(run.text, resolvedDirection);
         final width = style.font.measure(visual, style.fontSize);
         w
           ..font(style.font.resourceName, style.fontSize)
           ..fillColor(style.color)
           ..textAt(x - prevX, y - prevY);
-        if (style.font is PdfEmbeddedFont) {
+        if (isUnicode) {
+          w.showGlyphHex((style.font as PdfUnicodeFont).encodeHex(run.text));
+        } else if (style.font is PdfEmbeddedFont) {
           w.showGlyphHex((style.font as PdfEmbeddedFont).encodeHex(visual));
         } else {
           w.showText(visual);
@@ -1555,9 +1597,14 @@ extension PdfAnnotationEditing on PdfEditor {
   CosDictionary _richFontResources(List<PdfFreeTextRun> runs) {
     final dict = CosDictionary();
     for (final font in _richFonts(runs)) {
-      final resource = font is PdfEmbeddedFont
-          ? font.buildResource(_updater.addObject)
-          : _standardFont(font as PdfStandardFont);
+      final CosDictionary resource;
+      if (font is PdfEmbeddedFont) {
+        resource = font.buildResource(_updater.addObject);
+      } else if (font is PdfUnicodeFont) {
+        resource = font.buildResource(_updater.addObject);
+      } else {
+        resource = _standardFont(font as PdfStandardFont);
+      }
       dict.entries.addAll(resource.entries);
     }
     return dict;
@@ -2398,19 +2445,29 @@ extension PdfAnnotationEditing on PdfEditor {
       case 'FreeText':
         final style = annotation.freeTextStyle;
         if (style == null) return false;
-        final font = PdfStandardFont.tryFromName(style.fontName);
-        if (font == null) return false;
-        final w = _freeTextContent(to, annotation.contents ?? '',
+        final stdFont = PdfStandardFont.tryFromName(style.fontName);
+        if (stdFont == null) return false;
+        final text = annotation.contents ?? '';
+        PdfUnicodeFont? unicodeFont;
+        if (text.codeUnits.any((c) => c > 0xFF)) {
+          unicodeFont = PdfUnicodeFont(stdFont);
+          unicodeFont.resetUsage();
+        }
+        final PdfTextFont effectiveFont = unicodeFont ?? stdFont;
+        final w = _freeTextContent(to, text,
             fontSize: style.fontSize,
-            font: font,
+            font: effectiveFont,
             textDirection: _annotationTextDirection(annotation),
             color: style.color,
             fillColor: style.fillColor,
             borderColor: style.borderColor,
             borderWidth: style.borderWidth,
             pageRotation: pageRotation);
+        final CosDictionary fontResource = unicodeFont != null
+            ? unicodeFont.buildResource(_updater.addObject)
+            : _standardFont(stdFont);
         _replaceAppearance(dict, form, to, w,
-            resources: _resources(font: _standardFont(font)));
+            resources: _resources(font: fontResource));
         return true;
       case 'Line':
         final line = annotation.line;

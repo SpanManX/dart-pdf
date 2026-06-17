@@ -248,6 +248,127 @@ void main() {
     expect(content, isNot(contains('(abc 123 def) Tj')));
   });
 
+  test('free text encodes non-Latin-1 characters via Type0 Unicode font', () {
+    const text = 'hello مرحبا world';
+    final doc = roundTrip((e) => e.addFreeText(
+          0,
+          const PdfRect(72, 600, 300, 640),
+          text,
+        ));
+    final ft = doc.page(0).annotations.single;
+    // /Contents preserves the original text via UTF-16BE
+    expect(ft.contents, text);
+    // the appearance stream uses hex-encoded glyph IDs, not literal text
+    final content = appearanceText(doc, ft);
+    expect(content, isNot(contains('?')));
+    expect(content, isNot(contains('(hello')));
+    // hex-encoded content uses <...> Tj
+    expect(content, contains('Tj'));
+    // the font resource should be a Type0 font with Identity-H encoding
+    final form = ft.normalAppearance!;
+    final res =
+        doc.cos.resolve(form.dictionary['Resources']) as CosDictionary;
+    final fonts = doc.cos.resolve(res['Font']) as CosDictionary;
+    final f1 = doc.cos.resolve(fonts['F1']) as CosDictionary;
+    expect((f1['Subtype'] as CosName).value, 'Type0');
+    expect((f1['Encoding'] as CosName).value, 'Identity-H');
+    // /ToUnicode CMap must exist for text extraction
+    expect(f1['ToUnicode'], isNotNull);
+  });
+
+  test('RTL free text uses logical order (no visual reversal)', () {
+    const text = 'ـب';
+    final doc = roundTrip((e) => e.addFreeText(
+          0,
+          const PdfRect(72, 600, 200, 640),
+          text,
+        ));
+    final content = appearanceText(doc, doc.page(0).annotations.single);
+    // PdfUnicodeFont keeps text in logical order so the renderer's BiDi
+    // and shaping produce correct Arabic contextual forms; no ActualText
+    // is needed because the ToUnicode CMap already maps to logical Unicode.
+    expect(content, isNot(contains('ActualText')));
+    // hex-encoded logical-order text
+    final hex = text.runes
+        .map((r) => r.toRadixString(16).padLeft(4, '0'))
+        .join();
+    expect(content, contains(hex));
+  });
+
+  test('supplementary-plane characters encode correctly', () {
+    // U+1F600 (😀) is above U+FFFF
+    const text = '😀مرحبا';
+    final doc = roundTrip((e) => e.addFreeText(
+          0,
+          const PdfRect(72, 600, 200, 640),
+          text,
+        ));
+    final content = appearanceText(doc, doc.page(0).annotations.single);
+    // no ActualText needed — logical order in content stream
+    expect(content, isNot(contains('ActualText')));
+    expect(content, contains('Tj'));
+  });
+
+  test('rich free text encodes non-Latin runs via Type0 Unicode font', () {
+    final doc = roundTrip((e) => e.addFreeTextRich(
+          0,
+          const PdfRect(72, 600, 400, 660),
+          [
+            const PdfFreeTextRun('Hello '),
+            const PdfFreeTextRun('مرحبا', color: 0xFF0000),
+          ],
+        ));
+    final ft = doc.page(0).annotations.single;
+    expect(ft.contents, 'Hello مرحبا');
+    final content = appearanceText(doc, ft);
+    // the Arabic run uses hex-encoded glyph IDs
+    expect(content, isNot(contains('?')));
+    expect(content, contains('Tj'));
+    // the font resource dict should contain F1 (Type0 for Arabic run)
+    final form = ft.normalAppearance!;
+    final res =
+        doc.cos.resolve(form.dictionary['Resources']) as CosDictionary;
+    final fonts = doc.cos.resolve(res['Font']) as CosDictionary;
+    final f1 = doc.cos.resolve(fonts['F1']) as CosDictionary;
+    expect((f1['Subtype'] as CosName).value, 'Type0');
+  });
+
+  test('rich free text with RTL runs uses logical order', () {
+    final doc = roundTrip((e) => e.addFreeTextRich(
+          0,
+          const PdfRect(72, 600, 400, 660),
+          [
+            const PdfFreeTextRun('مرحبا', color: 0xFF0000),
+            const PdfFreeTextRun(' عالم'),
+          ],
+        ));
+    final content = appearanceText(doc, doc.page(0).annotations.single);
+    // PdfUnicodeFont: logical order, no ActualText
+    expect(content, isNot(contains('ActualText')));
+  });
+
+  test('resizing a non-Latin free text regenerates with Unicode font', () {
+    final editor = PdfEditor(PdfDocument.open(buildClassicPdf()));
+    editor.addFreeText(0, const PdfRect(72, 600, 300, 640), 'مرحبا');
+    // round-trip so the annotation is parseable from the saved bytes
+    final saved = PdfDocument.open(editor.save());
+    final editor2 = PdfEditor(saved);
+    final annot = saved.page(0).annotations.single;
+    editor2.resizeAnnotation(0, annot, const PdfRect(72, 580, 350, 640));
+    final doc = PdfDocument.open(editor2.save());
+    final ft = doc.page(0).annotations.single;
+    expect(ft.rect, const PdfRect(72, 580, 350, 640));
+    final content = appearanceText(doc, ft);
+    expect(content, isNot(contains('?')));
+    expect(content, contains('Tj'));
+    final form = ft.normalAppearance!;
+    final res =
+        doc.cos.resolve(form.dictionary['Resources']) as CosDictionary;
+    final fonts = doc.cos.resolve(res['Font']) as CosDictionary;
+    final f1 = doc.cos.resolve(fonts['F1']) as CosDictionary;
+    expect((f1['Subtype'] as CosName).value, 'Type0');
+  });
+
   test('free text takes a standard serif or monospace font', () {
     final doc = roundTrip((e) {
       e.addFreeText(0, const PdfRect(72, 600, 240, 680), 'Serif text',
