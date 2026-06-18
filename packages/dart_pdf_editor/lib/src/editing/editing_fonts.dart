@@ -20,10 +20,12 @@ class PdfBundledFont {
   final String assetKey;
 }
 
-/// The full-Unicode fonts bundled with the editor — a sans, serif, and
-/// monospace face that cover Latin, Cyrillic, Greek and more, so users get
-/// a richer choice than the base-14 set out of the box (custom `.ttf`/
-/// `.otf` files extend it further via a [PdfFontPicker]).
+/// The fonts bundled with the editor — the DejaVu trio (sans, serif and
+/// monospace covering Latin, Cyrillic, Greek and more) plus a few extra
+/// faces for stylistic range: Fira Sans (humanist sans), Spectral (a
+/// refined serif) and Lobster (a display script). Users get a richer
+/// choice than the base-14 set out of the box, and custom `.ttf`/`.otf`
+/// files extend it further via a [PdfFontPicker].
 const List<PdfBundledFont> pdfBundledFonts = [
   PdfBundledFont(
       'DejaVu Sans', 'packages/dart_pdf_editor/assets/fonts/DejaVuSans.ttf'),
@@ -31,6 +33,12 @@ const List<PdfBundledFont> pdfBundledFonts = [
       'DejaVu Serif', 'packages/dart_pdf_editor/assets/fonts/DejaVuSerif.ttf'),
   PdfBundledFont('DejaVu Sans Mono',
       'packages/dart_pdf_editor/assets/fonts/DejaVuSansMono.ttf'),
+  PdfBundledFont(
+      'Fira Sans', 'packages/dart_pdf_editor/assets/fonts/FiraSans-Regular.ttf'),
+  PdfBundledFont(
+      'Spectral', 'packages/dart_pdf_editor/assets/fonts/Spectral-Regular.ttf'),
+  PdfBundledFont(
+      'Lobster', 'packages/dart_pdf_editor/assets/fonts/Lobster-Regular.ttf'),
 ];
 
 final Map<String, Uint8List> _bundledCache = {};

@@ -36,12 +36,16 @@ dev_dependencies:
     sdk: flutter
 
 flutter:
-  # Bundled full-Unicode fonts offered by the font menu (DejaVu, a
-  # permissive Bitstream Vera / Arev licence — see assets/fonts/).
+  # Bundled fonts offered by the font menu. DejaVu is a permissive
+  # Bitstream Vera / Arev licence; Fira Sans, Spectral and Lobster are
+  # SIL Open Font Licence — see the *-LICENSE.txt files in assets/fonts/.
   assets:
     - assets/fonts/DejaVuSans.ttf
     - assets/fonts/DejaVuSerif.ttf
     - assets/fonts/DejaVuSansMono.ttf
+    - assets/fonts/FiraSans-Regular.ttf
+    - assets/fonts/Spectral-Regular.ttf
+    - assets/fonts/Lobster-Regular.ttf
   fonts:
     - family: DejaVu Sans
       fonts:
@@ -52,3 +56,12 @@ flutter:
     - family: DejaVu Sans Mono
       fonts:
         - asset: assets/fonts/DejaVuSansMono.ttf
+    - family: Fira Sans
+      fonts:
+        - asset: assets/fonts/FiraSans-Regular.ttf
+    - family: Spectral
+      fonts:
+        - asset: assets/fonts/Spectral-Regular.ttf
+    - family: Lobster
+      fonts:
+        - asset: assets/fonts/Lobster-Regular.ttf
