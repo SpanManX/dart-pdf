@@ -2955,3 +2955,24 @@ ladder works: first Escape commits the box and keeps the tool armed; the
 second reaches the viewer's `_onEscape` and disarms the tool to none (`tool =
 null`, the existing back-out step — not the select tool). Test: "two escapes:
 first commits the box, second backs out the tool".
+
+### Configurable scale reference unit (left side of the ratio)
+
+The scale dialog hard-coded "1 in = N unit" on the left — fine for an
+imperial drawing, wrong for a metric one where scales are quoted "1 cm = N m".
+`PdfMeasurementScale` now carries a `pageUnitLabel` (the on-page reference
+unit, one of `in`/`cm`/`mm`; default `in` so existing scales and the persisted
+JSON are byte-compatible — the `f` key is omitted when it's inches, and a
+legacy payload decodes as inches). `ratioLabel` and the dialog convert through
+`_pointsPerPageUnit` (72 pt = 1 in, 72/2.54 = 1 cm, 72/25.4 = 1 mm) instead of
+the bare `* 72`; the canonical `unitsPerPoint` is unchanged, so the stored
+`/Measure` math and all readouts are untouched — only how the ratio is quoted.
+The dialog's left side became a `pdf-scale-page-unit` dropdown, defaulting via
+the new `pdfDefaultPageUnit()` (inches in the imperial regions, centimetres
+elsewhere — shares `_isImperialRegion` with `pdfDefaultMeasurementUnit`, so it
+follows the device region, not the app's UI locale). Switching either dropdown
+keeps the typed number (it's a declaration of the ratio, not a unit
+conversion). Tests: `ratioLabel quotes the configurable on-page reference
+unit`, the encode/decode round-trip incl. the legacy-inches path, `the
+page-unit (left side) follows the device region`, and an end-to-end
+`a metric page unit produces the right per-point scale`.

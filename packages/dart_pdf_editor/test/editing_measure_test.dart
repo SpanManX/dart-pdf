@@ -83,6 +83,37 @@ void main() {
       expect(b.measurementScale!.unitLabel, 'ft');
       expect(b.measurementScale!.unitsPerPoint, closeTo(20 / 72, 1e-9));
     });
+
+    test('ratioLabel quotes the configurable on-page reference unit', () {
+      // 1 cm on the page (72/2.54 pt) = 5 m in the world.
+      final scale = PdfMeasurementScale(
+        unitsPerPoint: 5 / (72 / 2.54),
+        unitLabel: 'm',
+        pageUnitLabel: 'cm',
+      );
+      expect(scale.ratioLabel, '1 cm = 5 m');
+    });
+
+    test('an inch page unit stays the default and label', () {
+      final scale =
+          PdfMeasurementScale(unitsPerPoint: 20 / 72, unitLabel: 'ft');
+      expect(scale.pageUnitLabel, 'in');
+      expect(scale.ratioLabel, '1 in = 20 ft');
+    });
+
+    test('the page unit round-trips through encode/decode', () {
+      final scale = PdfMeasurementScale(
+        unitsPerPoint: 5 / (72 / 2.54),
+        unitLabel: 'm',
+        pageUnitLabel: 'cm',
+      );
+      final restored = PdfMeasurementScale.decode(scale.encode());
+      expect(restored, scale);
+      expect(restored!.pageUnitLabel, 'cm');
+      // a legacy payload without the page unit decodes as inches.
+      final legacy = PdfMeasurementScale.decode('{"u":${20 / 72},"l":"ft"}');
+      expect(legacy!.pageUnitLabel, 'in');
+    });
   });
 
   group('locale-based default unit', () {
@@ -134,6 +165,61 @@ void main() {
       final dropdown = tester.widget<DropdownButton<String>>(
           find.byKey(const ValueKey('pdf-scale-unit')));
       expect(dropdown.value, 'cm');
+    });
+
+    Future<String> shownPageUnit(WidgetTester tester, Locale device) async {
+      tester.platformDispatcher.localeTestValue = device;
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(
+          const MaterialApp(home: Scaffold(body: PdfScaleDialog())));
+      await tester.pumpAndSettle();
+      final dropdown = tester.widget<DropdownButton<String>>(
+          find.byKey(const ValueKey('pdf-scale-page-unit')));
+      return dropdown.value!;
+    }
+
+    testWidgets('the page-unit (left side) follows the device region',
+        (tester) async {
+      expect(await shownPageUnit(tester, const Locale('en', 'US')), 'in');
+      expect(await shownPageUnit(tester, const Locale('en', 'AU')), 'cm');
+      expect(await shownPageUnit(tester, const Locale('fr', 'FR')), 'cm');
+    });
+
+    testWidgets('a metric page unit produces the right per-point scale',
+        (tester) async {
+      tester.platformDispatcher.localeTestValue = const Locale('fr', 'FR');
+      addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+      PdfMeasurementScale? result;
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () async =>
+                  result = await showPdfScaleDialog(context),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Defaults to "1 cm = N m" in a metric region.
+      final pageUnit = tester.widget<DropdownButton<String>>(
+          find.byKey(const ValueKey('pdf-scale-page-unit')));
+      expect(pageUnit.value, 'cm');
+      await tester.enterText(
+          find.byKey(const ValueKey('pdf-scale-value')), '5');
+      await tester.tap(find.byKey(const ValueKey('pdf-scale-apply')));
+      await tester.pumpAndSettle();
+
+      expect(result, isNotNull);
+      expect(result!.pageUnitLabel, 'cm');
+      expect(result!.unitLabel, 'm');
+      // 1 cm = 72/2.54 pt, so 5 m over that span.
+      expect(result!.unitsPerPoint, closeTo(5 / (72 / 2.54), 1e-9));
+      expect(result!.ratioLabel, '1 cm = 5 m');
     });
   });
 

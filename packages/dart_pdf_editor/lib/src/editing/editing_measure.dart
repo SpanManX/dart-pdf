@@ -17,16 +17,19 @@ class PdfMeasurementScale {
   const PdfMeasurementScale({
     required this.unitsPerPoint,
     required this.unitLabel,
+    this.pageUnitLabel = 'in',
     this.areaUnitLabel,
     this.precision = 100,
   });
 
   /// Calibrates from a reference segment of [pointLength] PDF points that
-  /// represents [realLength] [unitLabel]s.
+  /// represents [realLength] [unitLabel]s. [pageUnitLabel] is the on-page
+  /// reference unit the ratio is quoted against ('in', 'cm', 'mm').
   factory PdfMeasurementScale.fromReference({
     required double pointLength,
     required double realLength,
     required String unitLabel,
+    String pageUnitLabel = 'in',
     String? areaUnitLabel,
     int precision = 100,
   }) {
@@ -34,6 +37,7 @@ class PdfMeasurementScale {
     return PdfMeasurementScale(
       unitsPerPoint: perPoint,
       unitLabel: unitLabel,
+      pageUnitLabel: pageUnitLabel,
       areaUnitLabel: areaUnitLabel,
       precision: precision,
     );
@@ -44,6 +48,11 @@ class PdfMeasurementScale {
 
   /// The distance unit label ('ft', 'm', ...).
   final String unitLabel;
+
+  /// The on-page reference unit the scale is quoted against — the
+  /// left-hand side of the `1 <pageUnit> = N <unit>` ratio ('in', 'cm',
+  /// 'mm'). Defaults to inches, the traditional drawing-scale reference.
+  final String pageUnitLabel;
 
   /// The area unit label, or null to default to `unitLabel²`.
   final String? areaUnitLabel;
@@ -61,20 +70,21 @@ class PdfMeasurementScale {
         ratioLabel: ratioLabel,
       );
 
-  /// A short user-facing label, e.g. `1 in = 20 ft` (assuming a 72 dpi
-  /// inch as the on-page reference unit).
+  /// A short user-facing label, e.g. `1 in = 20 ft` or `1 cm = 5 m`, quoted
+  /// against [pageUnitLabel] as the on-page reference unit.
   String get ratioLabel {
-    final perInch = unitsPerPoint * 72;
-    var text = perInch.toStringAsFixed(2);
+    final perPageUnit = unitsPerPoint * _pointsPerPageUnit(pageUnitLabel);
+    var text = perPageUnit.toStringAsFixed(2);
     if (text.contains('.')) {
       text = text.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
     }
-    return '1 in = $text $unitLabel';
+    return '1 $pageUnitLabel = $text $unitLabel';
   }
 
   String encode() => jsonEncode({
         'u': unitsPerPoint,
         'l': unitLabel,
+        if (pageUnitLabel != 'in') 'f': pageUnitLabel,
         if (areaUnitLabel != null) 'a': areaUnitLabel,
         'p': precision,
       });
@@ -89,6 +99,7 @@ class PdfMeasurementScale {
       return PdfMeasurementScale(
         unitsPerPoint: perPoint,
         unitLabel: label,
+        pageUnitLabel: json['f'] as String? ?? 'in',
         areaUnitLabel: json['a'] as String?,
         precision: (json['p'] as num?)?.toInt() ?? 100,
       );
@@ -102,34 +113,65 @@ class PdfMeasurementScale {
       other is PdfMeasurementScale &&
       other.unitsPerPoint == unitsPerPoint &&
       other.unitLabel == unitLabel &&
+      other.pageUnitLabel == pageUnitLabel &&
       other.areaUnitLabel == areaUnitLabel &&
       other.precision == precision;
 
   @override
-  int get hashCode =>
-      Object.hash(unitsPerPoint, unitLabel, areaUnitLabel, precision);
+  int get hashCode => Object.hash(
+      unitsPerPoint, unitLabel, pageUnitLabel, areaUnitLabel, precision);
 }
 
-/// The unit labels offered by [showPdfScaleDialog].
+/// The real-world unit labels offered by [showPdfScaleDialog].
 const _pdfScaleUnits = ['ft', 'in', 'yd', 'mi', 'm', 'cm', 'mm', 'km'];
+
+/// The on-page reference units offered for the left-hand side of the ratio.
+/// These are physical lengths on the printed page, so only the small units
+/// make sense.
+const _pdfPageUnits = ['in', 'cm', 'mm'];
+
+/// PDF points per one [pageUnit] (72 points = 1 inch). Falls back to inches
+/// for an unknown label.
+double _pointsPerPageUnit(String pageUnit) {
+  switch (pageUnit) {
+    case 'cm':
+      return 72 / 2.54;
+    case 'mm':
+      return 72 / 25.4;
+    case 'in':
+    default:
+      return 72;
+  }
+}
 
 /// The three countries that have not adopted the metric system and so
 /// default to imperial units: the United States, Liberia, and Myanmar.
 const _imperialCountries = {'US', 'LR', 'MM'};
 
-/// The default distance unit for [locale]: feet in the imperial-system
-/// regions (the US, Liberia, Myanmar), metres everywhere else. The
+/// Whether [locale]'s region uses the imperial measurement system. The
 /// measurement system is a regional preference, so the country comes from
 /// [locale] when it carries one, otherwise from the device locale
-/// (`platformDispatcher.locale` — the browser language on the web). The
-/// scale dialog passes no argument, so it follows the device region a
-/// user expects rather than the app's (possibly English-only) UI locale.
-String pdfDefaultMeasurementUnit([Locale? locale]) {
+/// (`platformDispatcher.locale` — the browser language on the web).
+bool _isImperialRegion([Locale? locale]) {
   final country = (locale?.countryCode ??
           WidgetsBinding.instance.platformDispatcher.locale.countryCode)
       ?.toUpperCase();
-  return country != null && _imperialCountries.contains(country) ? 'ft' : 'm';
+  return country != null && _imperialCountries.contains(country);
 }
+
+/// The default real-world distance unit for [locale]: feet in the
+/// imperial-system regions (the US, Liberia, Myanmar), metres everywhere
+/// else. The scale dialog passes no argument, so it follows the device
+/// region a user expects rather than the app's (possibly English-only) UI
+/// locale.
+String pdfDefaultMeasurementUnit([Locale? locale]) =>
+    _isImperialRegion(locale) ? 'ft' : 'm';
+
+/// The default on-page reference unit (the ratio's left-hand side) for
+/// [locale]: inches in the imperial-system regions, centimetres everywhere
+/// else. Like [pdfDefaultMeasurementUnit], this follows the device region.
+String pdfDefaultPageUnit([Locale? locale]) =>
+    _isImperialRegion(locale) ? 'in' : 'cm';
 
 /// Asks the user for a drawing scale (`1 in on the page = N unit in the
 /// world`) and returns the calibrated [PdfMeasurementScale], or null when
@@ -158,20 +200,28 @@ class PdfScaleDialog extends StatefulWidget {
 class _PdfScaleDialogState extends State<PdfScaleDialog> {
   late final TextEditingController _value;
   late String _unit;
+  late String _pageUnit;
 
   @override
   void initState() {
     super.initState();
     final initial = widget.initial;
-    final perInch = initial == null ? 1.0 : initial.unitsPerPoint * 72;
-    var text = perInch.toStringAsFixed(2);
+    // Carry over the on-page reference unit (the left-hand side) from an
+    // existing scale; otherwise default to the device region's measurement
+    // system (inches vs centimetres).
+    _pageUnit = (initial != null && _pdfPageUnits.contains(initial.pageUnitLabel))
+        ? initial.pageUnitLabel
+        : pdfDefaultPageUnit();
+    final perPageUnit =
+        initial == null ? 1.0 : initial.unitsPerPoint * _pointsPerPageUnit(_pageUnit);
+    var text = perPageUnit.toStringAsFixed(2);
     if (text.contains('.')) {
       text =
           text.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
     }
     _value = TextEditingController(text: text);
-    // Carry over the unit from an existing scale; otherwise default to the
-    // device region's measurement system (feet vs metres).
+    // Carry over the real-world unit from an existing scale; otherwise
+    // default to the device region's measurement system (feet vs metres).
     _unit = (initial != null && _pdfScaleUnits.contains(initial.unitLabel))
         ? initial.unitLabel
         : pdfDefaultMeasurementUnit();
@@ -184,14 +234,15 @@ class _PdfScaleDialogState extends State<PdfScaleDialog> {
   }
 
   void _submit() {
-    final perInch = double.tryParse(_value.text.trim());
-    if (perInch == null || perInch <= 0) {
+    final perPageUnit = double.tryParse(_value.text.trim());
+    if (perPageUnit == null || perPageUnit <= 0) {
       Navigator.of(context).pop();
       return;
     }
     Navigator.of(context).pop(PdfMeasurementScale(
-      unitsPerPoint: perInch / 72,
+      unitsPerPoint: perPageUnit / _pointsPerPageUnit(_pageUnit),
       unitLabel: _unit,
+      pageUnitLabel: _pageUnit,
     ));
   }
 
@@ -202,7 +253,19 @@ class _PdfScaleDialogState extends State<PdfScaleDialog> {
       content: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('1 in  =  '),
+          const Text('1  '),
+          DropdownButton<String>(
+            key: const ValueKey('pdf-scale-page-unit'),
+            value: _pageUnit,
+            onChanged: (value) {
+              if (value != null) setState(() => _pageUnit = value);
+            },
+            items: [
+              for (final unit in _pdfPageUnits)
+                DropdownMenuItem(value: unit, child: Text(unit)),
+            ],
+          ),
+          const Text('  =  '),
           SizedBox(
             width: 80,
             child: TextField(
