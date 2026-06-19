@@ -2884,3 +2884,39 @@ single-style appearance path — unchanged, separate from this fix. Tests:
 `annotation_editor_test.dart` (writer→parser round-trip incl. markup/newline
 escaping and attribute fallback) and `editing_text_edit_test.dart`
 (bold-one-word → commit → reopen shows the bold span again).
+
+## Inline editor follow-ups: embedded-font preview + Escape focus release
+
+Two more in-place free-text editor fixes, same "what you see while editing
+should match what commits" theme as the /RC round-trip.
+
+1. **Embedded/bundled font not visible mid-edit.** Changing part of a box to
+   a bundled (DejaVu) or custom embedded font showed no change in the editor,
+   though the committed appearance embedded it correctly. Base-14 faces map
+   to platform families ('Helvetica'/'Times New Roman'/'Courier'), but an
+   embedded font is drawn by the page renderer from outline bytes turned into
+   paths — a Flutter `TextField` can't use those until they're loaded as a
+   font. `_textEditUiFamily` returned null for any non-`PdfStandardFont`, so
+   the styled run fell back to the field face. Fix: when a restyle carries a
+   `PdfEmbeddedFont`, `_ensureEmbeddedFontPreview` registers its bytes via
+   `ui.loadFontFromList` under a synthetic family (`pdfedit-<postScript>:<len>`,
+   deduped through a module-level map + an in-flight set), then rebuilds so
+   the run switches to the real face. Hooked at the restyle *consume* point
+   (`_onControllerChanged`), so it covers both the inline font menu and a host
+   driving `restyleEditingTextSelection` directly. Needed a public
+   `PdfEmbeddedFont.fontBytes` getter (the parse keeps the raw program). The
+   box-default font (`_textEditFont`) is still always base-14, so only ranges
+   need this; reopen via /RC only ever yields base-14 runs, so no embedded
+   registration is needed there.
+
+2. **Escape didn't release focus.** `_closeTextEditor` cleared the editor but
+   never unfocused, so the field's focus node could keep primary focus (soft
+   keyboard/caret lingering, viewer shortcuts dead). Added
+   `_textEditFocus.unfocus()` on close. Also moved Escape onto the field's own
+   focus node via `FocusNode(onKeyEvent:)` — it cancels straight from the
+   focused node and returns `handled`, so it fires even where the ancestor
+   `CallbackShortcuts` Escape is shadowed by the field's own editing actions
+   (the redundant `CallbackShortcuts` binding stays, harmless: `handled` stops
+   the double-fire). Tests in `editing_text_edit_test.dart`: an embedded font
+   applied to a run previews in a `pdfedit-` family and commits as a Type0
+   face; Escape leaves no editor and no lingering focus.

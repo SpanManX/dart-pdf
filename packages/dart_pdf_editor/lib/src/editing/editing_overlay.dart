@@ -22,13 +22,34 @@ TextDirection _flutterTextDirection(String text) =>
     pdfTextLooksRtl(text) ? TextDirection.rtl : TextDirection.ltr;
 
 String? _textEditUiFamily(PdfTextFont font) {
-  if (font is! PdfStandardFont) return null;
-  return switch (font.family) {
-    PdfStandardFontFamily.sans => 'Helvetica',
-    PdfStandardFontFamily.serif => 'Times New Roman',
-    PdfStandardFontFamily.mono => 'Courier',
-  };
+  if (font is PdfStandardFont) {
+    return switch (font.family) {
+      PdfStandardFontFamily.sans => 'Helvetica',
+      PdfStandardFontFamily.serif => 'Times New Roman',
+      PdfStandardFontFamily.mono => 'Courier',
+    };
+  }
+  // An embedded/bundled font has no platform family the way base-14 does;
+  // the editor registers its outline bytes (see _ensureEmbeddedFontPreview)
+  // under a synthetic family so the live preview matches what commits.
+  // Null until that async registration lands, then it falls back gracefully.
+  if (font is PdfEmbeddedFont) {
+    return _embeddedPreviewFamilies[_embeddedFontKey(font)];
+  }
+  return null;
 }
+
+/// Synthetic Flutter font families an embedded font's bytes have been
+/// registered under (via `ui.loadFontFromList`), keyed by
+/// [_embeddedFontKey]. Module-level so [_textEditUiFamily] (a free
+/// function the rich controller calls) and the overlay state share it.
+final Map<String, String> _embeddedPreviewFamilies = {};
+
+/// A stable key for an embedded font's outline data — its PostScript name
+/// plus byte length, enough to dedupe registrations without holding the
+/// bytes. The registered family is `'pdfedit-<key>'`.
+String _embeddedFontKey(PdfEmbeddedFont font) =>
+    '${font.postScriptName}:${font.fontBytes.length}';
 
 FontWeight _textEditWeight(PdfTextFont font) =>
     font is PdfStandardFont && font.isBold
@@ -671,9 +692,12 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   PdfEditTool? _textEditTool;
   late final _RichTextEditingController _textEditText =
       _RichTextEditingController()..addListener(_onTextEditChanged);
-  late final FocusNode _textEditFocus = FocusNode()
+  late final FocusNode _textEditFocus = FocusNode(onKeyEvent: _onTextEditKey)
     ..addListener(_onTextEditFocus);
   PdfStandardFont _textEditFont = PdfStandardFont.helvetica;
+  // embedded-font keys whose preview registration is in flight, so a
+  // repeated restyle doesn't kick off a second load (see [_embeddedFontKey])
+  final Set<String> _embeddedFontsLoading = {};
   double _textEditSize = 14; // pt
   Color _textEditColor = const Color(0xFF000000);
   Color? _textEditFill; // the box background the commit will paint
@@ -1694,6 +1718,12 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _textEditStyleRevision = revision;
     final request = _controller.editingTextStyleRequest;
     if (request == null) return;
+    // register an embedded font's bytes so the styled run previews in its
+    // real face, not the fallback — covers the inline menu and a host that
+    // drives restyleEditingTextSelection directly
+    if (request.font is PdfEmbeddedFont) {
+      _ensureEmbeddedFontPreview(request.font as PdfEmbeddedFont);
+    }
     _textEditText.applyStyle(_textEditText.selection,
         font: request.font, size: request.size, color: request.color);
   }
@@ -2093,6 +2123,22 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   void _cancelTextEdit() => _closeTextEditor();
 
+  /// Escape cancels the inline editor straight from the field's focus node,
+  /// so it fires even on platforms/states where the ancestor
+  /// `CallbackShortcuts` never sees the key (e.g. the field's own editing
+  /// actions swallow it). Returning `handled` stops the duplicate
+  /// `CallbackShortcuts` binding from also running; every other key falls
+  /// through to normal text input.
+  KeyEventResult _onTextEditKey(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        _textEditRect != null) {
+      _cancelTextEdit();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   void _closeTextEditor() {
     if (_textEditRect == null) return;
     if (mounted) {
@@ -2107,6 +2153,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _textEditFieldName = null;
     }
     _controller.setEditingText(false);
+    // Escape (or any close) must hand the keyboard back: the field is gone
+    // from the tree, but its focus node keeps primary focus otherwise, so
+    // the soft keyboard/caret lingers and viewer shortcuts stay dead. rect
+    // is already null, so the focus-loss listener's commit is a no-op.
+    if (_textEditFocus.hasFocus) _textEditFocus.unfocus();
   }
 
   /// Losing focus commits — tapping another widget, switching panes.
@@ -3287,6 +3338,34 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (color != null) _controller.color = Color(0xFF000000 | rgb!);
     _controller.setEditingTextSelection(_textEditText.selection);
     _controller.restyleEditingTextSelection(font: font, size: size, color: rgb);
+  }
+
+  /// Registers an embedded font's outline bytes with the engine under a
+  /// synthetic family so the inline editor can *preview* it — base-14
+  /// faces map to platform families, but an embedded/bundled font is drawn
+  /// from raw bytes the page renderer turns into paths, which a Flutter
+  /// `TextField` can't use until they're loaded as a font. Idempotent and
+  /// fire-and-forget: once the load lands it rebuilds so the styled run
+  /// switches from the fallback face to the real one.
+  void _ensureEmbeddedFontPreview(PdfEmbeddedFont font) {
+    final key = _embeddedFontKey(font);
+    if (_embeddedPreviewFamilies.containsKey(key) ||
+        _embeddedFontsLoading.contains(key)) {
+      return;
+    }
+    _embeddedFontsLoading.add(key);
+    final family = 'pdfedit-$key';
+    // copy the bytes: loadFontFromList wants an owned, immutable list
+    ui
+        .loadFontFromList(Uint8List.fromList(font.fontBytes), fontFamily: family)
+        .then((_) {
+      _embeddedPreviewFamilies[key] = family;
+      _embeddedFontsLoading.remove(key);
+      if (mounted) setState(() {});
+    }, onError: (_) {
+      // a font the engine rejects just keeps previewing in the fallback face
+      _embeddedFontsLoading.remove(key);
+    });
   }
 
   /// Toggles bold (or [italic]) on the inline text editor — the desktop

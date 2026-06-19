@@ -59,6 +59,12 @@ class PdfEmbeddedFont implements PdfTextFont {
   /// A human-friendly family name (name table id 1), for font menus.
   final String familyName;
 
+  /// The raw font program (the TrueType/OpenType bytes this was parsed
+  /// from). Exposed so a host can register the same outline data with a
+  /// UI toolkit's font system — e.g. to preview the font while editing —
+  /// rather than re-loading it from disk.
+  Uint8List get fontBytes => _bytes;
+
   final Uint8List _bytes;
   final int _unitsPerEm;
   final int _numHMetrics;

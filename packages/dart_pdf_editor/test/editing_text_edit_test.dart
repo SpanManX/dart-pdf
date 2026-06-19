@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
@@ -442,6 +443,27 @@ void main() {
       await settle(tester);
     });
 
+    testWidgets('Escape releases keyboard focus, not just the editor',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing.tool = PdfEditTool.freeText;
+      await tester.pump();
+
+      await drag(tester, view(100, 700), view(300, 640));
+      await tester.enterText(find.byKey(editorKey), 'typing');
+      await tester.pump();
+      final focused = tester.binding.focusManager.primaryFocus;
+      expect(focused?.hasFocus, isTrue, reason: 'the field holds focus');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(find.byKey(editorKey), findsNothing);
+      expect(focused?.hasFocus, isFalse,
+          reason: 'Escape hands the keyboard back, leaving no lingering focus');
+      await settle(tester);
+    });
+
     testWidgets('backspace while typing edits text, not the document',
         (tester) async {
       final (editing, _) = await pumpEditor(tester);
@@ -641,6 +663,64 @@ void main() {
       expect(content, contains('/TimesBold 24 Tf'));
       expect(content, contains('1 0 0 rg'));
       expect(content, contains('(world) Tj'));
+      await settle(tester);
+    });
+
+    testWidgets('an embedded font applied to a run previews in its real face',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      final fontBytes =
+          File('../pdf_document/test/fonts/DejaVuSans.ttf').readAsBytesSync();
+      expect(editing.setCustomFont(fontBytes), isTrue);
+      final embedded = editing.activeFont as PdfEmbeddedFont;
+
+      editing.addFreeText(0, const PdfRect(100, 600, 360, 660), 'Hello world');
+      await tester.pump();
+      editing.tool = PdfEditTool.select;
+      await tester.pump();
+
+      await tap(tester, view(200, 630)); // first tap selects
+      await tap(tester, view(200, 630)); // second tap edits
+
+      final field = tester.widget<TextField>(find.byKey(editorKey));
+      field.controller!.value = const TextEditingValue(
+        text: 'Hello world',
+        selection: TextSelection(baseOffset: 6, extentOffset: 11),
+      );
+      await tester.pump();
+
+      // apply the embedded font to "world" through the public restyle path
+      expect(editing.restyleEditingTextSelection(font: embedded), isTrue);
+      // let ui.loadFontFromList register the outline bytes and rebuild
+      await tester.pumpAndSettle();
+
+      final span = field.controller!.buildTextSpan(
+        context: tester.element(find.byKey(editorKey)),
+        style: const TextStyle(),
+        withComposing: false,
+      );
+      final styled = span.children!.whereType<TextSpan>().singleWhere(
+            (child) => child.text == 'world',
+          );
+      // the run renders in the registered synthetic family, not the fallback
+      expect(styled.style?.fontFamily, startsWith('pdfedit-'));
+
+      await tap(tester, view(450, 400)); // outside: commit
+      final annotation = editing.document.page(0).annotations.single;
+      final res = editing.document.cos
+          .resolve(annotation.normalAppearance!.dictionary['Resources'])
+          as CosDictionary;
+      final fonts = editing.document.cos.resolve(res['Font']) as CosDictionary;
+      // the committed appearance embeds the font (a Type0 face for the run)
+      expect(
+          fonts.entries.values.any((ref) {
+            final f = editing.document.cos.resolve(ref);
+            return f is CosDictionary &&
+                (editing.document.cos.resolve(f['Subtype']) as CosName?)
+                        ?.value ==
+                    'Type0';
+          }),
+          isTrue);
       await settle(tester);
     });
 
