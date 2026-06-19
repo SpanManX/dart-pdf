@@ -135,8 +135,11 @@ lossless bit-perfect vs OpenJPEG, lossy ±1), deep-zoom detail patch
 (`PdfPageView` renders the visible slice past the raster caps;
 `rasterizeRegion`), and real ICC (`IccProfile` in pdf_graphics —
 gray TRC, matrix/TRC, mft1/mft2/mAB LUTs, validated vs littleCMS;
-wired into sc/scn and image decoding). Remaining gaps:
-RSASSA-PSS, JPX subsampling + PCRL/CPRL, rendering intents/BPC in ICC.
+wired into sc/scn and image decoding). RSASSA-PSS verification is in
+(`rsaVerifyPss` in pdf_cos rsa.dart — MGF1 + EMSA-PSS with salt-length
+recovery, KAT vs OpenSSL; PSS-params parsing and dispatch in cms.dart's
+`cmsVerify` and `X509Certificate.isSignedBy`). Remaining gaps:
+JPX subsampling + PCRL/CPRL, rendering intents/BPC in ICC.
 The editing UI is in (dart_pdf_editor `src/editing/`): `PdfEditingController`
 owns the edit session — every edit is an incremental save, so revisions
 are byte prefixes of one buffer and undo/redo is a stack of lengths;

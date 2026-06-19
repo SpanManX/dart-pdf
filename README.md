@@ -149,8 +149,8 @@ copyable without changing how the PDF looks.
     (`replaceText`, simple fonts, within one shown string; no reflow)
 
 Deliberately deferred: richer text editing beyond single shown-string
-rewrites, RSASSA-PSS signatures, JBIG2 Huffman/refinement variants, and
-JPX subsampling/PCRL-CPRL progressions.
+rewrites, JBIG2 Huffman/refinement variants, and JPX
+subsampling/PCRL-CPRL progressions.
 
 ## Features
 

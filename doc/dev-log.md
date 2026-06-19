@@ -2727,3 +2727,35 @@ the rationale comment; strictly relaxes the policy, so nothing that worked under
 require-corp breaks. The deployed-app model inference still can't be exercised
 in-sandbox (no browser/WebGPU), and jsDelivr/HuggingFace are 403'd by the
 sandbox network policy, so the header behaviour is reasoned, not reproduced here.
+
+## RSASSA-PSS signature verification
+
+Closed the deferred RSASSA-PSS gap (`cmsVerify` previously hard-stopped at
+the id-RSASSA-PSS OID `1.2.840.113549.1.1.10`). The verification core is
+`rsaVerifyPss` in `pdf_cos/src/crypto/rsa.dart`: RSAVP1 (`s^e mod n` →
+EM of `emLen = ceil((modBits-1)/8)` bytes), `_mgf1` mask generation, then
+EMSA-PSS-VERIFY per RFC 8017 §9.1.2 — check the `0xBC` trailer, clear the
+top `8*emLen - emBits` bits, unmask DB with MGF1, and compare
+`H' = Hash(0x00*8 || mHash || salt)` against H. The salt length is
+**recovered** by scanning DB to its `0x01` separator, so any conformant
+signature verifies regardless of the declared length; an explicit
+`saltLength` (from the params) is enforced when passed. One hash drives
+both the message digest and MGF1 — PSS allows them to differ but real
+signers never do (the maskGenAlgorithm `[1]` and trailerField `[3]` params
+are therefore not read).
+
+`_pssParams` in `cms.dart` reads RSASSA-PSS-params (hashAlgorithm `[0]`,
+saltLength `[2]`) off the AlgorithmIdentifier, which is now captured into
+`CmsSignerInfo.signatureAlgorithmParams` and
+`X509Certificate.signatureAlgorithmParams` (both previously discarded the
+params after pulling the OID). Dispatch added in `cmsVerify` and
+`X509Certificate.isSignedBy`, so PSS-signed certs in a chain now verify
+too. Defaults follow the ASN.1 spec (SHA-1, no explicit salt) for the
+degenerate no-params case; `cmsVerify` falls back to the signer's digest
+algorithm when params are absent.
+
+KAT in `pki_test.dart` against two OpenSSL signatures over the 1024-bit
+test key (salt length = digest length, and salt length = 0), covering
+auto-recovery, explicit-length enforcement, wrong-digest, and corrupted-
+signature rejection. The other deferred items (richer text editing, JBIG2
+Huffman/refinement, JPX subsampling + PCRL/CPRL) were left as-is this pass.
