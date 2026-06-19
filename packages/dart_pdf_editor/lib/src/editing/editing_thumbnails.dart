@@ -335,43 +335,45 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
               children: [
                 // page-level file actions sit in a slim header at the top so
                 // they never collide with the floating editing toolbar (or a
-                // snackbar) that hugs the bottom of the viewport
-                if (widget.onPickPdfToInsert != null ||
-                    widget.onExportPages != null)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                        8 + inset, 2, _extraRightPadding + inset, 0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Pages',
-                            style: Theme.of(context).textTheme.labelMedium,
-                            overflow: TextOverflow.ellipsis,
+                // snackbar) that hugs the bottom of the viewport. The slot is
+                // a fixed height and always present, so swapping in the bulk-
+                // action bar when 2+ pages are selected never reflows the
+                // tiles below (a single selection is just the navigation
+                // cursor — the per-tile delete handles it).
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      8 + inset, 2, _extraRightPadding + inset, 2),
+                  child: SizedBox(
+                    height: 36,
+                    child: controller.selectedPageCount > 1
+                        ? _PageSelectionBar(
+                            controller: controller,
+                            allowPageEditing: widget.allowPageEditing,
+                            onExportPages: widget.onExportPages,
+                            compact: true,
+                          )
+                        : Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Pages',
+                                  style:
+                                      Theme.of(context).textTheme.labelMedium,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (widget.onPickPdfToInsert != null ||
+                                  widget.onExportPages != null)
+                                _PageActionsButton(
+                                  controller: controller,
+                                  viewerController: widget.viewerController,
+                                  onPickPdfToInsert: widget.onPickPdfToInsert,
+                                  onExportPages: widget.onExportPages,
+                                ),
+                            ],
                           ),
-                        ),
-                        _PageActionsButton(
-                          controller: controller,
-                          viewerController: widget.viewerController,
-                          onPickPdfToInsert: widget.onPickPdfToInsert,
-                          onExportPages: widget.onExportPages,
-                        ),
-                      ],
-                    ),
                   ),
-                // when more than one page is selected, a bar offers bulk
-                // actions on the selection (a single selection is just the
-                // navigation cursor — the per-tile delete handles it)
-                if (controller.selectedPageCount > 1)
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                        8 + inset, 2, _extraRightPadding + inset, 0),
-                    child: _PageSelectionBar(
-                      controller: controller,
-                      allowPageEditing: widget.allowPageEditing,
-                      onExportPages: widget.onExportPages,
-                    ),
-                  ),
+                ),
                 Expanded(
                   child: ScrollConfiguration(
                     behavior: ScrollConfiguration.of(context)
@@ -491,11 +493,18 @@ class _PageSelectionBar extends StatelessWidget {
     required this.controller,
     required this.allowPageEditing,
     required this.onExportPages,
+    this.compact = false,
   });
 
   final PdfEditingController controller;
   final bool allowPageEditing;
   final void Function(Uint8List bytes)? onExportPages;
+
+  /// A single-row layout (count + a horizontally-scrollable action group)
+  /// that fits a fixed-height header slot — the docked strip swaps it in
+  /// for the "Pages" header so a selection never reflows the tiles. The
+  /// full-area grid leaves it false for the roomier two-row layout.
+  final bool compact;
 
   /// A compact icon button — tight enough that several fit (and wrap)
   /// within the narrow strip.
@@ -527,54 +536,71 @@ class _PageSelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final actions = <Widget>[
+      if (allowPageEditing) ...[
+        _action(
+          key: 'pdf-thumbnail-rotate-selected-ccw',
+          icon: Icons.rotate_left,
+          tooltip: 'Rotate selected pages left',
+          onPressed: () => controller.rotateSelectedPages(-90),
+        ),
+        _action(
+          key: 'pdf-thumbnail-rotate-selected-cw',
+          icon: Icons.rotate_right,
+          tooltip: 'Rotate selected pages right',
+          onPressed: () => controller.rotateSelectedPages(90),
+        ),
+      ],
+      if (onExportPages != null)
+        _action(
+          key: 'pdf-thumbnail-export-selected',
+          icon: Icons.file_download_outlined,
+          tooltip: 'Export selected pages',
+          onPressed: _exportSelected,
+        ),
+      if (allowPageEditing)
+        _action(
+          key: 'pdf-thumbnail-delete-selected',
+          icon: Icons.delete_outline,
+          tooltip: 'Delete selected pages',
+          onPressed: () => controller.removeSelectedPages(),
+        ),
+      _action(
+        key: 'pdf-thumbnail-clear-selection',
+        icon: Icons.close,
+        tooltip: 'Clear selection',
+        onPressed: controller.clearPageSelection,
+      ),
+    ];
+    final count = Text(
+      '${controller.selectedPageCount} selected',
+      style: Theme.of(context).textTheme.labelMedium,
+      overflow: TextOverflow.ellipsis,
+    );
+    // the strip's fixed-height header slot: one row, the actions scrolling
+    // horizontally so a narrow strip never overflows (and never reflows
+    // the tiles when the bar swaps in for the "Pages" header)
+    if (compact) {
+      return Row(
+        children: [
+          Flexible(child: count),
+          const SizedBox(width: 4),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '${controller.selectedPageCount} selected',
-          style: Theme.of(context).textTheme.labelMedium,
-          overflow: TextOverflow.ellipsis,
-        ),
+        count,
         // a Wrap (not a Row) so the action buttons flow onto a second
         // line on the narrow strip instead of overflowing
-        Wrap(
-          children: [
-            if (allowPageEditing) ...[
-              _action(
-                key: 'pdf-thumbnail-rotate-selected-ccw',
-                icon: Icons.rotate_left,
-                tooltip: 'Rotate selected pages left',
-                onPressed: () => controller.rotateSelectedPages(-90),
-              ),
-              _action(
-                key: 'pdf-thumbnail-rotate-selected-cw',
-                icon: Icons.rotate_right,
-                tooltip: 'Rotate selected pages right',
-                onPressed: () => controller.rotateSelectedPages(90),
-              ),
-            ],
-            if (onExportPages != null)
-              _action(
-                key: 'pdf-thumbnail-export-selected',
-                icon: Icons.file_download_outlined,
-                tooltip: 'Export selected pages',
-                onPressed: _exportSelected,
-              ),
-            if (allowPageEditing)
-              _action(
-                key: 'pdf-thumbnail-delete-selected',
-                icon: Icons.delete_outline,
-                tooltip: 'Delete selected pages',
-                onPressed: () => controller.removeSelectedPages(),
-              ),
-            _action(
-              key: 'pdf-thumbnail-clear-selection',
-              icon: Icons.close,
-              tooltip: 'Clear selection',
-              onPressed: controller.clearPageSelection,
-            ),
-          ],
-        ),
+        Wrap(children: actions),
       ],
     );
   }

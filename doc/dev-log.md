@@ -3088,3 +3088,23 @@ fill through. Tests: editing_page_ops_test.dart (`pageRangePreviewTo`
 mirrors the range / single page with no anchor; a Shift-hold over a hovered
 tile fills the previewed chips without committing, and releasing Shift
 clears them).
+
+### No layout shift when the selection bar appears (strip)
+
+The strip used to insert the `_PageSelectionBar` as an extra row when 2+
+pages were selected, which pushed every tile down. Now the strip's header
+is a single always-present fixed-height (36px) slot that swaps content: the
+"Pages" title + page-actions menu when idle, the bulk-action bar when 2+ are
+selected. Same height either way, so the tiles never move. `_PageSelectionBar`
+gained a `compact` flag: the strip passes `compact: true` for a one-row
+layout (a `Flexible` "N selected" count + the action icons in a horizontal
+`SingleChildScrollView`, so a narrow strip scrolls the actions instead of
+overflowing or wrapping); the full-area grid keeps the roomier two-row
+`Wrap`. The decorated tile chip's stable `pdf-thumbnail-tile-chip-$index`
+key (added for the shift-hover preview) doubles as the anchor a test reads
+to assert the first tile's top is unchanged when the bar swaps in. The two
+strip tests that tap selection actions now `ensureVisible` first (the
+actions can sit off the narrow strip's scroll). The grid's selection bar
+still appears as its own row — only the docked strip was asked to stop
+shifting, and the grid has the vertical room. Tests: editing_page_ops_test.dart
+(the bar swaps in without moving the first tile; the action taps reveal-then-tap).
