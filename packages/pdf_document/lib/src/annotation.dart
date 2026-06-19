@@ -267,6 +267,17 @@ class PdfAnnotation {
     return da is CosString ? da.text : null;
   }
 
+  /// The free-text rich-content string (§12.7.3.4 `/RC`) — the XHTML that
+  /// records per-run styling the flat /DA can't, written by
+  /// `PdfEditor.addFreeTextRich`. Null when absent (plain free text or a
+  /// non-free-text annotation). Parse it with
+  /// `PdfEditor.parseFreeTextRichContent`.
+  String? get richContent {
+    if (subtype != 'FreeText') return null;
+    final rc = document.cos.resolve(dict['RC']);
+    return rc is CosString ? rc.text : null;
+  }
+
   /// The complete style of a free-text annotation, parsed from /DA, /C,
   /// and /BS — everything needed to regenerate its appearance at a new
   /// size. Null for other subtypes or when /DA has no usable `Tf`.

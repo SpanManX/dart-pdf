@@ -3002,6 +3002,23 @@ class PdfEditingController extends ChangeNotifier {
     return _freeTextStyleOf(annotation!);
   }
 
+  /// The selected free-text annotation's per-run rich styling, parsed
+  /// from its /RC (§12.7.3.4) with any missing attribute defaulted from
+  /// the flat /DA. Null when the box carries no /RC (plain free text, or
+  /// authored before rich styling) so the editor falls back to seeding a
+  /// single uniform style. Lets reopening a mixed-format box rebuild its
+  /// bold/italic/colour runs instead of collapsing to one style.
+  List<PdfFreeTextRun>? get selectedRichRuns {
+    final annotation = selectedAnnotation;
+    if (annotation == null || annotation.subtype != 'FreeText') return null;
+    final rc = annotation.richContent;
+    if (rc == null) return null;
+    final style = _freeTextStyleOf(annotation);
+    final runs = PdfAnnotationEditing.parseFreeTextRichContent(rc,
+        fallbackFont: style.font, fallbackSize: style.size);
+    return runs.isEmpty ? null : runs;
+  }
+
   /// The selected free-text annotation's horizontal alignment (its /Q
   /// quadding), or null when the selection isn't a single free-text box.
   PdfTextAlign? get selectedTextAlign {

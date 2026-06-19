@@ -747,6 +747,61 @@ void main() {
       await settle(tester);
     });
 
+    testWidgets('reopening a mixed-format box restores its per-run styling',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing.addFreeText(0, const PdfRect(100, 600, 360, 660), 'Hello world');
+      await tester.pump();
+      editing.tool = PdfEditTool.select;
+      await tester.pump();
+
+      // open, bold just "world", commit
+      await tap(tester, view(200, 630));
+      await tap(tester, view(200, 630));
+      var field = tester.widget<TextField>(find.byKey(editorKey));
+      field.controller!.value = const TextEditingValue(
+        text: 'Hello world',
+        selection: TextSelection(baseOffset: 6, extentOffset: 11),
+      );
+      await tester.pump();
+      expect(
+          editing.restyleEditingTextSelection(
+              font: PdfStandardFont.helveticaBold),
+          isTrue);
+      await tester.pump();
+      await tap(tester, view(450, 400)); // commit
+      await settle(tester);
+
+      // the saved box carries /RC describing the bold run
+      final annotation = editing.document.page(0).annotations.single;
+      expect(annotation.richContent, isNotNull);
+      expect(editing.selectAnnotation(0, 0), isTrue);
+      final runs = editing.selectedRichRuns!;
+      expect(runs.map((r) => r.text).join(), 'Hello world');
+      expect(runs.firstWhere((r) => r.text.contains('world')).font,
+          PdfStandardFont.helveticaBold);
+
+      // reopen: the editor's span shows "world" bold again, not flattened
+      await tap(tester, view(200, 630));
+      await tap(tester, view(200, 630));
+      expect(find.byKey(editorKey), findsOneWidget);
+      field = tester.widget<TextField>(find.byKey(editorKey));
+      expect(field.controller!.text, 'Hello world');
+      final span = field.controller!.buildTextSpan(
+        context: tester.element(find.byKey(editorKey)),
+        style: const TextStyle(),
+        withComposing: false,
+      );
+      final styled = span.children!.whereType<TextSpan>().singleWhere(
+            (child) => child.text == 'world',
+          );
+      expect(styled.style?.fontWeight, FontWeight.bold);
+
+      await tap(tester, view(450, 400)); // commit, no change
+      editing.fontFamily = PdfStandardFont.helvetica;
+      await settle(tester);
+    });
+
     testWidgets('the style menu sets the font family for new text',
         (tester) async {
       final editing = PdfEditingController(buildMultiPagePdf(1));

@@ -347,6 +347,75 @@ void main() {
     expect(content, isNot(contains('ActualText')));
   });
 
+  test('rich free text persists /RC and /DS for re-editing', () {
+    final doc = roundTrip((e) => e.addFreeTextRich(
+          0,
+          const PdfRect(72, 600, 400, 660),
+          [
+            const PdfFreeTextRun('Bold ',
+                font: PdfStandardFont.helveticaBold, fontSize: 14),
+            const PdfFreeTextRun('red',
+                color: 0xFF0000, fontSize: 14),
+            const PdfFreeTextRun(' italic',
+                font: PdfStandardFont.timesItalic, fontSize: 18),
+          ],
+        ));
+    final ft = doc.page(0).annotations.single;
+    expect(ft.contents, 'Bold red italic');
+    final rc = ft.richContent;
+    expect(rc, isNotNull);
+    expect(rc, contains('<span'));
+
+    final runs = PdfAnnotationEditing.parseFreeTextRichContent(rc!);
+    expect(runs.map((r) => r.text).join(), 'Bold red italic');
+    expect(runs, hasLength(3));
+
+    expect(runs[0].text, 'Bold ');
+    expect(runs[0].font, PdfStandardFont.helveticaBold);
+    expect(runs[0].fontSize, 14);
+
+    expect(runs[1].text, 'red');
+    expect(runs[1].color, 0xFF0000);
+
+    expect(runs[2].text, ' italic');
+    expect(runs[2].font, PdfStandardFont.timesItalic);
+    expect(runs[2].fontSize, 18);
+  });
+
+  test('rich free text /RC escapes markup and newlines', () {
+    final doc = roundTrip((e) => e.addFreeTextRich(
+          0,
+          const PdfRect(72, 600, 400, 660),
+          [
+            const PdfFreeTextRun('a < b & c',
+                font: PdfStandardFont.helveticaBold),
+            const PdfFreeTextRun('\nline2'),
+          ],
+        ));
+    final ft = doc.page(0).annotations.single;
+    final runs = PdfAnnotationEditing.parseFreeTextRichContent(ft.richContent!);
+    expect(runs.map((r) => r.text).join(), 'a < b & c\nline2');
+    expect(runs.first.font, PdfStandardFont.helveticaBold);
+  });
+
+  test('parseFreeTextRichContent falls back for missing attributes', () {
+    final runs = PdfAnnotationEditing.parseFreeTextRichContent(
+      '<body><p><span style="font-weight:bold">x</span>'
+      '<span>y</span></p></body>',
+      fallbackFont: PdfStandardFont.times,
+      fallbackSize: 20,
+      fallbackColor: 0x00FF00,
+    );
+    expect(runs, hasLength(2));
+    // bold refines the serif fallback into Times-Bold
+    expect(runs[0].font, PdfStandardFont.timesBold);
+    expect(runs[0].fontSize, 20);
+    expect(runs[0].color, 0x00FF00);
+    // bare span keeps the fallback wholesale
+    expect(runs[1].font, PdfStandardFont.times);
+    expect(runs[1].color, 0x00FF00);
+  });
+
   test('resizing a non-Latin free text regenerates with Unicode font', () {
     final editor = PdfEditor(PdfDocument.open(buildClassicPdf()));
     editor.addFreeText(0, const PdfRect(72, 600, 300, 640), 'مرحبا');

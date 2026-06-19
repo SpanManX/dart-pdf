@@ -2837,3 +2837,50 @@ prompted by edit-time visual feedback.
    creation default to the SharedPreferences mock, so the test resets
    `fontFamily` at the end — a sibling test builds a controller without
    clearing prefs and would otherwise inherit the bold+italic family.
+
+## Rich free-text round-trip: /RC + /DS so re-editing keeps per-run styling
+
+Reopening a free-text box for editing lost its mixed formatting: the rich
+per-run model (`addFreeTextRich` — several fonts/sizes/colors in one box)
+was rasterized into the appearance stream, but only `/Contents` (plain
+text) and a single `/DA` (the *first* run's font) were persisted. On
+reopen `_openTextEditor` seeded the inline editor from `/DA` alone, so a
+box with "**bold** plain *italic*" came back uniformly in the first run's
+style. The appearance stream can't be re-parsed into runs (word wrap, hex
+glyphs, embedded fonts), so the fix is to persist the structure.
+
+`addFreeTextRich` (`annotation_editor.dart`) now also writes the spec's
+rich-text keys (§12.7.3.4): `/RC`, an XHTML `<body>/<p>` with one `<span
+style="font-family:…;font-size:…pt;color:#rrggbb[;font-weight:bold]
+[;font-style:italic]">` per run, and `/DS`, the first run's style as the
+paragraph default. `_richContentXhtml`/`_richSpanStyle` build them from the
+*unwrapped* runs (so base-14 PostScript family names survive — the Unicode
+wrapping for non-Latin text only affects the appearance). `/RC` is purely
+for our own re-edit; viewers render from `/AP` as before, so nothing about
+the on-page rendering changes.
+
+`PdfAnnotationEditing.parseFreeTextRichContent` is the lenient inverse:
+pulls `<span>`s, maps `font-family` through `PdfStandardFont.tryFromName`
+(refined by `font-weight`/`font-style`), reads size/color, and defaults any
+missing attribute from a caller-supplied fallback (the box's flat `/DA`).
+Static on the extension, so it's `PdfAnnotationEditing.parse…`, not
+`PdfEditor.parse…` — extension statics don't ride the extended type.
+`PdfAnnotation.richContent` exposes raw `/RC`; the controller's
+`selectedRichRuns` parses it with the `/DA` style as fallback, returning
+null when there's no `/RC` (plain or pre-existing boxes) so the editor
+falls back to the single-style seed.
+
+On reopen, `_openTextEditor` calls the new `_RichTextEditingController.
+seedRuns(runs, fallback)` when `selectedRichRuns` is non-empty: it sets the
+field text and one style range per run (merging adjacent identical), and
+keeps `fallback` (the `/DA` style) as the typing default for text added
+after. Uniform boxes still round-trip through `/DA` as before — they also
+get a one-span `/RC` now, harmless.
+
+Scope: base-14 faces round-trip exactly; embedded/Unicode runs fall back to
+the `/DA` face on re-edit (the appearance still renders correctly, only the
+re-edit distinction is lost). Resizing a rich box still flattens to the
+single-style appearance path — unchanged, separate from this fix. Tests:
+`annotation_editor_test.dart` (writer→parser round-trip incl. markup/newline
+escaping and attribute fallback) and `editing_text_edit_test.dart`
+(bold-one-word → commit → reopen shows the bold span again).

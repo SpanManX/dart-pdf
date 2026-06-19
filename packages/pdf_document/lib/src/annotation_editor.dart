@@ -1386,6 +1386,12 @@ extension PdfAnnotationEditing on PdfEditor {
     final dict =
         _markupDict('FreeText', rect, fillColor ?? first.color, text, author)
           ..['DA'] = CosString.fromText(da)
+          // /RC + /DS (§12.7.3.4) preserve the per-run styling the flat /DA
+          // can't, so a later edit rebuilds the mixed fonts/sizes/colors
+          // rather than collapsing the box to the first run's style. Built
+          // from the unwrapped runs so base-14 family names survive.
+          ..['RC'] = CosString.fromText(_richContentXhtml(nonEmpty))
+          ..['DS'] = CosString.fromText(_richSpanStyle(nonEmpty.first))
           ..['Q'] = CosInteger(align?.quadding ??
               (textDirection.resolve(text) == PdfTextDirection.rtl ? 2 : 0));
     if (borderColor != null && borderWidth > 0) {
@@ -1399,6 +1405,117 @@ extension PdfAnnotationEditing on PdfEditor {
       name: name,
     );
   }
+
+  /// The §12.7.3.4 rich-content (`/RC`) string for [runs]: an XHTML
+  /// `<body>/<p>` whose `<span>`s carry each run's font, size and color.
+  /// The appearance stream alone can't be re-parsed into runs, so this is
+  /// what lets an edit rebuild mixed styling. Inverse of
+  /// [parseFreeTextRichContent].
+  static String _richContentXhtml(List<PdfFreeTextRun> runs) {
+    final b = StringBuffer(
+        '<?xml version="1.0"?><body xmlns="http://www.w3.org/1999/xhtml"><p>');
+    for (final run in runs) {
+      b
+        ..write('<span style="')
+        ..write(_richSpanStyle(run))
+        ..write('">')
+        ..write(_xmlEscape(run.text))
+        ..write('</span>');
+    }
+    b.write('</p></body>');
+    return b.toString();
+  }
+
+  /// The CSS-ish style declaration for one run, shared by /RC spans and
+  /// the paragraph default /DS: family (the base-14 PostScript name, or an
+  /// embedded font's resource tag), size in points, colour, and explicit
+  /// weight/slant so the styling reads even if a viewer ignores the family.
+  static String _richSpanStyle(PdfFreeTextRun run) {
+    final font = run.font;
+    final family =
+        font is PdfStandardFont ? font.baseFont : font.resourceName;
+    final parts = [
+      'font-family:$family',
+      'font-size:${ContentWriter.fmt(run.fontSize)}pt',
+      'color:#${(run.color & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}',
+    ];
+    if (font is PdfStandardFont) {
+      if (font.isBold) parts.add('font-weight:bold');
+      if (font.isItalic) parts.add('font-style:italic');
+    }
+    return parts.join(';');
+  }
+
+  /// Parses a free-text `/RC` string back into styled runs — the inverse
+  /// of what [addFreeTextRich] writes. Lenient: reads each `<span>`'s
+  /// `font-family` (mapped to a base-14 face), `font-size` and `color`,
+  /// refines bold/italic from `font-weight`/`font-style`, and falls back
+  /// to [fallbackFont]/[fallbackSize]/[fallbackColor] (typically the box's
+  /// flat /DA) for anything a span omits. Returns an empty list when no
+  /// spans are found, so callers can fall back to the plain text path.
+  static List<PdfFreeTextRun> parseFreeTextRichContent(
+    String rc, {
+    PdfStandardFont fallbackFont = PdfStandardFont.helvetica,
+    double fallbackSize = 12,
+    int fallbackColor = 0x000000,
+  }) {
+    final runs = <PdfFreeTextRun>[];
+    for (final span
+        in RegExp(r'<span\b([^>]*)>(.*?)</span>', dotAll: true).allMatches(rc)) {
+      final attrs = span.group(1) ?? '';
+      final style =
+          RegExp(r'style\s*=\s*"([^"]*)"').firstMatch(attrs)?.group(1) ?? '';
+      final text = _xmlUnescape(span.group(2) ?? '');
+      if (text.isEmpty) continue;
+      runs.add(PdfFreeTextRun(
+        text,
+        font: _richSpanFont(style, fallbackFont),
+        fontSize: _richSpanSize(style) ?? fallbackSize,
+        color: _richSpanColor(style) ?? fallbackColor,
+      ));
+    }
+    return runs;
+  }
+
+  static PdfStandardFont _richSpanFont(String style, PdfStandardFont fallback) {
+    final family = RegExp(r'font-family\s*:\s*([^;]+)')
+        .firstMatch(style)
+        ?.group(1)
+        ?.trim();
+    var font = family == null ? null : PdfStandardFont.tryFromName(family);
+    if (RegExp(r'font-weight\s*:\s*(bold|[6-9]00)').hasMatch(style)) {
+      font = (font ?? fallback).withBold(true);
+    }
+    if (RegExp(r'font-style\s*:\s*(italic|oblique)').hasMatch(style)) {
+      font = (font ?? fallback).withItalic(true);
+    }
+    return font ?? fallback;
+  }
+
+  static double? _richSpanSize(String style) {
+    final m = RegExp(r'font-size\s*:\s*([\d.]+)').firstMatch(style);
+    return m == null ? null : double.tryParse(m.group(1)!);
+  }
+
+  static int? _richSpanColor(String style) {
+    final m = RegExp(r'color\s*:\s*#([0-9a-fA-F]{6})').firstMatch(style);
+    return m == null ? null : int.parse(m.group(1)!, radix: 16);
+  }
+
+  static String _xmlEscape(String s) => s
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('\n', '&#10;');
+
+  static String _xmlUnescape(String s) => s
+      .replaceAll('&#10;', '\n')
+      .replaceAll('&#xA;', '\n')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&amp;', '&');
 
   /// The free-text appearance content: optional background fill and
   /// border, then [text] wrapped into [rect] and clipped to it.

@@ -89,6 +89,36 @@ class _RichTextEditingController extends TextEditingController {
     _ranges.clear();
   }
 
+  /// Seeds the editor from a box's persisted per-run styling (its /RC):
+  /// sets [text] and a style range per run so reopening a mixed-format
+  /// box shows its bold/italic/colour, not a flattened single style.
+  /// [fallback] is the typing default (the box's flat /DA) for text added
+  /// afterwards. Runs with non-base-14 fonts keep their [PdfTextFont].
+  void seedRuns(List<PdfFreeTextRun> runs, _TextEditStyle fallback) {
+    defaultStyle = fallback;
+    final buffer = StringBuffer();
+    final ranges = <_TextEditStyleRange>[];
+    var offset = 0;
+    for (final run in runs) {
+      if (run.text.isEmpty) continue;
+      final start = offset;
+      buffer.write(run.text);
+      offset += run.text.length;
+      ranges.add(_TextEditStyleRange(
+          start,
+          offset,
+          _TextEditStyle(
+              font: run.font,
+              size: run.fontSize,
+              color: Color(0xFF000000 | (run.color & 0xFFFFFF)))));
+    }
+    _ranges
+      ..clear()
+      ..addAll(_mergeRanges(ranges));
+    // assigning text notifies listeners and rebuilds the styled span
+    text = buffer.toString();
+  }
+
   bool get hasRichStyles => _ranges.isNotEmpty;
 
   void applyStyle(TextSelection selection,
@@ -1914,9 +1944,17 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final defaultColor = annotationColor != null
         ? Color(0xFF000000 | annotationColor)
         : _controller.color;
-    _textEditText.resetStyles(_TextEditStyle(
-        font: defaultFont, size: defaultSize, color: defaultColor));
-    _textEditText.text = existing ? (_controller.selectedText ?? '') : '';
+    final fallbackStyle = _TextEditStyle(
+        font: defaultFont, size: defaultSize, color: defaultColor);
+    // a box saved with mixed styling carries /RC: reseed its per-run fonts
+    // so reopening shows the bold/italic/colour, not a flattened style
+    final richRuns = existing ? _controller.selectedRichRuns : null;
+    if (richRuns != null && richRuns.isNotEmpty) {
+      _textEditText.seedRuns(richRuns, fallbackStyle);
+    } else {
+      _textEditText.resetStyles(fallbackStyle);
+      _textEditText.text = existing ? (_controller.selectedText ?? '') : '';
+    }
     setState(() {
       _textEditRect = rect;
       _textEditPageRect = _geometry.toPageRect(rect);
