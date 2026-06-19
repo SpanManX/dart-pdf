@@ -820,6 +820,14 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     bool washed,
     double rotation,
   })? _afterText;
+  // the lifted clean page (the page rendered without the resized text box)
+  // kept alive past the drag so a transparent box's commit afterimage shows
+  // the real page content behind it instead of an opaque-paper flash. Null
+  // when the lift wasn't ready — then [_afterText.washed] paints the paper
+  // fallback. Hides the old footprint [_afterTextHideRect] (view space).
+  ui.Picture? _afterTextClean;
+  Rect? _afterTextHideRect;
+  double _afterTextHideAngle = 0;
   _InkPaint? _afterSignature;
 
   // live drag preview: the selected annotation's appearance, rendered
@@ -1364,6 +1372,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _afterShapeResize = null;
     _afterPath = null;
     _afterText = null;
+    _afterTextClean?.dispose();
+    _afterTextClean = null;
+    _afterTextHideRect = null;
+    _afterTextHideAngle = 0;
     _afterSignature = null;
     _afterEraseRects = null;
     _afterEraseFade = null;
@@ -2556,6 +2568,19 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final marqueeAdd = _marqueeAdd;
     final panned = _viewportPanning;
     final signaturePlace = _signatureDrag ? _signaturePreview : null;
+    // a free-text resize lifts the original box out of the page so the drag
+    // shows real content behind a transparent box; detach that lift (taking
+    // ownership from [_clearResizeClean]) so the commit afterimage can keep
+    // it up until the new raster lands — without it a transparent box
+    // flashes opaque paper on release
+    final textResizing = resizeRect != null && _textResizeStyle != null;
+    final liftClean = textResizing ? _resizeCleanPicture : null;
+    final liftHideRect = textResizing ? _resizeFrom : null;
+    final liftHideAngle = _resizeAngle;
+    if (liftClean != null) {
+      _resizeCleanPicture = null; // ownership transferred; don't dispose it
+      _resizeCleanFor = null;
+    }
     setState(() {
       _activeStroke = null;
       _activeStrokePressures = null;
@@ -2642,10 +2667,18 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             size: wrapStyle.size,
             color: wrapStyle.color,
             fill: wrapStyle.fill,
-            washed: true,
+            // with the lift up the box keeps its true (maybe transparent)
+            // fill and the lift hides the old footprint; only without a
+            // lift does it fall back to the opaque-paper wash
+            washed: liftClean == null,
             rotation: resizeAngle,
           );
+          _afterTextClean = liftClean;
+          _afterTextHideRect = liftHideRect;
+          _afterTextHideAngle = liftHideAngle;
           _afterDocument = _controller.document;
+        } else {
+          liftClean?.dispose(); // no commit: don't leak the detached lift
         }
       } else if (shapeStyle != null) {
         // the commit regenerates the shape at a constant stroke width —
@@ -4109,11 +4142,18 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                     ghostFlipY: _resizeHandle != null && _resizeFlipY,
                     // free-text resize lift: hide the original box's
                     // footprint with the page rendered without it (or an
-                    // opaque-paper wash until that lands)
-                    resizeClean:
-                        wrapResize != null ? _resizeCleanPicture : null,
-                    resizeHideRect: wrapResize != null ? _resizeFrom : null,
-                    resizeHideAngle: _resizeAngle,
+                    // opaque-paper wash until that lands). After the commit
+                    // the same lift carries on (kept alive as
+                    // [_afterTextClean]) so a transparent box's afterimage
+                    // shows page content behind it, not an opaque flash.
+                    resizeClean: wrapResize != null
+                        ? _resizeCleanPicture
+                        : _afterTextClean,
+                    resizeHideRect: wrapResize != null
+                        ? _resizeFrom
+                        : _afterTextHideRect,
+                    resizeHideAngle:
+                        wrapResize != null ? _resizeAngle : _afterTextHideAngle,
                     resizeHideWash: Color.alphaBlend(
                         widget.pageColor, const Color(0xFFFFFFFF)),
                     extraInk: extraInk,

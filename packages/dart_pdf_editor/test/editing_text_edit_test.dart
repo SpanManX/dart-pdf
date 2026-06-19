@@ -1275,6 +1275,47 @@ void main() {
       await settle(tester);
     });
 
+    testWidgets('releasing a resize keeps the lift, so no opaque flash',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing
+        ..fontSize = 16
+        // a transparent box (no fill): the one that used to flash opaque
+        // white over the page on release
+        ..textFillColor = null
+        ..addFreeText(0, const PdfRect(100, 600, 300, 650), 'Clear box')
+        ..tool = PdfEditTool.select;
+      expect(editing.selectAnnotation(0, 0), isTrue);
+      await tester.pump();
+
+      final gesture = await tester.startGesture(view(300, 600));
+      await gesture.moveTo(view(260, 600));
+      await gesture.moveTo(view(220, 600));
+      await tester.pump();
+
+      // wait for the async clean lift (the page rendered without the box)
+      // to land during the drag
+      var painter = overlayPainter(tester);
+      for (var i = 0; i < 40 && painter.resizeClean == null; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        painter = overlayPainter(tester);
+      }
+      expect(painter.resizeClean, isNotNull, reason: 'clean lift never landed');
+
+      await gesture.up();
+      await tester.pump();
+
+      // the commit happened, and the lift carried into the afterimage:
+      // the painter still hides the old footprint with real page content
+      // (resizeClean) instead of washing opaque paper over a transparent
+      // box — that wash was the white flash.
+      painter = overlayPainter(tester);
+      expect(painter.resizeClean, isNotNull);
+      expect(painter.resizeHideRect, isNotNull);
+      expect(find.text('Clear box'), findsOneWidget); // text still shown
+      await settle(tester);
+    });
+
     testWidgets('a shape resize still previews with the stretch ghost',
         (tester) async {
       final (editing, _) = await pumpEditor(tester);

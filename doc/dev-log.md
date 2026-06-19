@@ -3108,3 +3108,27 @@ actions can sit off the narrow strip's scroll). The grid's selection bar
 still appears as its own row — only the docked strip was asked to stop
 shifting, and the grid has the vertical room. Tests: editing_page_ops_test.dart
 (the bar swaps in without moving the first tile; the action taps reveal-then-tap).
+
+### No white flash when releasing a free-text resize
+
+A transparent free-text box flashed opaque paper on resize release. During
+the drag the box is "lifted" — the page is re-rendered without the
+annotation (`_resizeCleanPicture`) and the live preview paints only the
+box's own (maybe transparent) fill over it, so real page content shows
+through. On release the lift was dropped (`_clearResizeClean`) and the
+commit afterimage (`_afterText`) fell back to `washed: true`, i.e. a
+`pageColor @ 0.92` opaque-paper background — over a transparent box that's a
+white flash until the new raster lands. Fix: carry the lift past the drag.
+`_panEnd` detaches `_resizeCleanPicture` (taking ownership so
+`_clearResizeClean` won't dispose it) with the old footprint rect/angle, and
+the text-resize commit branch stashes them as `_afterTextClean` /
+`_afterTextHideRect` / `_afterTextHideAngle` and sets `_afterText.washed =
+liftClean == null` (the opaque wash is now only the fallback when the async
+clean render never landed). The painter already paints `resizeClean` over
+`resizeHideRect` independent of `dragging`, so `build` just feeds it the
+afterText lift when not dragging — no painter change. `_clearAfterimage`
+(and thus `dispose`) disposes `_afterTextClean`; a commit that produced no
+new revision disposes the detached lift to avoid a leak. Tests:
+editing_text_edit_test.dart (releasing a transparent-box resize keeps the
+lift — `resizeClean`/`resizeHideRect` stay non-null into the afterimage
+instead of an opaque wash; the text stays shown).
