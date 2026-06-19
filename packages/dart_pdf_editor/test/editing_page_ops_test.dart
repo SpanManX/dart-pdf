@@ -170,6 +170,25 @@ void main() {
       expect(editing.selectedPages, [0, 1, 2]);
     });
 
+    test('pageRangePreviewTo mirrors the range a shift-click would select',
+        () {
+      final editing = PdfEditingController(buildMultiPagePdf(6));
+      addTearDown(editing.dispose);
+      editing.selectPage(1); // anchor at 1
+      expect(editing.pageSelectionAnchor, 1);
+      // a hover over 4 previews 1..4 without committing the selection
+      expect(editing.pageRangePreviewTo(4), [1, 2, 3, 4]);
+      expect(editing.pageRangePreviewTo(0), [0, 1]); // backwards too
+      expect(editing.selectedPages, [1]); // preview never mutates
+    });
+
+    test('pageRangePreviewTo with no anchor previews just the page', () {
+      final editing = PdfEditingController(buildMultiPagePdf(4));
+      addTearDown(editing.dispose);
+      expect(editing.pageSelectionAnchor, isNull);
+      expect(editing.pageRangePreviewTo(2), [2]);
+    });
+
     test('togglePageSelection adds then removes individual pages', () {
       final editing = PdfEditingController(buildMultiPagePdf(5));
       addTearDown(editing.dispose);
@@ -353,6 +372,66 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('pdf-thumbnail-add-page')));
       await tester.pump();
       expect(editing.document.pageCount, 3);
+      await tester.pump(const Duration(seconds: 2)); // drain tile renders
+    });
+
+    testWidgets('holding shift previews the hovered range on the strip',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final editing = PdfEditingController(buildMultiPagePdf(5));
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Row(children: [
+            PdfThumbnailSidebar(controller: editing, viewerController: viewer),
+            const Expanded(child: SizedBox()),
+          ]),
+        ),
+      ));
+      await tester.pump();
+
+      BoxDecoration chip(int i) => tester
+          .widget<Container>(
+              find.byKey(ValueKey('pdf-thumbnail-tile-chip-$i')))
+          .decoration as BoxDecoration;
+
+      // anchor at Page 2 (index 1)
+      await tester.tap(find.text('Page 2'));
+      await tester.pump();
+      expect(editing.selectedPages, [1]);
+
+      // hover Page 4 (index 3) with a mouse
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text('Page 4')));
+      await tester.pump();
+
+      // no preview until shift goes down
+      expect(chip(3).color, isNull);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.pump();
+      // 1..3 now read as filled chips (anchor + the previewed run); the
+      // pages outside the range stay clear — and nothing is committed
+      expect(chip(1).color, isNotNull);
+      expect(chip(2).color, isNotNull);
+      expect(chip(3).color, isNotNull);
+      expect(chip(0).color, isNull);
+      expect(chip(4).color, isNull);
+      expect(editing.selectedPages, [1]);
+
+      // releasing shift clears the preview (only the real selection remains)
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pump();
+      expect(chip(2).color, isNull);
+      expect(chip(3).color, isNull);
+      expect(chip(1).color, isNotNull); // still selected
       await tester.pump(const Duration(seconds: 2)); // drain tile renders
     });
 

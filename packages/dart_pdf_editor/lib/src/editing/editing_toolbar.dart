@@ -422,8 +422,17 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   }
 
   Future<void> _setScale(BuildContext context) async {
-    final scale =
-        await showPdfScaleDialog(context, initial: controller.measurementScale);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final scale = await showPdfScaleDialog(
+      context,
+      initial: controller.measurementScale,
+      onCalibrate: () {
+        controller.tool = PdfEditTool.calibrate;
+        messenger?.showSnackBar(const SnackBar(
+          content: Text('Draw a line of known length to calibrate the scale.'),
+        ));
+      },
+    );
     if (scale != null) controller.measurementScale = scale;
   }
 
@@ -1296,7 +1305,15 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
       case 'insert':
         return const _StyleFields(opacity: true, font: true, boxColors: true);
       case 'measure':
-        return const _StyleFields(stroke: true, opacity: true, font: true);
+        return _StyleFields(
+          stroke: true,
+          opacity: true,
+          font: true,
+          // a distance line and a perimeter polyline carry endings; a
+          // closed area polygon does not
+          lineEndings: tool == PdfEditTool.measureDistance ||
+              tool == PdfEditTool.measurePerimeter,
+        );
       case 'markup':
         return const _StyleFields(opacity: true);
       default:
@@ -1320,6 +1337,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         return _StyleFields(
             stroke: canStroke,
             opacity: true,
+            // a /Polygon area measurement carries a caption font
+            font: controller.canRestyleMeasurementCaption,
             lineType: controller.canSetLineStyleSelected,
             shapeFill: controller.canFillSelected);
       case 'Line':
@@ -1327,6 +1346,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         return _StyleFields(
             stroke: canStroke,
             opacity: true,
+            // a measurement (/Line distance, /PolyLine perimeter) carries one
+            font: controller.canRestyleMeasurementCaption,
             lineType: controller.canSetLineStyleSelected,
             lineEndings: controller.canSetLineEndings);
       case 'Ink':
@@ -2112,6 +2133,8 @@ class _StyleMenuState extends State<_StyleMenu> {
     if (controller.restyleEditingTextSelection(font: font)) return;
     if (controller.canRestyleSelectedText) {
       controller.restyleSelectedText(font: font);
+    } else if (controller.canRestyleMeasurementCaption) {
+      controller.setSelectedMeasurementCaption(font: font);
     }
   }
 
@@ -2296,6 +2319,10 @@ class _StyleMenuState extends State<_StyleMenu> {
           builder: (context, _) {
             final fields = widget.fields;
             final selectedStyle = controller.selectedTextStyle;
+            // a selected measurement exposes its caption font/size the same
+            // way a free text exposes its own; the font rows drive whichever
+            // is non-null
+            final captionStyle = controller.selectedMeasurementCaptionStyle;
             // with a restylable selection the stroke/opacity sliders
             // show — and change — its style; otherwise the defaults
             final restylingAnnotation = controller.canRestyleSelected;
@@ -2469,27 +2496,35 @@ class _StyleMenuState extends State<_StyleMenu> {
                       label: 'Font size',
                       value: _draggingFontSize ??
                           selectedStyle?.size ??
+                          captionStyle?.size ??
                           controller.fontSize,
                       min: 8,
                       max: 48,
                       display:
-                          '${(_draggingFontSize ?? selectedStyle?.size ?? controller.fontSize).round()} pt',
+                          '${(_draggingFontSize ?? selectedStyle?.size ?? captionStyle?.size ?? controller.fontSize).round()} pt',
                       onChanged: (v) {
                         setState(() => _draggingFontSize = v.roundToDouble());
-                        if (selectedStyle == null) {
+                        if (selectedStyle == null && captionStyle == null) {
                           controller.fontSize = v.roundToDouble();
                         }
                       },
                       onChangeEnd: (v) {
                         final size = v.roundToDouble();
-                        controller.fontSize = size;
                         if (controller.restyleEditingTextSelection(
                             size: size)) {
+                          controller.fontSize = size;
                           setState(() => _draggingFontSize = null);
                           return;
                         }
                         if (controller.canRestyleSelectedText) {
+                          controller.fontSize = size;
                           controller.restyleSelectedText(size: size);
+                        } else if (controller.canRestyleMeasurementCaption) {
+                          // a selected measurement keeps its own caption size;
+                          // don't disturb the creation default
+                          controller.setSelectedMeasurementCaption(size: size);
+                        } else {
+                          controller.fontSize = size;
                         }
                         setState(() => _draggingFontSize = null);
                       },
@@ -2515,7 +2550,9 @@ class _StyleMenuState extends State<_StyleMenu> {
                       child: Row(children: [
                         const SizedBox(width: 86, child: Text('Style')),
                         FontStyleToggles(
-                          font: selectedStyle?.font ?? controller.fontFamily,
+                          font: selectedStyle?.font ??
+                              captionStyle?.font ??
+                              controller.fontFamily,
                           onChanged: _setFont,
                         ),
                       ]),

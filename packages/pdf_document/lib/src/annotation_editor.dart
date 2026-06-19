@@ -1123,6 +1123,10 @@ extension PdfAnnotationEditing on PdfEditor {
     double opacity = 1,
     List<double>? dashPattern,
     int? captionColor,
+    PdfStandardFont captionFont = PdfStandardFont.helvetica,
+    double captionSize = 10,
+    PdfLineEnding startEnding = PdfLineEnding.none,
+    PdfLineEnding endEnding = PdfLineEnding.none,
     String? author,
     String? name,
   }) {
@@ -1141,6 +1145,11 @@ extension PdfAnnotationEditing on PdfEditor {
     final closed = kind == PdfMeasurementKind.area;
     final (caption, anchor) = _measurementCaption(kind, points, m);
 
+    // endings ride the open kinds (distance/perimeter); a closed area
+    // polygon carries none.
+    final lineStart = closed ? PdfLineEnding.none : startEnding;
+    final lineEnd = closed ? PdfLineEnding.none : endEnding;
+
     // the geometry appearance, then the caption text drawn over its anchor
     final gs = _alphaState(opacity);
     final content = _lineContent(points,
@@ -1149,35 +1158,21 @@ extension PdfAnnotationEditing on PdfEditor {
         dashPattern: dashPattern,
         closed: closed,
         fillColor: closed ? fillColor : null,
+        startEnding: lineStart,
+        endEnding: lineEnd,
         hasAlpha: gs != null);
 
-    const captionSize = 10.0;
     final labelColor = captionColor ?? strokeColor;
-    final textWidth = measureHelvetica(caption, captionSize);
-    const padX = 3.0, padY = 2.0;
-    final boxLeft = anchor.$1 - textWidth / 2 - padX;
-    final boxBottom = anchor.$2 - captionSize / 2 - padY;
-    final boxWidth = textWidth + 2 * padX;
-    final boxHeight = captionSize + 2 * padY;
-    content
-      ..fillColor(0xFFFFFF)
-      ..rect(boxLeft, boxBottom, boxWidth, boxHeight)
-      ..fill()
-      ..beginText()
-      ..font('Helv', captionSize)
-      ..fillColor(labelColor)
-      ..textAt(anchor.$1 - textWidth / 2,
-          anchor.$2 - captionSize * 0.36) // rough cap-height centering
-      ..showText(caption)
-      ..endText();
+    final captionBox = _drawMeasurementCaption(content, caption, anchor,
+        font: captionFont, size: captionSize, color: labelColor);
 
     // the rect must cover both the geometry and the caption box
     final geomRect = _pointBounds(points, strokeWidth);
     final rect = PdfRect(
-      math.min(geomRect.left, boxLeft),
-      math.min(geomRect.bottom, boxBottom),
-      math.max(geomRect.right, boxLeft + boxWidth),
-      math.max(geomRect.top, boxBottom + boxHeight),
+      math.min(geomRect.left, captionBox.left),
+      math.min(geomRect.bottom, captionBox.bottom),
+      math.max(geomRect.right, captionBox.right),
+      math.max(geomRect.top, captionBox.top),
     );
 
     final subtype = switch (kind) {
@@ -1190,10 +1185,17 @@ extension PdfAnnotationEditing on PdfEditor {
       PdfMeasurementKind.perimeter => 'PolyLineDimension',
       PdfMeasurementKind.area => 'PolygonDimension',
     };
+    String rgb(int c) =>
+        ContentWriter.rgbComponents(c).map(ContentWriter.fmt).join(' ');
     final dict = _markupDict(subtype, rect, strokeColor, caption, author)
       ..['BS'] = _borderStyle(strokeWidth, dashPattern: dashPattern)
       ..['IT'] = CosName(intent)
+      // the caption's font/size/color, so a restyle can redraw it (§12.7.2)
+      ..['DA'] = CosString.fromText('${rgb(labelColor)} rg '
+          '/${captionFont.resourceName} ${ContentWriter.fmt(captionSize)} Tf')
       ..['Measure'] = m.toCosDictionary();
+    final leArray =
+        CosArray([CosName(lineStart.pdfName), CosName(lineEnd.pdfName)]);
     if (kind == PdfMeasurementKind.distance) {
       dict['L'] = CosArray([
         CosReal(points.first.$1),
@@ -1201,7 +1203,10 @@ extension PdfAnnotationEditing on PdfEditor {
         CosReal(points.last.$1),
         CosReal(points.last.$2),
       ]);
-      dict['LE'] = CosArray([const CosName('None'), const CosName('None')]);
+      dict['LE'] = leArray;
+    } else if (kind == PdfMeasurementKind.perimeter) {
+      dict['Vertices'] = _pointArray(points);
+      dict['LE'] = leArray; // §12.5.6.7: endings ride the first/last vertex
     } else {
       dict['Vertices'] = _pointArray(points);
     }
@@ -1211,9 +1216,100 @@ extension PdfAnnotationEditing on PdfEditor {
       pageIndex,
       dict,
       _form(rect, content,
-          resources: _resources(extGState: gs, font: _helvetica())),
+          resources: _resources(extGState: gs, font: _standardFont(captionFont))),
       name: name,
     );
+  }
+
+  /// Draws a measurement caption — a small white box and centered text at
+  /// [anchor] — into [content], returning the box's page-space bounds so
+  /// the caller can widen the annotation /Rect to include it. Shared by
+  /// [addMeasurement] and the restyle/resize regeneration so a width or
+  /// style change never drops the label.
+  PdfRect _drawMeasurementCaption(
+    ContentWriter content,
+    String caption,
+    (double, double) anchor, {
+    required PdfStandardFont font,
+    required double size,
+    required int color,
+  }) {
+    final textWidth = font.measure(caption, size);
+    const padX = 3.0, padY = 2.0;
+    final boxLeft = anchor.$1 - textWidth / 2 - padX;
+    final boxBottom = anchor.$2 - size / 2 - padY;
+    final boxWidth = textWidth + 2 * padX;
+    final boxHeight = size + 2 * padY;
+    content
+      ..fillColor(0xFFFFFF)
+      ..rect(boxLeft, boxBottom, boxWidth, boxHeight)
+      ..fill()
+      ..beginText()
+      ..font(font.resourceName, size)
+      ..fillColor(color)
+      ..textAt(anchor.$1 - textWidth / 2,
+          anchor.$2 - size * 0.36) // rough cap-height centering
+      ..showText(caption)
+      ..endText();
+    return PdfRect(
+        boxLeft, boxBottom, boxLeft + boxWidth, boxBottom + boxHeight);
+  }
+
+  /// Recovers a measurement caption's font, size, and color from the
+  /// annotation's /DA (written by [addMeasurement]). Falls back to
+  /// Helvetica 10 pt in the stroke color for measurements authored before
+  /// /DA was stored.
+  (PdfStandardFont, double, int) _measurementCaptionStyle(
+      PdfAnnotation annotation) {
+    final fallbackColor = annotation.color ?? 0x000000;
+    final da = annotation.defaultAppearance;
+    if (da == null) return (PdfStandardFont.helvetica, 10, fallbackColor);
+    final tf = RegExp(r'/(\S+)\s+([\d.]+)\s+Tf').firstMatch(da);
+    final size = double.tryParse(tf?.group(2) ?? '') ?? 10;
+    final font = tf == null
+        ? PdfStandardFont.helvetica
+        : (PdfStandardFont.tryFromName(tf.group(1)!) ?? PdfStandardFont.helvetica);
+    final rg = RegExp(r'([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg\b')
+        .allMatches(da)
+        .lastOrNull;
+    var color = fallbackColor;
+    if (rg != null) {
+      int byte(String s) =>
+          ((double.tryParse(s) ?? 0).clamp(0.0, 1.0) * 255).round();
+      color = (byte(rg.group(1)!) << 16) |
+          (byte(rg.group(2)!) << 8) |
+          byte(rg.group(3)!);
+    }
+    return (font, size, color);
+  }
+
+  /// If [annotation] is a measurement, recomputes its caption from the
+  /// /Measure and draws it into [w] over [points]' anchor, widening /Rect
+  /// to include the label and returning the expanded BBox plus the caption
+  /// font resource. For a non-measurement line it draws nothing and
+  /// returns [rect] with no font. Shared by every appearance regeneration
+  /// (restyle, resize, reshape, ending change) so the label is never lost.
+  (PdfRect, CosDictionary?) _appendMeasurementCaption(PdfAnnotation annotation,
+      PdfRect rect, List<(double, double)> points, ContentWriter w) {
+    final measure = annotation.measure;
+    if (measure == null) return (rect, null);
+    final kind = switch (annotation.subtype) {
+      'PolyLine' => PdfMeasurementKind.perimeter,
+      'Polygon' => PdfMeasurementKind.area,
+      _ => PdfMeasurementKind.distance,
+    };
+    final (caption, anchor) = _measurementCaption(kind, points, measure);
+    final (font, size, color) = _measurementCaptionStyle(annotation);
+    final box = _drawMeasurementCaption(w, caption, anchor,
+        font: font, size: size, color: color);
+    final full = PdfRect(
+      math.min(rect.left, box.left),
+      math.min(rect.bottom, box.bottom),
+      math.max(rect.right, box.right),
+      math.max(rect.top, box.top),
+    );
+    annotation.dict['Rect'] = _rectArray(full);
+    return (full, _standardFont(font));
   }
 
   /// The caption string and its page-space anchor (segment midpoint for a
@@ -2151,13 +2247,15 @@ extension PdfAnnotationEditing on PdfEditor {
     } else {
       dict['Vertices'] = _pointArray(points);
     }
+    // a measurement's caption rides along, expanding /Rect to fit it
+    final (bbox, font) = _appendMeasurementCaption(annotation, rect, points, w);
     if (form != null) {
-      _replaceAppearance(dict, form, rect, w,
-          resources: _resources(extGState: gs));
+      _replaceAppearance(dict, form, bbox, w,
+          resources: _resources(extGState: gs, font: font));
     } else {
       dict['AP'] = CosDictionary({
-        'N': _updater
-            .addObject(_form(rect, w, resources: _resources(extGState: gs))),
+        'N': _updater.addObject(
+            _form(bbox, w, resources: _resources(extGState: gs, font: font))),
       });
     }
     _markAnnotationChanged(pageIndex, dict);
@@ -2196,6 +2294,49 @@ extension PdfAnnotationEditing on PdfEditor {
     ]);
     // re-wrap: the dict's /LE just changed under the caller's instance, and
     // reshape reads the endings back through a fresh parse
+    reshapeLineAnnotation(
+        pageIndex, PdfAnnotation.fromDict(document, annotation.dict), points);
+    return true;
+  }
+
+  /// Restyles a measurement's caption font and/or size in place, keeping
+  /// the annotation's object number, /Annots slot, and geometry. The new
+  /// face/size is recorded in /DA and the appearance regenerates from the
+  /// current points (so the label redraws in the new font; the caption's
+  /// color is preserved). Pass null for an axis to leave it unchanged. A
+  /// no-op (returns false) for a line annotation that carries no /Measure,
+  /// any other subtype, or when nothing changes.
+  bool setMeasurementCaptionStyle(
+    int pageIndex,
+    PdfAnnotation annotation, {
+    PdfStandardFont? font,
+    double? size,
+  }) {
+    final subtype = annotation.subtype;
+    if (subtype != 'Line' && subtype != 'PolyLine' && subtype != 'Polygon') {
+      return false;
+    }
+    if (annotation.measure == null) return false;
+    final (curFont, curSize, color) = _measurementCaptionStyle(annotation);
+    final newFont = font ?? curFont;
+    final newSize = size ?? curSize;
+    if (newFont == curFont && newSize == curSize) return false;
+    final List<(double, double)> points;
+    if (subtype == 'Line') {
+      final line = annotation.line;
+      if (line == null) return false;
+      points = [line.$1, line.$2];
+    } else {
+      final vertices = annotation.vertices;
+      if (vertices == null || vertices.length < 2) return false;
+      points = vertices;
+    }
+    final rgb =
+        ContentWriter.rgbComponents(color).map(ContentWriter.fmt).join(' ');
+    annotation.dict['DA'] = CosString.fromText('$rgb rg '
+        '/${newFont.resourceName} ${ContentWriter.fmt(newSize)} Tf');
+    // re-wrap: the dict's /DA just changed under the caller's instance, and
+    // reshape recovers the caption style back through a fresh parse
     reshapeLineAnnotation(
         pageIndex, PdfAnnotation.fromDict(document, annotation.dict), points);
     return true;
@@ -2669,8 +2810,13 @@ extension PdfAnnotationEditing on PdfEditor {
         startEnding: endings.$1,
         endEnding: endings.$2,
         hasAlpha: gs != null);
-    _replaceAppearance(annotation.dict, form, rect, w,
-        resources: _resources(extGState: gs));
+    // A measurement carries a caption drawn over the line; regenerate it
+    // too (recovering its font/size/color from /DA) so a width or style
+    // change never drops the label, widening the BBox/Rect to keep it
+    // unclipped.
+    final (bbox, font) = _appendMeasurementCaption(annotation, rect, points, w);
+    _replaceAppearance(annotation.dict, form, bbox, w,
+        resources: _resources(extGState: gs, font: font));
     return true;
   }
 

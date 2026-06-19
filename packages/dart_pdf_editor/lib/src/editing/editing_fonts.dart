@@ -65,6 +65,11 @@ void pdfApplyFont(PdfEditingController controller, PdfTextFont font) {
   if (controller.restyleEditingTextSelection(font: font)) return;
   if (controller.canRestyleSelectedText) {
     controller.restyleSelectedFont(font);
+  } else if (font is PdfStandardFont &&
+      controller.canRestyleMeasurementCaption) {
+    // a measurement caption is drawn in a base-14 face (/DA resource name),
+    // so only a standard family applies — embedded fonts don't
+    controller.setSelectedMeasurementCaption(font: font);
   }
 }
 

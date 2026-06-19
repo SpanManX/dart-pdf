@@ -150,7 +150,40 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
 
   int _lastCurrent = 0;
 
+  /// The tile the mouse is over, tracked even while Shift is up so the
+  /// range preview can appear the instant Shift goes down.
+  int? _hoverPage;
+
+  /// Whether Shift is held — while it is (and a tile is hovered) the strip
+  /// previews the range a shift-click would select.
+  bool _shiftHeld = HardwareKeyboard.instance.isShiftPressed;
+
   PdfEditingPreferences get _preferences => widget.controller.preferences;
+
+  /// The pages the strip is previewing as a shift-click range: empty
+  /// unless Shift is held over a hovered tile.
+  Set<int> get _rangePreview => _shiftHeld && _hoverPage != null
+      ? widget.controller.pageRangePreviewTo(_hoverPage!).toSet()
+      : const {};
+
+  /// Tracks Shift's up/down so the preview can show and clear live. The
+  /// handler never consumes the event.
+  bool _onKeyEvent(KeyEvent event) {
+    final shift = HardwareKeyboard.instance.isShiftPressed;
+    if (shift != _shiftHeld && mounted) setState(() => _shiftHeld = shift);
+    return false;
+  }
+
+  /// A tile's mouse enter/exit. The field always updates; a rebuild only
+  /// happens while Shift is held, where the preview is actually visible —
+  /// plain hovering never churns the list.
+  void _setHover(int index, bool hovering) {
+    final next =
+        hovering ? index : (_hoverPage == index ? null : _hoverPage);
+    if (next == _hoverPage) return;
+    _hoverPage = next;
+    if (_shiftHeld && mounted) setState(() {});
+  }
 
   double get _width =>
       (_dragWidth ?? _preferences.thumbnailSidebarWidth ?? widget.width)
@@ -180,6 +213,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
     _lastCurrent = widget.viewerController.currentPage;
     widget.viewerController.addListener(_onViewerChanged);
     _preferences.addListener(_onPreferences);
+    HardwareKeyboard.instance.addHandler(_onKeyEvent);
   }
 
   @override
@@ -203,6 +237,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
   void dispose() {
     widget.viewerController.removeListener(_onViewerChanged);
     _preferences.removeListener(_onPreferences);
+    HardwareKeyboard.instance.removeHandler(_onKeyEvent);
     _scroll.dispose();
     _cache.dispose();
     super.dispose();
@@ -276,6 +311,9 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
   Widget build(BuildContext context) {
     final width = _width;
     final controller = widget.controller;
+    // pages a shift-click would select from the current hover — painted as
+    // a ghost of the selection chip while Shift is held
+    final rangePreview = _rangePreview;
     // a bottom sheet supplies its own width and resize affordance, so the
     // strip drops the side resize grip; the tile column keeps its preferred
     // width, centered in the wider sheet rather than stretched
@@ -358,6 +396,8 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
                           cache: _cache,
                           tileWidth: _tileWidth,
                           renderWorker: widget.renderWorker,
+                          inRangePreview: rangePreview.contains(index),
+                          onHover: (hovering) => _setHover(index, hovering),
                         );
                         // without the drag listener no reorder can ever start
                         return widget.allowPageEditing
@@ -1134,6 +1174,8 @@ class _PageTile extends StatelessWidget {
     required this.tileWidth,
     required this.renderWorker,
     this.onActivatePage,
+    this.inRangePreview = false,
+    this.onHover,
   });
 
   final PdfEditingController controller;
@@ -1146,6 +1188,16 @@ class _PageTile extends StatelessWidget {
   final _ThumbnailCache cache;
   final double tileWidth;
   final PdfRenderWorker? renderWorker;
+
+  /// Whether a shift-click on this tile would add it to the selection
+  /// right now — painted as a faint preview of the selection chip while
+  /// the strip's Shift hover is live. Ignored when already [selected].
+  final bool inRangePreview;
+
+  /// The mouse entering (true) or leaving (false) this tile, so the strip
+  /// can track the hovered page for its Shift range preview. Null off the
+  /// strip (the grid does its own hover handling).
+  final void Function(bool hovering)? onHover;
 
   /// Overrides what a plain tap does after selecting the page. The strip
   /// leaves this null and just scrolls the viewer to the page; the
@@ -1196,7 +1248,11 @@ class _PageTile extends StatelessWidget {
         ? scheme.primary
         : scheme.inversePrimary;
     final document = controller.document;
-    return GestureDetector(
+    // a shift-click would add this tile to the selection: paint a fainter
+    // version of the selected chip so the would-be range reads ahead of
+    // the click. The selected look always wins.
+    final preview = inRangePreview && !selected;
+    final tile = GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: _onTap,
       // a right-click (or control-click on macOS) opens the page context
@@ -1216,12 +1272,21 @@ class _PageTile extends StatelessWidget {
       // never nudges its contents — per-tile layout, _tileWidth's -26, and
       // _estimateOffset all still hold (each side still totals 12/4px).
       child: Container(
+        // a stable key (never toggles, so it doesn't churn the thumbnail
+        // raster) the strip's tests read the chip decoration through
+        key: ValueKey('pdf-thumbnail-tile-chip-$pageIndex'),
         padding: const EdgeInsets.fromLTRB(10.5, 2.5, 10.5, 2.5),
         decoration: BoxDecoration(
-          color: selected ? scheme.primary.withValues(alpha: 0.20) : null,
+          color: selected
+              ? scheme.primary.withValues(alpha: 0.20)
+              : (preview ? scheme.primary.withValues(alpha: 0.08) : null),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: selected ? scheme.primary : Colors.transparent,
+            color: selected
+                ? scheme.primary
+                : (preview
+                    ? scheme.primary.withValues(alpha: 0.45)
+                    : Colors.transparent),
             width: 1.5,
           ),
         ),
@@ -1335,6 +1400,13 @@ class _PageTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+    final onHover = this.onHover;
+    if (onHover == null) return tile;
+    return MouseRegion(
+      onEnter: (_) => onHover(true),
+      onExit: (_) => onHover(false),
+      child: tile,
     );
   }
 }

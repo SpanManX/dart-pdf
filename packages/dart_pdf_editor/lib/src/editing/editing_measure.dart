@@ -175,23 +175,34 @@ String pdfDefaultPageUnit([Locale? locale]) =>
 
 /// Asks the user for a drawing scale (`1 in on the page = N unit in the
 /// world`) and returns the calibrated [PdfMeasurementScale], or null when
-/// dismissed. [initial] pre-fills the fields.
+/// dismissed. [initial] pre-fills the fields. When [onCalibrate] is given,
+/// the dialog offers a "Calibrate" action that dismisses the dialog and
+/// invokes the callback (typically to arm the draw-a-reference-segment
+/// flow) instead of returning a typed ratio.
 Future<PdfMeasurementScale?> showPdfScaleDialog(
   BuildContext context, {
   PdfMeasurementScale? initial,
+  VoidCallback? onCalibrate,
 }) =>
     showDialog<PdfMeasurementScale>(
       context: context,
-      builder: (context) => PdfScaleDialog(initial: initial),
+      builder: (context) =>
+          PdfScaleDialog(initial: initial, onCalibrate: onCalibrate),
     );
 
 /// The scale-calibration dialog shown by [showPdfScaleDialog]. The user
 /// expresses the drawing's scale as "1 inch on the page equals N real
-/// units" — the most common way drawing scales are quoted.
+/// units" — the most common way drawing scales are quoted — or taps
+/// "Calibrate" (when [onCalibrate] is set) to measure a known length on
+/// the page instead.
 class PdfScaleDialog extends StatefulWidget {
-  const PdfScaleDialog({super.key, this.initial});
+  const PdfScaleDialog({super.key, this.initial, this.onCalibrate});
 
   final PdfMeasurementScale? initial;
+
+  /// Called when the user chooses to calibrate by drawing a reference
+  /// segment; the dialog dismisses first. Null hides the action.
+  final VoidCallback? onCalibrate;
 
   @override
   State<PdfScaleDialog> createState() => _PdfScaleDialogState();
@@ -292,12 +303,129 @@ class _PdfScaleDialogState extends State<PdfScaleDialog> {
         ],
       ),
       actions: [
+        if (widget.onCalibrate != null)
+          TextButton(
+            key: const ValueKey('pdf-scale-calibrate'),
+            onPressed: () {
+              Navigator.of(context).pop();
+              widget.onCalibrate!();
+            },
+            child: const Text('Calibrate'),
+          ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
         FilledButton(
           key: const ValueKey('pdf-scale-apply'),
+          onPressed: _submit,
+          child: const Text('Set scale'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Asks how long the just-drawn reference segment is in the real world,
+/// returning `(realLength, unitLabel)` or null when dismissed. Used by the
+/// draw-a-segment calibration flow after the user releases the drag.
+/// [initialUnit] pre-selects the unit (defaults to the device region's).
+Future<(double, String)?> showPdfCalibrationLengthDialog(
+  BuildContext context, {
+  String? initialUnit,
+}) =>
+    showDialog<(double, String)>(
+      context: context,
+      builder: (context) => _PdfCalibrationLengthDialog(initialUnit: initialUnit),
+    );
+
+class _PdfCalibrationLengthDialog extends StatefulWidget {
+  const _PdfCalibrationLengthDialog({this.initialUnit});
+
+  final String? initialUnit;
+
+  @override
+  State<_PdfCalibrationLengthDialog> createState() =>
+      _PdfCalibrationLengthDialogState();
+}
+
+class _PdfCalibrationLengthDialogState
+    extends State<_PdfCalibrationLengthDialog> {
+  final _value = TextEditingController();
+  late String _unit;
+
+  @override
+  void initState() {
+    super.initState();
+    _unit = (widget.initialUnit != null &&
+            _pdfScaleUnits.contains(widget.initialUnit))
+        ? widget.initialUnit!
+        : pdfDefaultMeasurementUnit();
+  }
+
+  @override
+  void dispose() {
+    _value.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final length = double.tryParse(_value.text.trim());
+    if (length == null || length <= 0) {
+      Navigator.of(context).pop();
+      return;
+    }
+    Navigator.of(context).pop((length, _unit));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Calibrate scale'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('The line you drew represents:'),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 100,
+                child: TextField(
+                  key: const ValueKey('pdf-calibrate-value'),
+                  controller: _value,
+                  autofocus: true,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  textAlign: TextAlign.end,
+                  onSubmitted: (_) => _submit(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                key: const ValueKey('pdf-calibrate-unit'),
+                value: _unit,
+                onChanged: (value) {
+                  if (value != null) setState(() => _unit = value);
+                },
+                items: [
+                  for (final unit in _pdfScaleUnits)
+                    DropdownMenuItem(value: unit, child: Text(unit)),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const ValueKey('pdf-calibrate-apply'),
           onPressed: _submit,
           child: const Text('Set scale'),
         ),

@@ -15,6 +15,7 @@ import '../theme.dart';
 import 'editing_color_picker.dart';
 import 'editing_controller.dart';
 import 'editing_fonts.dart';
+import 'editing_measure.dart';
 import 'stroke_prediction.dart';
 import 'text_prompt.dart';
 
@@ -914,7 +915,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   bool get _lineDragTool =>
       _tool == PdfEditTool.line ||
       _tool == PdfEditTool.arrow ||
-      _tool == PdfEditTool.measureDistance;
+      _tool == PdfEditTool.measureDistance ||
+      _tool == PdfEditTool.calibrate;
 
   /// The measurement kind the armed tool creates, or null for a
   /// non-measurement tool.
@@ -2252,6 +2254,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             PdfEditTool.line ||
             PdfEditTool.arrow ||
             PdfEditTool.measureDistance ||
+            PdfEditTool.calibrate ||
             PdfEditTool.freeText ||
             PdfEditTool.stamp ||
             PdfEditTool.image ||
@@ -2730,6 +2733,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   void _commitLineDrag(Offset start, Offset end) {
+    if (_tool == PdfEditTool.calibrate) {
+      unawaited(_commitCalibration(start, end));
+      return;
+    }
     final before = _controller.document;
     if (_tool == PdfEditTool.measureDistance) {
       _controller.addMeasurement(widget.pageIndex, PdfMeasurementKind.distance,
@@ -2751,6 +2758,27 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       dashed: _controller.dashedStroke,
     );
     _afterDocument = _controller.document;
+  }
+
+  /// Finishes the calibration drag: asks how long the drawn segment is in
+  /// the real world, then derives [PdfEditingController.measurementScale]
+  /// from it and disarms the tool. Nothing is stamped on the page.
+  Future<void> _commitCalibration(Offset start, Offset end) async {
+    final existing = _controller.measurementScale;
+    final result = await showPdfCalibrationLengthDialog(
+      context,
+      initialUnit: existing?.unitLabel,
+    );
+    if (!mounted || result == null) return;
+    final (length, unit) = result;
+    _controller.calibrateScale(
+      _geometry.toPagePoint(start),
+      _geometry.toPagePoint(end),
+      length,
+      unit,
+      pageUnitLabel: existing?.pageUnitLabel ?? pdfDefaultPageUnit(),
+    );
+    _controller.tool = PdfEditTool.select;
   }
 
   void _commitVertexDrag(List<Offset> points) {

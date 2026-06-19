@@ -65,6 +65,12 @@ enum PdfEditTool {
   /// live.
   measureArea,
 
+  /// Drag a straight segment of known real-world length to calibrate the
+  /// [PdfEditingController.measurementScale]. On release the editor asks
+  /// how long the drawn segment is and derives the scale from it (the
+  /// "two-point calibration" flow); nothing is stamped on the page.
+  calibrate,
+
   /// Drag out a box, then type the text shown inside it (/FreeText).
   freeText,
 
@@ -653,10 +659,13 @@ class PdfEditingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// A human label for the font new free text will be written in — the
-  /// embedded font's family, or the standard family name.
+  /// A human label for the font the font controls currently target — a
+  /// selected measurement's caption face, else the font new free text will
+  /// be written in (the embedded font's family, or the standard family).
   String get activeFontLabel =>
-      _activeFont?.familyName ?? preferences.fontFamily.family.label;
+      selectedMeasurementCaptionStyle?.font.family.label ??
+      _activeFont?.familyName ??
+      preferences.fontFamily.family.label;
 
   /// Parses [bytes] as a TrueType (.ttf) or OpenType (.otf) font and
   /// selects it for new free text via [activeFont]. Returns false when the
@@ -1218,6 +1227,7 @@ class PdfEditingController extends ChangeNotifier {
     (double, double) end,
     double realLength,
     String unitLabel, {
+    String pageUnitLabel = 'in',
     String? areaUnitLabel,
     int precision = 100,
   }) {
@@ -1229,6 +1239,7 @@ class PdfEditingController extends ChangeNotifier {
       pointLength: length,
       realLength: realLength,
       unitLabel: unitLabel,
+      pageUnitLabel: pageUnitLabel,
       areaUnitLabel: areaUnitLabel,
       precision: precision,
     );
@@ -1279,6 +1290,12 @@ class PdfEditingController extends ChangeNotifier {
           strokeWidth: preferences.strokeWidth,
           opacity: preferences.opacity,
           dashPattern: _lineDashPattern,
+          // the caption is base-14 text; an embedded selection falls back
+          // to the active standard family
+          captionFont: preferences.fontFamily,
+          captionSize: preferences.fontSize,
+          startEnding: preferences.lineStartEnding,
+          endEnding: preferences.lineEndEnding,
           author: author),
       pages: [pageIndex],
     );
@@ -1754,6 +1771,22 @@ class PdfEditingController extends ChangeNotifier {
     if (!_selectedPages.remove(index)) _selectedPages.add(index);
     _pageSelectionAnchor = index;
     notifyListeners();
+  }
+
+  /// The page a shift-click extends a range from, or null when nothing
+  /// has anchored it yet — the strip reads it to preview the range while
+  /// Shift is held.
+  int? get pageSelectionAnchor => _pageSelectionAnchor;
+
+  /// The pages a shift-click on [index] would select right now: the
+  /// contiguous run from the current anchor to [index] (ascending), or
+  /// just [index] with no anchor yet. The live preview the strip paints
+  /// while Shift is held — mirrors [selectPageRange] without committing.
+  List<int> pageRangePreviewTo(int index) {
+    final anchor = _pageSelectionAnchor ?? index;
+    final lo = math.min(anchor, index);
+    final hi = math.max(anchor, index);
+    return [for (var i = lo; i <= hi; i++) i];
   }
 
   /// Selects the contiguous range from the current anchor to [index]
@@ -2917,6 +2950,39 @@ class PdfEditingController extends ChangeNotifier {
     apply(
         (e) => e.setLineEndings(_selected.last.$1, annotation,
             startEnding: start, endEnding: end),
+        pages: [_selected.last.$1]);
+  }
+
+  /// Whether the single selected annotation is a measurement (a /Line,
+  /// /PolyLine, or /Polygon carrying a /Measure) whose caption font and
+  /// size can be restyled in place ([setSelectedMeasurementCaption]).
+  bool get canRestyleMeasurementCaption {
+    final annotation = selectedAnnotation;
+    return _selected.length == 1 &&
+        annotation != null &&
+        annotation.measure != null &&
+        annotation.normalAppearance != null &&
+        const {'Line', 'PolyLine', 'Polygon'}.contains(annotation.subtype);
+  }
+
+  /// The selected measurement caption's font and size, parsed from its
+  /// /DA, or null when no single measurement is selected — for the font
+  /// controls to reflect the current caption.
+  ({PdfStandardFont font, double size})? get selectedMeasurementCaptionStyle {
+    if (!canRestyleMeasurementCaption) return null;
+    return _freeTextStyleOf(selectedAnnotation!);
+  }
+
+  /// Restyles the selected measurement's caption font and/or size in
+  /// place — one revision, one undo, and the annotation keeps its /Annots
+  /// slot and object number. Pass null for an axis to leave it unchanged.
+  void setSelectedMeasurementCaption(
+      {PdfStandardFont? font, double? size}) {
+    final annotation = selectedAnnotation;
+    if (annotation == null || !canRestyleMeasurementCaption) return;
+    apply(
+        (e) => e.setMeasurementCaptionStyle(_selected.last.$1, annotation,
+            font: font, size: size),
         pages: [_selected.last.$1]);
   }
 

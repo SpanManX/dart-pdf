@@ -2976,3 +2976,115 @@ conversion). Tests: `ratioLabel quotes the configurable on-page reference
 unit`, the encode/decode round-trip incl. the legacy-inches path, `the
 page-unit (left side) follows the device region`, and an end-to-end
 `a metric page unit produces the right per-point scale`.
+
+### Calibrate the scale by drawing a known length
+
+The scale dialog gained a "Calibrate" action (shown only when
+`showPdfScaleDialog(onCalibrate:)` is wired — the toolbar passes it). The
+controller's `calibrateScale` had been dead code; this is its first caller.
+Flow: tap Calibrate → dialog dismisses, `controller.tool` becomes the new
+`PdfEditTool.calibrate`, a SnackBar says "Draw a line of known length" →
+user drags one straight segment → on release the overlay shows
+`showPdfCalibrationLengthDialog` ("The line you drew represents [__]
+[unit]") → `calibrateScale(start, end, length, unit)` derives the scale and
+the tool steps back to select. Nothing is stamped on the page.
+
+Wiring notes: `calibrate` reuses the single-segment line-drag machinery —
+added to `_lineDragTool` (so the preview line paints) and to the pan-start
+drag-out switch; `_commitLineDrag` branches to `_commitCalibration` (async,
+`unawaited`) before the measurement/line paths. `_measureKind` deliberately
+returns null for it, so the live measure readout (which needs an existing
+scale) stays off and no `/Measure` annotation is added. The calibrated
+scale's real-world unit comes from the length dialog (defaulting to the
+device region via `pdfDefaultMeasurementUnit`); its on-page `pageUnitLabel`
+follows the existing scale or `pdfDefaultPageUnit()`. `calibrateScale` and
+`PdfMeasurementScale.fromReference` took an optional `pageUnitLabel` (default
+`in`, so the existing dead-code signature stays source-compatible). Tests in
+editing_measure_test.dart: the Calibrate button hides without a callback and
+fires + dismisses with one; an end-to-end mouse drag → length dialog → scale
+set (200 page-pt segment = 50 ft ⇒ unitsPerPoint 0.25, nothing stamped, tool
+back to select); and cancelling the length dialog leaves the scale unset.
+
+### Measurement captions: keep them on restyle, plus font + line endings
+
+Three fixes to measurement annotations (/Line, /PolyLine, /Polygon + /Measure):
+
+1. **Width change dropped the caption (regression).** The label is drawn
+   into the appearance stream, but both regeneration paths —
+   `_regenerateLineLikeAppearance` (restyle/resize) and `reshapeLineAnnotation`
+   (vertex drag, ending change) — rebuilt only the line geometry and never
+   the caption, so any restyle erased the label. Extracted
+   `_appendMeasurementCaption`: when the annotation carries a /Measure it
+   recomputes the caption from the geometry, recovers its font/size/color
+   from /DA, draws it, widens /Rect + BBox to fit, and returns the caption
+   font resource. Both paths now call it, so the label survives every edit.
+
+2. **Caption font formatting.** `addMeasurement` gained `captionFont`
+   (a `PdfStandardFont`, base-14) and `captionSize`, and records them as a
+   /DA string (`<rgb> rg /<resource> <size> Tf`) so regeneration can redraw
+   in the same face. `_measurementCaptionStyle` parses /DA back (Helvetica
+   10 pt in the stroke color for pre-/DA measurements). The controller feeds
+   `preferences.fontFamily`/`fontSize`; the measure tool's tune popup already
+   shows the font controls (`font: true`), so they now take effect.
+
+3. **Start/end line endings.** `addMeasurement` gained `startEnding`/
+   `endEnding` and writes /LE for distance (Line) and perimeter (PolyLine)
+   — area (Polygon) carries none. The controller passes
+   `preferences.lineStartEnding`/`lineEndEnding`; the measure tune popup now
+   enables the ending pickers for distance/perimeter. Editing a selected
+   measurement's endings already worked via `setSelectedLineEndings`
+   (`canSetLineEndings` accepts Line/PolyLine) and now keeps the caption.
+
+Shared `_drawMeasurementCaption` replaced the inlined caption block (now
+takes any standard font instead of hardcoded `Helv` 10 pt). Tests:
+measure_test.dart (restyle keeps caption, /DA font+size, endings written +
+survive restyle, perimeter endings, setLineEndings keeps caption);
+editing_measure_test.dart (new measurements adopt the active caption font +
+endings; a width change keeps the caption visible).
+
+### Restyle a selected measurement's caption font
+
+Follow-up to the above ("not yet done" item): the font controls now appear
+for a *selected* measurement and restyle its caption in place. Editor:
+`PdfEditor.setMeasurementCaptionStyle(page, annotation, {font, size})` —
+mirrors `setLineEndings` (reads the current /DA style via
+`_measurementCaptionStyle`, preserves the caption color, rewrites /DA with
+the new face/size, re-wraps the dict and calls `reshapeLineAnnotation`,
+which redraws the label through `_appendMeasurementCaption`). No-op (false)
+for a line without a /Measure. Controller: `canRestyleMeasurementCaption`
+(single /Line, /PolyLine, or /Polygon with a /Measure and an appearance),
+`selectedMeasurementCaptionStyle` (font+size from /DA via `_freeTextStyleOf`),
+`setSelectedMeasurementCaption({font, size})`. Toolbar: `_selectionStyleFields`
+sets `font: controller.canRestyleMeasurementCaption` on the Line/PolyLine and
+Polygon cases; the tune popup's font-size slider and `FontStyleToggles` read
+`captionStyle` (the new getter) and route changes through
+`setSelectedMeasurementCaption` when no FreeText is the target. `_setFont`
+and `pdfApplyFont` gained the same fallback (standard families only — a
+caption is a base-14 face, so embedded fonts don't apply). The slider leaves
+the *creation* default font size untouched while restyling a caption (unlike
+FreeText, where the box size and default move together), and
+`activeFontLabel` now reflects the selected caption's face. Tests:
+measure_test.dart (`setMeasurementCaptionStyle` restyles /DA + the drawn
+caption; no-op on a plain line); editing_measure_test.dart (the panel
+restyles a selected caption font, getters report it, label kept).
+
+### Shift-hover range preview on the thumbnail strip
+
+Holding Shift over the pages strip now previews the range a shift-click
+would select — the run from the current anchor to the hovered tile reads as
+a faint version of the selection chip (primary @ 0.08 fill, @ 0.45 border)
+before the click commits. Controller: `pageSelectionAnchor` getter and
+`pageRangePreviewTo(index)` (mirrors `selectPageRange` without mutating).
+`_PdfThumbnailSidebarState` tracks `_hoverPage` (a `MouseRegion` per tile,
+via a new `_PageTile.onHover`) and `_shiftHeld` (a `HardwareKeyboard`
+handler added/removed in init/dispose); `_rangePreview` is the previewed
+set. The hover field always updates but only triggers a rebuild while Shift
+is held, so plain hovering never churns the lazy list. `_PageTile` gained
+`inRangePreview` + `onHover` (both default off, so the full-area grid — which
+does its own hover-for-drag — is unaffected). The decorated chip Container
+got a stable `pdf-thumbnail-tile-chip-$index` key (never toggles, so it
+doesn't re-key the thumbnail raster) that the widget test reads the chip
+fill through. Tests: editing_page_ops_test.dart (`pageRangePreviewTo`
+mirrors the range / single page with no anchor; a Shift-hold over a hovered
+tile fills the previewed chips without committing, and releasing Shift
+clears them).
