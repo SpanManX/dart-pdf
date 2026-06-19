@@ -212,6 +212,13 @@ class _ScaledTextSelectionControls extends MaterialTextSelectionControls
   Widget buildHandle(
       BuildContext context, TextSelectionHandleType type, double textLineHeight,
       [VoidCallback? onTap]) {
+    // The collapsed handle is the touch caret's draggable dot. In an
+    // expanded text box it floats well below the caret (a stray dot near
+    // the box's bottom edge), so suppress it — the blinking caret already
+    // marks the insertion point. Range-selection handles stay.
+    if (type == TextSelectionHandleType.collapsed) {
+      return const SizedBox.shrink();
+    }
     return SizedBox.fromSize(
       size: getHandleSize(textLineHeight),
       child: CustomPaint(
@@ -3244,6 +3251,40 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _controller.restyleEditingTextSelection(font: font, size: size, color: rgb);
   }
 
+  /// Toggles bold (or [italic]) on the inline text editor — the desktop
+  /// Cmd/Ctrl+B / Cmd/Ctrl+I shortcuts. Bold and italic are variants of the
+  /// base-14 faces, so an embedded font is left alone. With a selection the
+  /// toggle restyles it; with none it styles the whole box (or just sets the
+  /// face when the box is still empty).
+  void _toggleInlineTextStyle({required bool italic}) {
+    // form fields carry a single /DA font — no rich styling to toggle
+    if (_textEditRect == null || _textEditFieldName != null) return;
+
+    final base = _canStyleInlineTextSelection
+        ? _currentInlineTextStyle().font
+        : _textEditFont;
+    if (base is! PdfStandardFont) return;
+    final next =
+        italic ? base.withItalic(!base.isItalic) : base.withBold(!base.isBold);
+
+    if (_canStyleInlineTextSelection) {
+      _applyInlineTextStyle(font: next);
+      return;
+    }
+    final length = _textEditText.text.length;
+    if (length == 0) {
+      setState(() => _textEditFont = next);
+      _controller.fontFamily = next;
+      _textEditText.resetStyles(_TextEditStyle(
+          font: next, size: _textEditSize, color: _textEditColor));
+      return;
+    }
+    // a bare caret: style the whole box (select-all gives visible feedback)
+    _textEditText.selection =
+        TextSelection(baseOffset: 0, extentOffset: length);
+    _applyInlineTextStyle(font: next);
+  }
+
   Future<void> _showInlineTextFontMenu(BuildContext context) async {
     if (!_canStyleInlineTextSelection) return;
     final box = context.findRenderObject() as RenderBox?;
@@ -4004,6 +4045,22 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                             meta: true): _commitTextEdit,
                         const SingleActivator(LogicalKeyboardKey.enter,
                             control: true): _commitTextEdit,
+                        const SingleActivator(LogicalKeyboardKey.keyB,
+                            meta: true): () => _toggleInlineTextStyle(
+                              italic: false,
+                            ),
+                        const SingleActivator(LogicalKeyboardKey.keyB,
+                            control: true): () => _toggleInlineTextStyle(
+                              italic: false,
+                            ),
+                        const SingleActivator(LogicalKeyboardKey.keyI,
+                            meta: true): () => _toggleInlineTextStyle(
+                              italic: true,
+                            ),
+                        const SingleActivator(LogicalKeyboardKey.keyI,
+                            control: true): () => _toggleInlineTextStyle(
+                              italic: true,
+                            ),
                       },
                       child: Container(
                         // the chrome border lives in the inflate(2) gutter
@@ -4014,11 +4071,12 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                         padding: const EdgeInsets.all(2),
                         // the box's own fill when it has one; otherwise wash
                         // the paper color over what's underneath: faint for a
-                        // fresh box, near-opaque when editing existing text
-                        // so the old rendering doesn't show through
+                        // fresh box, fully opaque when editing existing text
+                        // so the old rendering doesn't ghost through and read
+                        // as a misaligned shadow behind the live text
                         color: _textEditFill ??
                             widget.pageColor.withValues(
-                                alpha: _textEditExisting ? 0.92 : 0.3),
+                                alpha: _textEditExisting ? 1 : 0.3),
                         foregroundDecoration: BoxDecoration(
                           border: Border.all(
                               color: PdfViewerTheme.of(context)

@@ -694,6 +694,59 @@ void main() {
       await settle(tester);
     });
 
+    testWidgets('Ctrl+B and Ctrl+I toggle bold/italic on the selection',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing.addFreeText(0, const PdfRect(100, 600, 360, 660), 'Hello world');
+      await tester.pump();
+      editing.tool = PdfEditTool.select;
+      await tester.pump();
+
+      await tap(tester, view(200, 630)); // first tap selects
+      await tap(tester, view(200, 630)); // second tap edits
+
+      final field = tester.widget<TextField>(find.byKey(editorKey));
+      field.controller!.value = const TextEditingValue(
+        text: 'Hello world',
+        selection: TextSelection(baseOffset: 6, extentOffset: 11),
+      );
+      await tester.pump();
+
+      Future<void> press(LogicalKeyboardKey key) async {
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(key);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pump();
+      }
+
+      await press(LogicalKeyboardKey.keyB);
+      await press(LogicalKeyboardKey.keyI);
+
+      final span = field.controller!.buildTextSpan(
+        context: tester.element(find.byKey(editorKey)),
+        style: const TextStyle(),
+        withComposing: false,
+      );
+      final styled = span.children!.whereType<TextSpan>().singleWhere(
+            (child) => child.text == 'world',
+          );
+      expect(styled.style?.fontWeight, FontWeight.bold);
+      expect(styled.style?.fontStyle, FontStyle.italic);
+
+      await tap(tester, view(450, 400)); // outside: commit
+      final annotation = editing.document.page(0).annotations.single;
+      final content = latin1.decode(
+          editing.document.cos.decodeStreamData(annotation.normalAppearance!));
+      expect(content, contains('/HelvBoldObl 14 Tf'));
+      expect(content, contains('(world) Tj'));
+      expect(content, contains('(Hello ) Tj'));
+      // restyling also moved the persisted creation default; reset it so a
+      // later test that builds a controller without clearing prefs still
+      // starts from plain Helvetica
+      editing.fontFamily = PdfStandardFont.helvetica;
+      await settle(tester);
+    });
+
     testWidgets('the style menu sets the font family for new text',
         (tester) async {
       final editing = PdfEditingController(buildMultiPagePdf(1));

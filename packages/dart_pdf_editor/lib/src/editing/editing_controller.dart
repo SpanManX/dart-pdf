@@ -3390,8 +3390,8 @@ class PdfEditingController extends ChangeNotifier {
   ///
   /// Built on [PdfEditor.replaceText], so its limits apply: identical
   /// runs elsewhere on the page change too, composite (Type0) fonts are
-  /// skipped, and glyphs are not re-measured — longer replacements can
-  /// overlap what follows on the line.
+  /// skipped, and matches do not cross a line break. Replacements are
+  /// re-measured so the rest of the line keeps its position.
   int replaceSelectedElementText(String text) {
     final selected = _selectedElement;
     final element = selectedElement;

@@ -112,7 +112,10 @@ Test signer identity in
 Content editing is in: `PdfEditor.stampPage` (text/shapes/JPEG via
 `PdfStamp`), `PdfPageElements.of` + `PdfEditor.deleteElements` (element
 enumeration with approximate bounds, stream rewriting), and
-`PdfEditor.replaceText` (simple fonts only) — all in
+`PdfEditor.replaceText` (simple fonts; matches across a line's shown
+strings and consecutive Tj/TJ runs, with width-compensated re-measurement
+from the font's /Widths so following text holds position; /Type0 and
+cross-line reflow still out) — all in
 `content_editor.dart`/`content_elements.dart`; the content-stream
 tokenizer (`ContentStreamParser`) now lives in pdf_cos.
 The roadmap is complete. Polish landed since: LZW/RunLength filters, xref recovery

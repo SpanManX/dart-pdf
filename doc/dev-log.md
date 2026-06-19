@@ -2759,3 +2759,81 @@ test key (salt length = digest length, and salt length = 0), covering
 auto-recovery, explicit-length enforcement, wrong-digest, and corrupted-
 signature rejection. The other deferred items (richer text editing, JBIG2
 Huffman/refinement, JPX subsampling + PCRL/CPRL) were left as-is this pass.
+
+## Richer text editing — cross-string matching with width compensation
+
+Lifted `PdfEditor.replaceText` (`content_editor.dart`) past its "match must
+fall inside one shown string" limit. It now models each maximal run of
+consecutive `Tj`/`TJ` operators as a flat list of **cells** — one per shown
+byte, plus a kern cell for each `TJ` adjustment number — so a `find` matches
+across the strings of a `TJ` array (and across adjacent show operators)
+exactly as the kerned text reads. The deferred example
+`[(spli) -20 (t run)]` now matches "split" as one word, consuming the
+interior −20.
+
+Replacements are **re-measured** against the font's real advance widths via
+`_widthsFor`: the font's own `/Widths` (+`/FirstChar`, `/MissingWidth`)
+when present, else base-14 metrics keyed off `/BaseFont` through
+`PdfStandardFont.tryFromName`, falling back to Helvetica. When text still
+follows a match on the line, a compensating `TJ` number of
+`newWidth − oldWidth` (glyph units — font size cancels, so it's never
+needed) is inserted so the rest of the line holds position. `oldWidth`
+includes any kern cells interior to the match.
+
+Emission keeps fidelity: runs with no match are returned untouched (byte
+identical); a single `Tj` whose result is one plain string stays a `Tj`
+(so simple corrections still serialize as `(text) Tj` and the existing
+round-trip test holds); anything needing a kern collapses the whole run to
+one `TJ`. `'`/`"` carry a line break so they stay standalone and need no
+compensation (still handled by `_replaceBytes`). /Type0 runs are still
+skipped and matching still stops at a line break (`Td`/`T*`/`'`/`"`) — i.e.
+this corrects and re-flows *within* a line, not across paragraphs; /Type0
+(CID) editing and paragraph reflow remain the deferred follow-ons.
+
+Mechanics worth remembering: `replaceText` rebuilds the operation list and
+writes it back via `elements.operations..clear()..addAll(...)` then
+`serialize()`; `ContentOperation(operator, operands)` is constructible and
+its operand list is mutable, and `CosArray` serializes elements
+space-separated, so a compensated run reads `[(AA) -667 (BBB)] TJ`. Tests
+in `content_edit_test.dart` cover within-element, cross-element+kern,
+the exact −667 Helvetica compensation, and a match spanning two `Tj`
+operators. Width compensation ignores `Tc`/`Tw` (per-char/space spacing),
+which is exact only when both are zero — the common case; documented, not
+handled. The remaining deferred item this pass left untouched: JBIG2
+Huffman/refinement and JPX subsampling + PCRL/CPRL.
+
+## Inline text editor: ghost wash, stray touch handle, bold/italic shortcuts
+
+Three fixes to the in-place free-text editor (`editing_overlay.dart`),
+prompted by edit-time visual feedback.
+
+1. **Ghost behind the live text.** Editing existing free text washed the
+   paper color over the old appearance at `alpha: 0.92`, so ~8% of the
+   committed rendering bled through — and because the live Flutter text and
+   the PDF appearance use slightly different glyph advances, that 8% read
+   as a misaligned shadow. Bumped the existing-text wash to fully opaque
+   (`alpha: 1`); a box with its own fill (`_textEditFill`) is unchanged, and
+   fresh boxes still wash faint (0.3) so you can place them over content.
+   The residual on-commit reflow (Flutter layout → PDF base-14 layout) is a
+   separate, deeper metrics problem left as-is.
+
+2. **Stray touch caret dot.** `_ScaledTextSelectionControls.buildHandle`
+   painted a handle for `TextSelectionHandleType.collapsed` too — the touch
+   caret's draggable dot, which in an expanded text box floats near the
+   box's bottom edge as a stray blue dot far from the caret. `buildHandle`
+   now returns `SizedBox.shrink()` for the collapsed type; the blinking
+   caret marks the insertion point and the range-selection handles stay.
+
+3. **Bold/Italic desktop shortcuts.** Added Cmd/Ctrl+B and Cmd/Ctrl+I to
+   the editor's existing `CallbackShortcuts` (alongside Esc / Cmd+Enter).
+   `_toggleInlineTextStyle` toggles `withBold`/`withItalic` on the base-14
+   face: with a selection it restyles it through `_applyInlineTextStyle`
+   (the same path the inline style chip uses); with a bare caret it styles
+   the whole box (select-all for visible feedback); on an empty box it just
+   sets the face. Embedded (non-base-14) fonts and form-field editors are
+   left alone. Test in `editing_text_edit_test.dart` selects a word, sends
+   Ctrl+B then Ctrl+I, and asserts the run renders bold+italic and commits
+   as `/HelvBoldObl`. Gotcha that cost a run: restyling persists the
+   creation default to the SharedPreferences mock, so the test resets
+   `fontFamily` at the end — a sibling test builds a controller without
+   clearing prefs and would otherwise inherit the bold+italic family.
