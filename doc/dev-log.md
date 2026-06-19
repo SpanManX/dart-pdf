@@ -2920,3 +2920,21 @@ should match what commits" theme as the /RC round-trip.
    the double-fire). Tests in `editing_text_edit_test.dart`: an embedded font
    applied to a run previews in a `pdfedit-` family and commits as a Type0
    face; Escape leaves no editor and no lingering focus.
+
+## Escape on the inline editor: finish the box, never delete it
+
+Follow-up to the focus-release work above. On desktop, placing a free-text
+box, typing, and pressing Escape *discarded* the box — which read as Escape
+"deleting" the annotation you'd just made. The earlier `onKeyEvent`/unfocus
+changes made Escape reliably end the edit, but it still ran the cancel path.
+
+Escape now goes through `_onEscapeTextEdit`, which never destroys a box:
+a brand-new box **commits** what was typed (an empty one adds nothing on
+close), matching the Figma/PowerPoint convention where Escape finishes the
+box; an existing box or a form field still **cancels** (reverts to the saved
+value — also non-destructive, the box stays). Wired into both the field's
+`onKeyEvent` and the redundant `CallbackShortcuts` binding. The old
+"Escape cancels without committing" test became "Escape keeps a newly placed
+box, committing what was typed", plus a new "Escape on an empty new box adds
+nothing". Existing-box and form Escape paths are unchanged (covered by the
+mouse/touch edit-in-place tests, which assert the annotation survives).

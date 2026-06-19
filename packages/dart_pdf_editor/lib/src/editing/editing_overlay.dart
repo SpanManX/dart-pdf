@@ -2123,8 +2123,23 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   void _cancelTextEdit() => _closeTextEditor();
 
-  /// Escape cancels the inline editor straight from the field's focus node,
-  /// so it fires even on platforms/states where the ancestor
+  /// What Escape does to the open editor. It must never destroy a box: a
+  /// brand-new free-text box keeps what was typed (an empty one just adds
+  /// nothing on close), matching the desktop convention where Escape
+  /// *finishes* the box rather than throwing it away — discarding it read
+  /// as Escape "deleting" the annotation you'd just placed. An existing box
+  /// or a form field reverts to its saved value instead (a real cancel,
+  /// and still non-destructive — the box stays).
+  void _onEscapeTextEdit() {
+    if (_textEditExisting || _textEditFieldName != null) {
+      _cancelTextEdit();
+    } else {
+      _commitTextEdit();
+    }
+  }
+
+  /// Escape ends the inline editor straight from the field's focus node, so
+  /// it fires even on platforms/states where the ancestor
   /// `CallbackShortcuts` never sees the key (e.g. the field's own editing
   /// actions swallow it). Returning `handled` stops the duplicate
   /// `CallbackShortcuts` binding from also running; every other key falls
@@ -2133,7 +2148,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape &&
         _textEditRect != null) {
-      _cancelTextEdit();
+      _onEscapeTextEdit();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -4157,7 +4172,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                     child: CallbackShortcuts(
                       bindings: {
                         const SingleActivator(LogicalKeyboardKey.escape):
-                            _cancelTextEdit,
+                            _onEscapeTextEdit,
                         const SingleActivator(LogicalKeyboardKey.enter,
                             meta: true): _commitTextEdit,
                         const SingleActivator(LogicalKeyboardKey.enter,

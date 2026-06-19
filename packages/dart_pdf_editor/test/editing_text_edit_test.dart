@@ -426,20 +426,40 @@ void main() {
       await settle(tester);
     });
 
-    testWidgets('Escape cancels the editor without committing', (tester) async {
+    testWidgets('Escape keeps a newly placed box, committing what was typed',
+        (tester) async {
       final (editing, _) = await pumpEditor(tester);
       editing.tool = PdfEditTool.freeText;
       await tester.pump();
 
       await drag(tester, view(100, 700), view(300, 640));
-      await tester.enterText(find.byKey(editorKey), 'never mind');
+      await tester.enterText(find.byKey(editorKey), 'keep me');
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
 
       expect(find.byKey(editorKey), findsNothing);
       expect(editing.isEditingText, isFalse);
-      expect(editing.document.page(0).annotations, isEmpty);
+      // Escape finishes the box rather than discarding it — losing the box
+      // you just placed read as Escape "deleting" the annotation
+      expect(editing.document.page(0).annotations, hasLength(1));
+      expect(editing.document.page(0).annotations.single.contents, 'keep me');
       expect(editing.tool, PdfEditTool.freeText, reason: 'tool stays armed');
+      await settle(tester);
+    });
+
+    testWidgets('Escape on an empty new box adds nothing', (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing.tool = PdfEditTool.freeText;
+      await tester.pump();
+
+      await drag(tester, view(100, 700), view(300, 640));
+      // no text typed
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(find.byKey(editorKey), findsNothing);
+      expect(editing.document.page(0).annotations, isEmpty,
+          reason: 'an empty box has nothing to keep');
       await settle(tester);
     });
 
@@ -512,6 +532,8 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pump();
+      expect(editing.document.page(0).annotations, hasLength(1),
+          reason: 'Escape (mouse-edit path) must not delete the box');
       await settle(tester);
     });
 
@@ -539,6 +561,29 @@ void main() {
       expect(annotation.contents, 'Edited in place');
       // the rewrite kept the original 14pt Helvetica style
       expect(annotation.defaultAppearance, contains('/Helv 14 Tf'));
+      await settle(tester);
+    });
+
+    testWidgets('Escape while editing existing free text keeps the annotation',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing.addFreeText(0, const PdfRect(100, 600, 300, 660), 'Original');
+      await tester.pump();
+      editing.tool = PdfEditTool.select;
+      await tester.pump();
+
+      await tap(tester, view(200, 630)); // select
+      await tap(tester, view(200, 630)); // edit
+      expect(find.byKey(editorKey), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+
+      expect(find.byKey(editorKey), findsNothing);
+      expect(editing.document.page(0).annotations, hasLength(1),
+          reason: 'Escape cancels the edit, it must not delete the box');
+      expect(
+          editing.document.page(0).annotations.single.contents, 'Original');
       await settle(tester);
     });
 
