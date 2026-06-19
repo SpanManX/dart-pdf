@@ -2439,6 +2439,15 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     _clearSelection();
   }
 
+  /// Reclaims keyboard focus after the in-place text editor closes while it
+  /// owned the keyboard (Escape, ⌘Enter, or a tap-on-page commit), so the
+  /// viewer's own shortcuts fire on the very next key — notably a second
+  /// Escape stepping the armed tool back out. Without it the removed field's
+  /// focus node leaves focus in limbo and that next key reaches nothing.
+  void _reclaimFocusAfterTextEdit() {
+    if (mounted) _focusNode.requestFocus();
+  }
+
   /// The controller behind any in-place text editor — the editing
   /// session, or (in the reader) the standalone form-fill controller.
   PdfEditingController? get _textEditController =>
@@ -3499,6 +3508,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
                 previewCache: widget.pagePreviews ? _previews : null,
                 renderWorker: widget.renderWorker,
                 predictStrokes: widget.predictStrokes,
+                onTextEditClosed: _reclaimFocusAfterTextEdit,
               ),
             ),
           ),
@@ -3886,6 +3896,7 @@ class _PdfViewerPage extends StatefulWidget {
     required this.previewCache,
     required this.renderWorker,
     required this.predictStrokes,
+    required this.onTextEditClosed,
   });
 
   final PdfPage page;
@@ -3975,6 +3986,9 @@ class _PdfViewerPage extends StatefulWidget {
 
   /// See [PdfViewer.predictStrokes].
   final bool predictStrokes;
+
+  /// See [EditingPageOverlay.onTextEditClosed].
+  final VoidCallback onTextEditClosed;
 
   @override
   State<_PdfViewerPage> createState() => _PdfViewerPageState();
@@ -4104,6 +4118,7 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
                               onShowFormFieldMenu: widget.onShowFormFieldMenu,
                               onResolvePagePoint: widget.onResolvePagePoint,
                               onMoveDragPreview: widget.onMoveDragPreview,
+                              onTextEditClosed: widget.onTextEditClosed,
                               rasterCurrent: _rastered,
                               zoom: zoom,
                               predictStrokes: widget.predictStrokes,

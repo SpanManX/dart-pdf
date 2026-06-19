@@ -423,6 +423,7 @@ class EditingPageOverlay extends StatefulWidget {
     this.onShowFormFieldMenu,
     this.onResolvePagePoint,
     this.onMoveDragPreview,
+    this.onTextEditClosed,
   });
 
   final PdfEditingController controller;
@@ -503,6 +504,14 @@ class EditingPageOverlay extends StatefulWidget {
   /// paints it above every page — a per-page overlay clips it behind the
   /// page below once the drag crosses a page boundary. Null clears it.
   final PdfMoveDragPreviewCallback? onMoveDragPreview;
+
+  /// Called when the in-place text editor closes while it still owned the
+  /// keyboard (Escape, ⌘Enter, or a commit by tapping the page) — not when
+  /// focus moved to another widget. The viewer wires this to reclaim its
+  /// own focus so its shortcuts (Escape → back out, tool keys, delete) work
+  /// again immediately; otherwise the removed field's focus node leaves
+  /// focus in limbo and the next key reaches nothing.
+  final VoidCallback? onTextEditClosed;
 
   @override
   State<EditingPageOverlay> createState() => _EditingPageOverlayState();
@@ -2156,6 +2165,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   void _closeTextEditor() {
     if (_textEditRect == null) return;
+    // whether the editor still owned the keyboard: a close driven by Escape,
+    // ⌘Enter, or a tap on the page arrives with focus still on the field; a
+    // close because the user clicked another widget (e.g. a toolbar field)
+    // does not — that new focus must be left alone
+    final ownedFocus = _textEditFocus.hasFocus;
     if (mounted) {
       setState(() {
         _textEditRect = null;
@@ -2168,11 +2182,20 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _textEditFieldName = null;
     }
     _controller.setEditingText(false);
-    // Escape (or any close) must hand the keyboard back: the field is gone
-    // from the tree, but its focus node keeps primary focus otherwise, so
-    // the soft keyboard/caret lingers and viewer shortcuts stay dead. rect
-    // is already null, so the focus-loss listener's commit is a no-op.
-    if (_textEditFocus.hasFocus) _textEditFocus.unfocus();
+    // hand the keyboard back so the viewer's shortcuts work again right away
+    // (Escape → back out the tool, V/P/R tool keys, delete): the removed
+    // field's focus node otherwise leaves focus in limbo and the next key
+    // reaches nothing. Prefer the viewer's own node (via onTextEditClosed)
+    // so a *second* Escape lands on its handler; fall back to a plain
+    // unfocus in hosts that supply no hook. rect is already null, so the
+    // focus-loss listener's commit is a no-op.
+    if (ownedFocus) {
+      if (widget.onTextEditClosed != null) {
+        widget.onTextEditClosed!();
+      } else if (_textEditFocus.hasFocus) {
+        _textEditFocus.unfocus();
+      }
+    }
   }
 
   /// Losing focus commits — tapping another widget, switching panes.

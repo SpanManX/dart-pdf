@@ -447,6 +447,32 @@ void main() {
       await settle(tester);
     });
 
+    testWidgets('two escapes: first commits the box, second backs out the tool',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing.tool = PdfEditTool.freeText;
+      await tester.pump();
+
+      await drag(tester, view(100, 700), view(300, 640));
+      await tester.enterText(find.byKey(editorKey), 'keep me');
+      await tester.pump();
+
+      // first Escape: commit and close, tool stays armed
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.byKey(editorKey), findsNothing);
+      expect(editing.document.page(0).annotations, hasLength(1));
+      expect(editing.tool, PdfEditTool.freeText);
+
+      // second Escape: the viewer reclaimed focus on close, so its own
+      // shortcut runs and backs the tool out to none
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(editing.tool, isNull,
+          reason: 'a second Escape must reach the viewer and disarm the tool');
+      await settle(tester);
+    });
+
     testWidgets('Escape on an empty new box adds nothing', (tester) async {
       final (editing, _) = await pumpEditor(tester);
       editing.tool = PdfEditTool.freeText;

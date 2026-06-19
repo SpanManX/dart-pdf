@@ -2938,3 +2938,20 @@ value — also non-destructive, the box stays). Wired into both the field's
 box, committing what was typed", plus a new "Escape on an empty new box adds
 nothing". Existing-box and form Escape paths are unchanged (covered by the
 mouse/touch edit-in-place tests, which assert the annotation survives).
+
+### Second Escape backs out the tool: hand focus back to the viewer
+
+The "first Escape commits" change exposed a sequel bug: a *second* Escape did
+nothing, so the armed free-text tool never stepped back out. Cause: closing
+the editor `unfocus()`'d the field into limbo, so the viewer's `_focusNode`
+(which owns its `CallbackShortcuts`) held no focus and the next key reached
+nothing. Fix: `EditingPageOverlay.onTextEditClosed` — called from
+`_closeTextEditor` only when the editor still owned the keyboard (Escape /
+⌘Enter / tap-on-page commit, detected via `_textEditFocus.hasFocus` before
+the field is torn down; a close because focus moved to another widget, e.g. a
+toolbar field, is left alone). The viewer wires it to
+`_reclaimFocusAfterTextEdit` → `_focusNode.requestFocus()`. Now the two-Escape
+ladder works: first Escape commits the box and keeps the tool armed; the
+second reaches the viewer's `_onEscape` and disarms the tool to none (`tool =
+null`, the existing back-out step — not the select tool). Test: "two escapes:
+first commits the box, second backs out the tool".
