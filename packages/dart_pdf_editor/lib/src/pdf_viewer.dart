@@ -745,6 +745,15 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
   final _previewAttempts = Set<PdfPage>.identity();
   bool _prerendering = false;
 
+  /// The editing controller's [PdfEditingController.pageRenderStamp] for
+  /// each page as of the displayed revision — the content the cached
+  /// previews (and on-screen rasters) reflect. A same-geometry edit swap
+  /// compares the new stamps against this snapshot: any page whose stamp
+  /// advanced had its content change (most importantly a redaction burn),
+  /// so its stale preview is dropped instead of rebound. Empty (and all
+  /// stamps read as 0) outside an editing session.
+  final Map<int, int> _contentStamps = {};
+
   late List<PdfPage> _pages;
   late List<double> _aspects; // height / width, after /Rotate
 
@@ -912,6 +921,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
         if (animation != null) _transform.value = animation.value;
       });
     _loadPages();
+    _snapshotContentStamps();
     _bindRasterCache();
     _scroll.addListener(_onScroll);
     _scroll.addListener(_onScrollForDetail);
@@ -1318,7 +1328,15 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       // objects — edited pages refresh from their on-screen render); a
       // different document starts clean
       if (sameGeometry) {
-        _previews.rebind(_pages);
+        // a page whose content stamp advanced changed materially (a
+        // redaction burn removes glyphs/images): drop its stale preview so
+        // a fast scroll can't flash the deleted content, instead of
+        // rebinding it. Untouched pages rebind in place as before.
+        _previews.rebind(_pages,
+            changed: (i) {
+          final prev = _contentStamps[i];
+          return prev != null && prev != _contentStamp(i);
+        });
       } else {
         _previews.clear();
         // the page list shifted under the lazy list's slot-keyed States;
@@ -1327,6 +1345,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
         // an insert/remove/reorder paints the wrong, stale low-res page)
         _pageEpoch++;
       }
+      // the cached previews (rebound or cleared) now reflect this revision
+      _snapshotContentStamps();
       // re-point (and, for a different file, re-prime) the persistent
       // preview backing; an edit revision keeps its rebound previews so the
       // prime is a no-op there
@@ -1394,6 +1414,21 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     _pages = [for (var i = 0; i < count; i++) widget.document.page(i)];
     _recomputeAspects();
     _controller._setPageCount(count);
+  }
+
+  /// Page [index]'s current content stamp from the editing controller, or 0
+  /// when not editing (no content can change under the viewer).
+  int _contentStamp(int index) => widget.editing?.pageRenderStamp(index) ?? 0;
+
+  /// Records the content stamp of every current page as the baseline the
+  /// cached previews now reflect (after a swap, a prerender pass, or first
+  /// build).
+  void _snapshotContentStamps() {
+    _contentStamps
+      ..clear()
+      ..addEntries([
+        for (var i = 0; i < _pages.length; i++) MapEntry(i, _contentStamp(i)),
+      ]);
   }
 
   void _recomputeAspects() {
@@ -3490,6 +3525,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
                 scale: _renderScale,
                 settleGeneration: _settleGeneration,
                 pageEpoch: _pageEpoch,
+                contentStamp: _contentStamp(index),
                 matches: _controller._matchesOn(index),
                 currentMatch: _controller._currentMatch >= 0
                     ? _controller._matches[_controller._currentMatch]
@@ -3881,6 +3917,7 @@ class _PdfViewerPage extends StatefulWidget {
     required this.scale,
     required this.settleGeneration,
     required this.pageEpoch,
+    required this.contentStamp,
     required this.matches,
     required this.currentMatch,
     required this.selection,
@@ -3931,6 +3968,13 @@ class _PdfViewerPage extends StatefulWidget {
   /// slot-reused [PdfPageView] State drops the previous page's stale raster
   /// instead of painting it for the page now in its slot.
   final int pageEpoch;
+
+  /// This page's [PdfEditingController.pageRenderStamp]: changes when the
+  /// page's *content* changed in a same-geometry edit revision (a redaction
+  /// burn, a fill, an annotation edit). A reused [PdfPageView] State drops
+  /// its stale raster/preview rather than painting the pre-edit content
+  /// while the new render lands. 0 outside an editing session.
+  final int contentStamp;
   final List<PdfTextMatch> matches;
   final PdfTextMatch? currentMatch;
   final List<PdfTextQuad> selection;
@@ -4036,6 +4080,7 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
         scale: widget.scale,
         settleGeneration: widget.settleGeneration,
         pageEpoch: widget.pageEpoch,
+        contentStamp: widget.contentStamp,
         pageColor: widget.pageColor,
         showAnnotations: widget.showAnnotations,
         onRasterReady: _onRasterReady,

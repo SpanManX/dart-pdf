@@ -3172,3 +3172,75 @@ toolbar tune popup (new `_StyleFields.formField`, 'Widget' case in
 context menu's new "Text style…" entry. Tests: form_styling_test.dart
 (pure-Dart: base-14 + embedded /DR + reopen-refill), editing_form_style_test.dart
 (controller API + labels appear with the tool + panel/tune-popup surfaces).
+
+## Type0 (composite) text editing + slider edits + redaction preview fix
+
+Three threads landed together.
+
+**Redaction fast-scroll leak.** After `applyRedactions` burns marks, the
+document swaps to a *same-geometry* revision, so the viewer's
+`didUpdateWidget` took the `rebind` path — which kept the cached low-res
+previews and marked them fresh for the new page objects, so a fast scroll
+flashed the now-removed content and the on-screen render could never
+replace it (`isFresh` blocked `putFromPicture`). Fix: `PdfPagePreviewCache.
+rebind` gained a `changed` predicate; the viewer snapshots each page's
+`PdfEditingController.pageRenderStamp` and, on a same-geometry swap, drops
+(not rebinds) the preview for any page whose stamp advanced (redaction
+bumps the epoch → every page). A per-page `contentStamp` is threaded into
+`PdfPageView` so a reused on-screen state also drops its stale raster +
+preview when its content changed. Disk previews are already off during an
+edit session, so the leak was purely in-memory. Tests in
+`page_preview_test.dart` (rebind drop unit) and `editing_redaction_test.dart`
+(end-to-end: the post-burn preview shows the fill, not the old glyphs).
+
+**Editable slider readouts.** General rule — every editing slider's value is
+now typeable. New shared `editing_value_field.dart`'s `PdfSliderValueField`
+replaces the read-only readout `Text` in the properties panel
+(`_sliderRow`), the toolbar tune popup (`_slider`) + inline opacity, and the
+shared form-style control. It tracks the slider while unfocused and commits
+on Enter/blur through the slider's change-end callback (clamped to range);
+percent readouts round-trip via a `parse` that strips `%`.
+
+**Type0 text editing.** `replaceText` now rewrites composite /Type0 runs for
+the Identity-H / CIDFontType2 / Identity-CIDToGIDMap shape (what this lib
+emits and most producers use). `content_editor_type0.dart`'s `_Type0Editing`:
+reads existing text from /ToUnicode (so a `find` string matches), re-encodes
+replacements via the embedded program's own cmap
+(`PdfEmbeddedFont.glyphForRune`) — so *any* glyph the embedded font carries
+can be typed, not just ones already on the page — re-measures from the
+descendant /W (DW default), inserts the width-compensating kern, and on
+commit merges the new glyphs' advances + Unicode into /W and /ToUnicode.
+It bails (run untouched) on anything it can't round-trip: CFF descendant,
+stream /CIDToGIDMap, non-Identity-H, missing program/ToUnicode, a char the
+font lacks, or a code split across show strings. Crucial UI-integration
+piece: `PdfPageElements` previously Latin-1-decoded Type0 runs (garbage), so
+the content tool's prompt + `find` were wrong — now it decodes Type0 via
+shared `type0_metrics.dart` (`parseToUnicodeCmap`/`parseCidWidths`/
+`cidDefaultWidth`) so `element.text` is real Unicode and measures by /W.
+Tests in `content_edit_type0_test.dart` build a real Type0 page via
+`CosDocumentBuilder` + `PdfEmbeddedFont.buildResource` and cover rewrite,
+typing a not-yet-used char (ö, with /W + /ToUnicode updates), width
+compensation, shrink, no-match, delete, element-text decode, and the
+content-tool round-trip.
+
+A *subsetted* embedded font physically lacks the outlines it stripped, so
+typing a character whose glyph isn't in the embedded program needs an
+outside glyph source. That's handled by a **bundled-font fallback**:
+`replaceText(fallbackFonts:)` takes a list of `PdfEmbeddedFont`s; when the
+document's own /Type0 font can't draw the whole replacement, `_Type0Editing`
+picks the first fallback that can (style-matched to the document font's
+serif/mono /Flags), embeds it as a new page /Font resource, and emits the
+replacement between `Tf` switches (restoring the original font after) — so
+unchanged text stays in the document font and only the new characters adopt
+the fallback face. Because `pdf_document` is pure-Dart (no asset access),
+the bytes come from the editor: `loadFallbackFonts()` (`editing_fonts.dart`)
+loads + parses the already-bundled **DejaVu Sans/Serif/Mono** trio (wide
+Unicode, libre) once, and the content tool's `_editElementText` awaits it
+and passes them through `replaceSelectedElementText(fallbackFonts:)`. The
+simple-font path also stopped hard-encoding `find`/`replace` as Latin-1
+(`_tryLatin1` → null for non-Latin-1), so a Unicode replacement no longer
+throws before reaching the composite path. Tests:
+`content_edit_type0_test.dart` uses Liberation Sans as the document font and
+a DejaVu fallback for a glyph Liberation lacks, asserting the run switches
+fonts and the text round-trips through both /ToUnicodes;
+`editing_fonts_test.dart` asserts the trio resolves from assets.

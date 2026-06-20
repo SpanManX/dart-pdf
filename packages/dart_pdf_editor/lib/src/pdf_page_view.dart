@@ -35,6 +35,7 @@ class PdfPageView extends StatefulWidget {
     this.previewCache,
     this.previewIndex = 0,
     this.pageEpoch = 0,
+    this.contentStamp = 0,
     this.renderWorker,
   });
 
@@ -74,6 +75,15 @@ class PdfPageView extends StatefulWidget {
   /// Unchanged across same-geometry (content-only) edits, so those keep
   /// re-rendering in place without a blank flash.
   final int pageEpoch;
+
+  /// This page's content stamp (see [_PdfViewerPage.contentStamp]). Unlike
+  /// [pageEpoch] it is per-page, so a content-only same-geometry edit that
+  /// changed *this* page advances it while leaving untouched pages alone.
+  /// When it changes the held raster and preview are the pre-edit content —
+  /// most dangerously after a redaction burn, where keeping them would
+  /// flash the removed glyphs/images during a fast scroll — so both drop
+  /// and the page re-renders. 0 outside an editing session (never changes).
+  final int contentStamp;
 
   /// While true, a page that has not been interpreted yet keeps its
   /// paper placeholder instead of starting the (UI-thread) interpreter
@@ -236,18 +246,22 @@ class _PdfPageViewState extends State<PdfPageView> {
       _preview = null;
       _refreshPreview();
     }
-    if (oldWidget.pageEpoch != widget.pageEpoch) {
-      // A structural document change reused this State for a different page
-      // at the same slot (previewIndex is unchanged, so the branches above
-      // don't fire). The held raster and preview belong to the page that
-      // used to live here — drop them so a fast scroll can't flash the wrong
-      // page; the (just-cleared) preview cache and _render below repaint it.
+    if (oldWidget.pageEpoch != widget.pageEpoch ||
+        oldWidget.contentStamp != widget.contentStamp) {
+      // Either a structural document change reused this State for a different
+      // page at the same slot (pageEpoch; previewIndex unchanged, so the
+      // branches above don't fire), or this page's own content changed in a
+      // same-geometry edit (contentStamp — a redaction burn, a fill). Either
+      // way the held raster and preview are stale: drop them so a fast scroll
+      // can't flash the old (or, after a redaction, removed) content; the
+      // preview cache (cleared for changed pages) and _render below repaint.
       _image?.dispose();
       _image = null;
       _preview?.dispose();
       _preview = null;
     }
     if (oldWidget.pageEpoch != widget.pageEpoch ||
+        oldWidget.contentStamp != widget.contentStamp ||
         !identical(oldWidget.page, widget.page) ||
         oldWidget.rotation != widget.rotation ||
         oldWidget.pageColor != widget.pageColor ||

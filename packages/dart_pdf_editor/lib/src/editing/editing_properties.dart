@@ -8,6 +8,7 @@ import 'editing_font_controls.dart';
 import 'editing_fonts.dart';
 import 'editing_panel.dart';
 import 'editing_preferences.dart';
+import 'editing_value_field.dart';
 import 'text_prompt.dart';
 import 'line_style.dart';
 
@@ -321,7 +322,9 @@ class _PdfAnnotationPropertiesPanelState
       required double max,
       required ValueChanged<double> onChanged,
       required ValueChanged<double> onChangeEnd,
-      String Function(double)? display}) {
+      String Function(double)? display,
+      double? Function(String)? parse}) {
+    final base = key is ValueKey ? '${key.value}' : '$key';
     return Padding(
       padding: const EdgeInsets.only(left: 16, right: 8),
       child: Row(children: [
@@ -336,11 +339,17 @@ class _PdfAnnotationPropertiesPanelState
             onChangeEnd: onChangeEnd,
           ),
         ),
-        SizedBox(
-          width: 36,
-          child: Text((display ?? _fmt)(value),
-              style: Theme.of(context).textTheme.bodySmall,
-              textAlign: TextAlign.right),
+        // the value also reads back as an editable number, so it can be set
+        // exactly without nudging the slider (general rule: any slider's
+        // value is directly typeable)
+        PdfSliderValueField(
+          key: ValueKey('$base-input'),
+          value: value,
+          min: min,
+          max: max,
+          display: display ?? _fmt,
+          parse: parse,
+          onSubmit: onChangeEnd,
         ),
         const SizedBox(width: 8),
       ]),
@@ -485,6 +494,10 @@ class _PdfAnnotationPropertiesPanelState
         min: 0.05,
         max: 1,
         display: (v) => '${(v * 100).round()}%',
+        parse: (s) {
+          final n = double.tryParse(s.replaceAll('%', '').trim());
+          return n == null ? null : n / 100;
+        },
         onChanged: (v) => setState(() => _draggingOpacity = v),
         onChangeEnd: (v) {
           _controller.restyleSelected(opacity: v);

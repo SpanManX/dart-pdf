@@ -15,11 +15,13 @@ import 'image.dart';
 import 'measure.dart';
 import 'page.dart';
 import 'rect.dart';
+import 'type0_metrics.dart';
 
 part 'annotation_clipboard.dart';
 part 'annotation_editor.dart';
 part 'annotation_sync.dart';
 part 'content_editor.dart';
+part 'content_editor_type0.dart';
 part 'redaction.dart';
 part 'form_admin.dart';
 part 'form_editor.dart';

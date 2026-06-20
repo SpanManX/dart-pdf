@@ -61,14 +61,32 @@ extension PdfContentEditing on PdfEditor {
   /// compensating `TJ` adjustment is inserted so whatever follows on the
   /// line keeps its position regardless of how the width changed.
   ///
-  /// Remaining limitations: composite /Type0 runs are skipped (their bytes
-  /// are glyph indexes, not characters); both strings must be Latin-1; and
-  /// matches do not cross a line break (`Td`/`T*`/`'`/`"`) — this corrects
-  /// and re-flows within a line, it does not re-flow paragraphs.
-  int replaceText(int index, String find, String replace) {
+  /// Composite (/Type0) runs are handled too, for the common Identity-H /
+  /// CIDFontType2 / Identity-CIDToGIDMap shape: the existing text is read
+  /// from `/ToUnicode`, replacements are re-encoded through the embedded
+  /// font's own `cmap` (so any character the embedded program carries a
+  /// glyph for can be typed), and the new glyphs' widths and Unicode values
+  /// are merged into the descendant `/W` and `/ToUnicode` (see
+  /// [_Type0Editing]). A Type0 run is left untouched when it can't be safely
+  /// round-tripped (CFF descendant, stream /CIDToGIDMap, non-Identity-H
+  /// encoding, missing program/ToUnicode, or a character the font lacks).
+  ///
+  /// Remaining limitations: for simple fonts both strings must be Latin-1;
+  /// and matches do not cross a line break (`Td`/`T*`/`'`/`"`) — this
+  /// corrects and re-flows within a line, it does not re-flow paragraphs.
+  /// [fallbackFonts] (composite editing only) supply glyph outlines for
+  /// characters the document's own /Type0 font can't draw — a subsetted
+  /// embedded font physically lacks the glyphs it dropped, and this library
+  /// bundles none. When given, such a replacement is drawn in the first
+  /// fallback that can render it (style-matched to the document font); when
+  /// omitted, an undrawable replacement leaves the run untouched.
+  int replaceText(int index, String find, String replace,
+      {List<PdfEmbeddedFont> fallbackFonts = const []}) {
     if (find.isEmpty) throw ArgumentError.value(find, 'find', 'is empty');
-    final findBytes = latin1.encode(find);
-    final replaceBytes = latin1.encode(replace);
+    // the simple-font path is byte-encoded; non-Latin-1 strings can only be
+    // matched/drawn by the composite path, so leave these null there.
+    final findBytes = _tryLatin1(find);
+    final replaceBytes = _tryLatin1(replace);
 
     final page = document.page(index);
     final elements = PdfPageElements.of(document, index);
@@ -81,18 +99,29 @@ extension PdfContentEditing on PdfEditor {
       return font is CosDictionary ? font : null;
     }
 
+    // composite (/Type0) fonts are rewritten by a separate path that decodes
+    // 2-byte glyph codes — built lazily and cached per font resource name.
+    final type0Cache = <String, _Type0Editing?>{};
+    _Type0Editing? type0For(String name, CosDictionary f) =>
+        type0Cache.putIfAbsent(
+            name, () => _Type0Editing.tryCreate(this, page, name, f, fallbackFonts));
+
     final ops = elements.operations;
     final rewritten = <ContentOperation>[];
     var count = 0;
     CosDictionary? font; // the font active at the current operation
+    String? fontName; // its /Font resource key
+    var fontSize = 0.0; // its size, for fallback Tf switches
 
     var i = 0;
     while (i < ops.length) {
       final op = ops[i];
       if (op.operator == 'Tf' && op.operands.isNotEmpty) {
-        font = op.operands[0] is CosName
-            ? fontFor((op.operands[0] as CosName).value)
+        fontName = op.operands[0] is CosName
+            ? (op.operands[0] as CosName).value
             : null;
+        font = fontFor(fontName);
+        if (op.operands.length >= 2) fontSize = _num(op.operands[1]);
         rewritten.add(op);
         i++;
         continue;
@@ -107,14 +136,23 @@ extension PdfContentEditing on PdfEditor {
           run.add(ops[i]);
           i++;
         }
-        final (ops_, n) = _rewriteTextRun(run, font, findBytes, replaceBytes);
+        final (ops_, n) = _isType0(cos, font) && fontName != null
+            ? (type0For(fontName, font!)
+                    ?.rewriteRun(run, find, replace, fontSize) ??
+                (run, 0))
+            : (findBytes != null && replaceBytes != null
+                ? _rewriteTextRun(run, font, findBytes, replaceBytes)
+                : (run, 0));
         rewritten.addAll(ops_);
         count += n;
         continue;
       }
       // ' and " carry a line break, so they stand alone; a single string
       // with nothing after it on its line needs no width compensation.
-      if ((op.operator == "'" || op.operator == '"') && !_isType0(cos, font)) {
+      if ((op.operator == "'" || op.operator == '"') &&
+          !_isType0(cos, font) &&
+          findBytes != null &&
+          replaceBytes != null) {
         final si = op.operator == '"' ? 2 : 0;
         if (op.operands.length > si && op.operands[si] is CosString) {
           final s = op.operands[si] as CosString;
@@ -130,12 +168,27 @@ extension PdfContentEditing on PdfEditor {
     }
 
     if (count > 0) {
+      // write the new glyphs' widths and Unicode values into the composite
+      // fonts they were added to before re-serializing the page.
+      for (final ctx in type0Cache.values) {
+        if (ctx != null && ctx.isDirty) ctx.commit();
+      }
       ops
         ..clear()
         ..addAll(rewritten);
       _setContent(page, elements.serialize());
     }
     return count;
+  }
+
+  /// [s] as Latin-1 bytes, or null when it has a code unit past 0xFF (the
+  /// simple-font path can't represent it; the composite path uses the string
+  /// directly).
+  static Uint8List? _tryLatin1(String s) {
+    for (final unit in s.codeUnits) {
+      if (unit > 0xFF) return null;
+    }
+    return Uint8List.fromList(s.codeUnits);
   }
 
   static bool _isType0(CosDocument cos, CosDictionary? font) {

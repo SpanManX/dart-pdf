@@ -3506,18 +3506,23 @@ class PdfEditingController extends ChangeNotifier {
   /// Rewrites the selected text element's characters to [text] and
   /// returns how many text runs changed.
   ///
-  /// Built on [PdfEditor.replaceText], so its limits apply: identical
-  /// runs elsewhere on the page change too, composite (Type0) fonts are
-  /// skipped, and matches do not cross a line break. Replacements are
-  /// re-measured so the rest of the line keeps its position.
-  int replaceSelectedElementText(String text) {
+  /// Built on [PdfEditor.replaceText], so its limits apply: identical runs
+  /// elsewhere on the page change too, and matches do not cross a line
+  /// break. Replacements are re-measured so the rest of the line keeps its
+  /// position. Composite (/Type0) text is handled; [fallbackFonts] (the
+  /// bundled DejaVu trio, see `loadFallbackFonts`) draw any character the
+  /// document's own font can't, so typing outside its subset still works.
+  int replaceSelectedElementText(String text,
+      {List<PdfEmbeddedFont> fallbackFonts = const []}) {
     final selected = _selectedElement;
     final element = selectedElement;
     if (selected == null || element == null || !canEditSelectedElementText) {
       return 0;
     }
     var count = 0;
-    apply((e) => count = e.replaceText(selected.$1, element.text!, text),
+    apply(
+        (e) => count = e.replaceText(selected.$1, element.text!, text,
+            fallbackFonts: fallbackFonts),
         pages: [selected.$1]);
     return count;
   }

@@ -12,6 +12,7 @@ import 'editing_controller.dart';
 import 'editing_font_controls.dart';
 import 'editing_fonts.dart';
 import 'editing_form_style.dart';
+import 'editing_value_field.dart';
 import 'editing_measure.dart';
 import 'line_style.dart';
 import 'editing_signature.dart';
@@ -480,7 +481,10 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
       multiline: false,
     );
     if (text == null || text.isEmpty || text == element.text) return;
-    controller.replaceSelectedElementText(text);
+    // bundled fallbacks let composite (/Type0) edits draw characters the
+    // document's own (possibly subsetted) font lacks
+    final fallbacks = await loadFallbackFonts();
+    controller.replaceSelectedElementText(text, fallbackFonts: fallbacks);
   }
 
   void _flatten(BuildContext context) {
@@ -1240,16 +1244,18 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
           ),
         ),
       ),
-      SizedBox(
-        width: 38,
-        child: Text(
-          '${(value * 100).round()}%',
-          style: TextStyle(
-            fontFeatures: const [FontFeature.tabularFigures()],
-            fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
+      PdfSliderValueField(
+        value: value,
+        min: 0.1,
+        max: 1,
+        width: 40,
+        display: (v) => '${(v * 100).round()}%',
+        parse: _parsePercent,
+        onSubmit: (v) {
+          controller.opacity = v;
+          if (restyling) controller.restyleSelected(opacity: v);
+          setState(() => _dragOpacity = null);
+        },
       ),
     ]);
   }
@@ -2017,6 +2023,16 @@ extension _FaintColor on ColorScheme {
 /// Which controls the style popup should show for the active context —
 /// each tool/selection only carries the settings it can actually use, so
 /// the popup never shows (say) a font picker while a rectangle is armed.
+/// Parses a points readout ("12.0 pt") back to its number.
+double? _parsePoints(String s) =>
+    double.tryParse(s.replaceAll(RegExp('[^0-9.]'), ''));
+
+/// Parses a percent readout ("40%") back to the 0..1 underlying value.
+double? _parsePercent(String s) {
+  final n = double.tryParse(s.replaceAll(RegExp('[^0-9.]'), ''));
+  return n == null ? null : n / 100;
+}
+
 class _StyleFields {
   const _StyleFields({
     this.stroke = false,
@@ -2394,7 +2410,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                       value: controller.eraserRadius,
                       min: 2,
                       max: 40,
-                      display: '${controller.eraserRadius.round()} pt',
+                      display: (v) => '${v.round()} pt',
+                      parse: _parsePoints,
                       onChanged: (v) =>
                           controller.eraserRadius = v.roundToDouble(),
                     ),
@@ -2404,7 +2421,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                       value: strokeValue,
                       min: 0.5,
                       max: 12,
-                      display: '${strokeValue.toStringAsFixed(1)} pt',
+                      display: (v) => '${v.toStringAsFixed(1)} pt',
+                      parse: _parsePoints,
                       onChanged: (v) {
                         setState(() => _draggingStroke = v);
                         if (!restylingAnnotation) controller.strokeWidth = v;
@@ -2423,7 +2441,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                       value: opacityValue,
                       min: 0.1,
                       max: 1,
-                      display: '${(opacityValue * 100).round()}%',
+                      display: (v) => '${(v * 100).round()}%',
+                      parse: _parsePercent,
                       onChanged: (v) {
                         setState(() => _draggingOpacity = v);
                         if (!restylingAnnotation) controller.opacity = v;
@@ -2515,8 +2534,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                           controller.fontSize,
                       min: 8,
                       max: 48,
-                      display:
-                          '${(_draggingFontSize ?? selectedStyle?.size ?? captionStyle?.size ?? controller.fontSize).round()} pt',
+                      display: (v) => '${v.round()} pt',
+                      parse: _parsePoints,
                       onChanged: (v) {
                         setState(() => _draggingFontSize = v.roundToDouble());
                         if (selectedStyle == null && captionStyle == null) {
@@ -2656,7 +2675,8 @@ class _StyleMenuState extends State<_StyleMenu> {
     required double value,
     required double min,
     required double max,
-    required String display,
+    required String Function(double) display,
+    double? Function(String)? parse,
     required ValueChanged<double> onChanged,
     ValueChanged<double>? onChangeEnd,
   }) {
@@ -2671,7 +2691,19 @@ class _StyleMenuState extends State<_StyleMenu> {
           onChangeEnd: onChangeEnd,
         ),
       ),
-      SizedBox(width: 44, child: Text(display, textAlign: TextAlign.end)),
+      // the readout is editable: type an exact value (general rule across
+      // the editing UI) — committing routes through the change-end callback,
+      // or onChanged for sliders that have none (live-only)
+      PdfSliderValueField(
+        key: key is ValueKey ? ValueKey('${key.value}-input') : null,
+        value: value,
+        min: min,
+        max: max,
+        width: 56,
+        display: display,
+        parse: parse,
+        onSubmit: onChangeEnd ?? onChanged,
+      ),
     ]);
   }
 }

@@ -112,12 +112,25 @@ Test signer identity in
 Content editing is in: `PdfEditor.stampPage` (text/shapes/JPEG via
 `PdfStamp`), `PdfPageElements.of` + `PdfEditor.deleteElements` (element
 enumeration with approximate bounds, stream rewriting), and
-`PdfEditor.replaceText` (simple fonts; matches across a line's shown
+`PdfEditor.replaceText` (matches across a line's shown
 strings and consecutive Tj/TJ runs, with width-compensated re-measurement
-from the font's /Widths so following text holds position; /Type0 and
-cross-line reflow still out) — all in
-`content_editor.dart`/`content_elements.dart`; the content-stream
-tokenizer (`ContentStreamParser`) now lives in pdf_cos.
+from the font's /Widths so following text holds position; composite
+/Type0 runs are handled too for the Identity-H/CIDFontType2/Identity-
+CIDToGIDMap shape — `content_editor_type0.dart`'s `_Type0Editing` reads
+existing text from /ToUnicode, re-encodes replacements through the
+embedded font's own cmap so any glyph the program carries can be typed,
+and merges new glyphs' advances + Unicode into the descendant /W and
+/ToUnicode; when the document font can't draw a character — a subsetted
+font dropped it — `replaceText(fallbackFonts:)` embeds a style-matched
+bundled fallback as a new page /Font resource and emits that replacement
+between Tf switches (the editor passes the DejaVu trio via
+`loadFallbackFonts()`); cross-line reflow and CFF/non-Identity Type0 still
+out) — all
+in `content_editor.dart`/`content_elements.dart`; shared Type0 metric
+parsing (/ToUnicode + /W) is in `type0_metrics.dart`, and
+`PdfPageElements` decodes Type0 runs through it so `element.text` is real
+Unicode (what the content-edit UI shows and passes as `find`). The
+content-stream tokenizer (`ContentStreamParser`) now lives in pdf_cos.
 The roadmap is complete. Polish landed since: LZW/RunLength filters, xref recovery
 (`CosDocument.open` falls back to scanning for `N G obj` when the xref
 chain is broken), type 4 PostScript calculator functions, /Count-based

@@ -4,6 +4,7 @@ import 'editing_color_picker.dart';
 import 'editing_controller.dart';
 import 'editing_font_controls.dart';
 import 'editing_fonts.dart';
+import 'editing_value_field.dart';
 import 'text_prompt.dart';
 
 /// A reusable column of controls that style the selected form text field's
@@ -114,10 +115,18 @@ class _PdfFormFieldStyleControlsState extends State<PdfFormFieldStyleControls> {
                     },
                   ),
                 ),
-                SizedBox(
-                  width: 28,
-                  child: Text('${(_draggingSize ?? style.size).round()}',
-                      textAlign: TextAlign.right),
+                PdfSliderValueField(
+                  key: const ValueKey('pdf-form-style-size-input'),
+                  value: _draggingSize ?? style.size,
+                  min: 6,
+                  max: 72,
+                  width: 40,
+                  display: (v) => '${v.round()}',
+                  onSubmit: (v) {
+                    _controller.setFormFieldStyle(name,
+                        fontSize: v.roundToDouble());
+                    setState(() => _draggingSize = null);
+                  },
                 ),
               ]),
             SwitchListTile(

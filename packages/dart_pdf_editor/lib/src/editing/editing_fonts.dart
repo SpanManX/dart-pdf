@@ -52,6 +52,30 @@ Future<Uint8List> loadBundledFont(PdfBundledFont font) async {
   return _bundledCache[font.assetKey] = bytes;
 }
 
+List<PdfEmbeddedFont>? _fallbackFontsCache;
+
+/// The bundled DejaVu trio (sans, serif, monospace) parsed for use as
+/// content-edit fallbacks: when rewriting composite (/Type0) page text, a
+/// document's own font may be subsetted and lack the glyph for a character
+/// the user types, so these wide-Unicode faces draw it instead (the closest
+/// serif/mono match is chosen). Loaded and cached once; a missing/corrupt
+/// asset is skipped.
+Future<List<PdfEmbeddedFont>> loadFallbackFonts() async {
+  if (_fallbackFontsCache != null) return _fallbackFontsCache!;
+  final fonts = <PdfEmbeddedFont>[];
+  for (final label in const ['DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono']) {
+    final bundled =
+        pdfBundledFonts.where((f) => f.label == label).firstOrNull;
+    if (bundled == null) continue;
+    try {
+      fonts.add(PdfEmbeddedFont.parse(await loadBundledFont(bundled)));
+    } catch (_) {
+      // skip a font that fails to load/parse
+    }
+  }
+  return _fallbackFontsCache = fonts;
+}
+
 /// Applies [font] to [controller]: it becomes the font new free text is
 /// written in (an embedded font sets [PdfEditingController.activeFont]; a
 /// standard family sets [PdfEditingController.fontFamily]) and, when a

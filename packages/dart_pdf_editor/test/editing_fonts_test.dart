@@ -28,6 +28,22 @@ void main() {
         (c.document.cos.resolve(f['Subtype']) as CosName?)?.value == 'Type0';
   }
 
+  group('bundled fallback fonts', () {
+    testWidgets('loadFallbackFonts resolves the DejaVu trio from assets',
+        (tester) async {
+      // a missing/renamed asset would silently disable composite-text
+      // fallback, so assert the bundled faces load and parse.
+      late List<PdfEmbeddedFont> fonts;
+      await tester.runAsync(() async => fonts = await loadFallbackFonts());
+      expect(fonts.map((f) => f.familyName).join(' '),
+          allOf(contains('Sans'), contains('Serif'), contains('Mono')));
+      // each carries real glyphs (a Latin letter resolves)
+      for (final f in fonts) {
+        expect(f.glyphForRune('A'.codeUnitAt(0)), greaterThan(0));
+      }
+    });
+  });
+
   group('controller font selection', () {
     test('setCustomFont parses a font and embeds it in new free text', () {
       final c = PdfEditingController(buildMultiPagePdf(1));
