@@ -8,6 +8,8 @@ on:
       - 'pdf_document-v*'
       - 'pdf_graphics-v*'
       - 'dart_pdf_editor-v*'
+      - 'pdf_ocr_vlm-v*'
+      - 'pdf_ocr_ondevice-v*'
 
 jobs:
   publish-pdf-cos:
@@ -59,3 +61,23 @@ jobs:
     with:
       environment: pub.dev
       working-directory: packages/dart_pdf_editor
+
+  publish-pdf-ocr-vlm:
+    if: startsWith(github.ref_name, 'pdf_ocr_vlm-v')
+    permissions:
+      contents: read
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      environment: pub.dev
+      working-directory: packages/pdf_ocr_vlm
+
+  publish-pdf-ocr-ondevice:
+    if: startsWith(github.ref_name, 'pdf_ocr_ondevice-v')
+    permissions:
+      contents: read
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      environment: pub.dev
+      working-directory: packages/pdf_ocr_ondevice
