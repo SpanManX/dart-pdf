@@ -39,6 +39,9 @@ jobs:
 
       - run: flutter pub get
       - run: dart analyze --fatal-infos
+      # Block a release whose inter-package lower bounds are stale (would score
+      # 0/20 on pub.dev downgrade analysis). See tool/check_lockstep_constraints.dart.
+      - run: dart run tool/check_lockstep_constraints.dart
       - run: dart test
         working-directory: packages/pdf_cos
       - run: dart test
