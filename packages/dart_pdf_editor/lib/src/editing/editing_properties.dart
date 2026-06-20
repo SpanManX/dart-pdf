@@ -88,6 +88,7 @@ class _PdfAnnotationPropertiesPanelState
 
   final TextEditingController _contents = TextEditingController();
   final TextEditingController _author = TextEditingController();
+  final TextEditingController _fieldName = TextEditingController();
   final TextEditingController _x = TextEditingController();
   final TextEditingController _y = TextEditingController();
   final TextEditingController _w = TextEditingController();
@@ -137,6 +138,7 @@ class _PdfAnnotationPropertiesPanelState
     _scroll.dispose();
     _contents.dispose();
     _author.dispose();
+    _fieldName.dispose();
     _x.dispose();
     _y.dispose();
     _w.dispose();
@@ -192,6 +194,7 @@ class _PdfAnnotationPropertiesPanelState
     _syncedFor = key;
     _contents.text = annotation?.contents ?? '';
     _author.text = annotation?.author ?? '';
+    _fieldName.text = _controller.selectedWidgetFieldName ?? '';
     final rect = annotation?.rect;
     _x.text = rect == null ? '' : _fmt(rect.left);
     _y.text = rect == null ? '' : _fmt(rect.bottom);
@@ -202,6 +205,17 @@ class _PdfAnnotationPropertiesPanelState
   void _commitContents() => _controller.setSelectedContents(_contents.text);
 
   void _commitAuthor() => _controller.setSelectedAuthor(_author.text);
+
+  void _commitFieldName() {
+    final current = _controller.selectedWidgetFieldName;
+    final next = _fieldName.text.trim();
+    if (current == null || next.isEmpty || next == current) return;
+    if (!_controller.renameFormField(current, next)) {
+      // a clash or invalid name leaves the field unchanged — restore the
+      // text so the row keeps reflecting the real name
+      _fieldName.text = current;
+    }
+  }
 
   void _commitGeometry() {
     final annotation = _controller.selectedAnnotation;
@@ -571,6 +585,121 @@ class _PdfAnnotationPropertiesPanelState
     ];
   }
 
+  /// Text styling for a selected form text field (font, style, alignment,
+  /// auto-size, size, multiline, colour) — regenerated through
+  /// [PdfEditingController.setFormFieldStyle].
+  List<Widget> _formFieldControls() {
+    final name = _controller.selectedFormFieldName;
+    final style = _controller.selectedFormFieldStyle;
+    if (name == null || style == null) return const [];
+    return [
+      _section('Text'),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(children: [
+          const Expanded(child: Text('Font')),
+          DropdownButton<PdfStandardFontFamily>(
+            key: const ValueKey('pdf-prop-form-font'),
+            value: style.font.family,
+            isDense: true,
+            items: const [
+              DropdownMenuItem(
+                  value: PdfStandardFontFamily.sans, child: Text('Sans')),
+              DropdownMenuItem(
+                  value: PdfStandardFontFamily.serif, child: Text('Serif')),
+              DropdownMenuItem(
+                  value: PdfStandardFontFamily.mono, child: Text('Mono')),
+            ],
+            onChanged: (family) {
+              if (family != null) {
+                _controller.setFormFieldStyle(name,
+                    font: PdfStandardFont.styled(family,
+                        bold: style.font.isBold, italic: style.font.isItalic));
+              }
+            },
+          ),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(children: [
+          const Expanded(child: Text('Style')),
+          FontStyleToggles(
+            keyPrefix: 'pdf-prop-form-font',
+            font: style.font,
+            onChanged: (font) =>
+                _controller.setFormFieldStyle(name, font: font),
+          ),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(children: [
+          const Expanded(child: Text('Align')),
+          TextAlignToggles(
+            keyPrefix: 'pdf-prop-form-align',
+            align: style.align,
+            onChanged: (align) =>
+                _controller.setFormFieldStyle(name, align: align),
+          ),
+        ]),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(children: [
+          const Expanded(child: Text('More fonts')),
+          PdfFontMenuButton(
+            controller: _controller,
+            fontPicker: widget.fontPicker,
+          ),
+        ]),
+      ),
+      SwitchListTile(
+        key: const ValueKey('pdf-prop-form-autosize'),
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        title: const Text('Auto-size'),
+        value: style.autoSize,
+        onChanged: (v) => _controller.setFormFieldStyle(name,
+            autoSize: v, fontSize: v ? null : style.size),
+      ),
+      if (!style.autoSize)
+        _sliderRow(
+          'Size',
+          _draggingFontSize ?? style.size,
+          key: const ValueKey('pdf-prop-form-size'),
+          min: 6,
+          max: 72,
+          onChanged: (v) => setState(() => _draggingFontSize = v),
+          onChangeEnd: (v) {
+            _controller.setFormFieldStyle(name, fontSize: v.roundToDouble());
+            setState(() => _draggingFontSize = null);
+          },
+        ),
+      SwitchListTile(
+        key: const ValueKey('pdf-prop-form-multiline'),
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        title: const Text('Multiline'),
+        value: style.multiline,
+        onChanged: (v) => _controller.setFormFieldStyle(name, multiline: v),
+      ),
+      _swatchRow('Color', style.color,
+          key: const ValueKey('pdf-prop-form-color'),
+          onTap: () => _pickFormColor(name, style.color)),
+    ];
+  }
+
+  Future<void> _pickFormColor(String name, Color current) async {
+    final picked = await showPdfColorPicker(context,
+        initial: current,
+        initialFormat: _preferences.colorPickerFormat,
+        onFormatChanged: (format) => _preferences.colorPickerFormat = format);
+    if (picked != null) {
+      _controller.setFormFieldStyle(name, color: picked.toARGB32() & 0xFFFFFF);
+    }
+  }
+
   List<Widget> _buildSingle(PdfAnnotation annotation) {
     final slot = _controller.selectedAnnotationSlot!;
     return [
@@ -581,14 +710,28 @@ class _PdfAnnotationPropertiesPanelState
       ),
       ..._styleControls(annotation),
       ..._textStyleControls(annotation),
-      _section('Content'),
-      _textRow('Contents', _contents,
-          key: const ValueKey('pdf-prop-contents'),
-          onCommit: _commitContents,
-          maxLines: 4),
-      if (widget.showAuthor)
-        _textRow('Author', _author,
-            key: const ValueKey('pdf-prop-author'), onCommit: _commitAuthor),
+      // a form widget's /T is its field name, not an author, and /V (not
+      // /Contents) is its value — so widgets get a "Field name" row instead
+      // of the generic Contents/Author section
+      if (annotation.subtype == 'Widget') ...[
+        if (_controller.selectedWidgetFieldName != null) ...[
+          _section('Form field'),
+          _textRow('Field name', _fieldName,
+              key: const ValueKey('pdf-prop-field-name'),
+              onCommit: _commitFieldName),
+        ],
+        ..._formFieldControls(),
+      ] else ...[
+        ..._formFieldControls(),
+        _section('Content'),
+        _textRow('Contents', _contents,
+            key: const ValueKey('pdf-prop-contents'),
+            onCommit: _commitContents,
+            maxLines: 4),
+        if (widget.showAuthor)
+          _textRow('Author', _author,
+              key: const ValueKey('pdf-prop-author'), onCommit: _commitAuthor),
+      ],
       _section('Position & size (pt)'),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

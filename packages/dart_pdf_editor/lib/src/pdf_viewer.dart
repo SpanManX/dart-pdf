@@ -450,6 +450,7 @@ class PdfViewer extends StatefulWidget {
     this.editingTextPrompt,
     this.annotationMenuBuilder,
     this.formImagePicker,
+    this.fontPicker,
     this.imagePicker,
     this.onSnapshot,
     this.pageSpacing = 12,
@@ -554,6 +555,12 @@ class PdfViewer extends StatefulWidget {
   /// (signature and logo fields) — typically a file picker returning
   /// PNG or JPEG bytes. With none, tapping a push button does nothing.
   final PdfFormImagePicker? formImagePicker;
+
+  /// How the form field "Text style…" popup loads a custom `.ttf`/`.otf`
+  /// font (its "More fonts → Load font…" entry) — typically a file picker
+  /// returning the font bytes. With none, that popup still offers the
+  /// standard and bundled fonts; only the load-custom entry is hidden.
+  final PdfFontPicker? fontPicker;
 
   /// How the image tool ([PdfEditTool.image]) asks for the picture to
   /// insert — typically a file picker returning PNG or JPEG bytes. With
@@ -2218,6 +2225,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       controller: editing,
       fieldName: fieldName,
       textPrompt: widget.editingTextPrompt ?? showPdfTextPrompt,
+      fontPicker: widget.fontPicker,
     );
   }
 
@@ -4125,6 +4133,22 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
                             ),
                           ),
                         ),
+                ),
+              // field-name labels: while the form-authoring tool is armed,
+              // outline every field and tag it with its name so empty
+              // fields (which render nothing) are discoverable
+              if (editing != null)
+                Positioned.fill(
+                  child: ListenableBuilder(
+                    listenable: editing,
+                    builder: (context, _) => editing.tool == PdfEditTool.form
+                        ? FormFieldLabelLayer(
+                            controller: editing,
+                            pageIndex: widget.index,
+                            geometry: geometry,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
                 ),
               // direct form fill: a per-field tap layer in reading /
               // selection modes (the form-authoring tool owns fields

@@ -23,6 +23,7 @@ part 'content_editor.dart';
 part 'redaction.dart';
 part 'form_admin.dart';
 part 'form_editor.dart';
+part 'form_styling.dart';
 part 'ocr_editor.dart';
 part 'page_editor.dart';
 part 'signature_editor.dart';

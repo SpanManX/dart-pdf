@@ -137,6 +137,41 @@ typedef PdfAnnotationEditPredicate = bool Function(PdfAnnotation annotation);
 /// the subset of [PdfFieldType] with creation support in [PdfEditor].
 enum PdfFormFieldKind { text, checkBox, pushButton }
 
+/// The text styling of a form text field, read from its /DA, /Q and /Ff —
+/// what the form-field style controls reflect and edit
+/// ([PdfEditingController.selectedFormFieldStyle]).
+class PdfFormFieldStyle {
+  const PdfFormFieldStyle({
+    required this.font,
+    required this.size,
+    required this.autoSize,
+    required this.color,
+    required this.align,
+    required this.multiline,
+  });
+
+  /// The base-14 face the field's /DA names, mapped leniently (an embedded
+  /// /DR font maps to Helvetica). Carries the bold/italic state the style
+  /// toggles reflect.
+  final PdfStandardFont font;
+
+  /// The /DA font size in points; when [autoSize] this is a readable
+  /// stand-in (the stored size is 0).
+  final double size;
+
+  /// Whether the field auto-sizes its text (the /DA size is 0).
+  final bool autoSize;
+
+  /// The /DA text colour (opaque).
+  final Color color;
+
+  /// The /Q alignment.
+  final PdfTextAlign align;
+
+  /// Whether the field wraps over multiple lines (/Ff multiline flag).
+  final bool multiline;
+}
+
 /// An editing session over a PDF document: applies edits through
 /// [PdfEditor], owns the resulting document revisions, and carries the
 /// UI state of the editing tools (active tool, color, pending ink
@@ -3731,4 +3766,110 @@ class PdfEditingController extends ChangeNotifier {
   /// Flattens the interactive form: bakes every widget's appearance
   /// into its page and removes all fields ([PdfEditor.flattenForm]).
   bool flattenFormFields() => apply((e) => e.flattenForm());
+
+  /// The selected text field (name + field), or null unless exactly one
+  /// text-field widget is selected — the styling controls' target.
+  (String name, PdfFormField field)? get _selectedFormTextField {
+    if (_selected.length != 1) return null;
+    if (selectedAnnotation?.subtype != 'Widget') return null;
+    final ref = _widgetFieldForSlot(_selected.last);
+    if (ref == null) return null;
+    final field = acroForm?.fieldNamed(ref.$1);
+    if (field == null || field.type != PdfFieldType.text) return null;
+    return (ref.$1, field);
+  }
+
+  /// Whether a single text-field widget is selected, so its text styling
+  /// (font, size, colour, alignment, auto-size, multiline) can be changed
+  /// via [setFormFieldStyle] / [selectedFormFieldStyle].
+  bool get canStyleSelectedFormField => _selectedFormTextField != null;
+
+  /// The name of the selected text field, or null unless exactly one is
+  /// selected — the handle the style controls pass to [setFormFieldStyle].
+  String? get selectedFormFieldName => _selectedFormTextField?.$1;
+
+  /// The field name of the selected form widget of any field type (text,
+  /// check box, radio, button, …), or null unless exactly one form widget
+  /// is selected — for the properties panel's field-name row.
+  String? get selectedWidgetFieldName {
+    if (_selected.length != 1 || selectedAnnotation?.subtype != 'Widget') {
+      return null;
+    }
+    return _widgetFieldForSlot(_selected.last)?.$1;
+  }
+
+  /// Selects the field [name]'s first widget (so the style controls and
+  /// move/resize act on it) by hit-testing its rectangle's centre. Returns
+  /// false when the field or its first widget's page/rect can't be found.
+  bool selectFormFieldByName(String name) {
+    final field = acroForm?.fieldNamed(name);
+    if (field == null) return false;
+    final page = field.widgetPageIndex(0);
+    final rect = field.widgetRect(0);
+    if (page < 0 || rect == null) return false;
+    return selectFormWidgetAt(
+        page, (rect.left + rect.right) / 2, (rect.bottom + rect.top) / 2);
+  }
+
+  /// The selected text field's current style, or null when no single text
+  /// field is selected — drives the form-field style controls.
+  PdfFormFieldStyle? get selectedFormFieldStyle {
+    final sel = _selectedFormTextField;
+    if (sel == null) return null;
+    final field = sel.$2;
+    final name = RegExp(r'/(\S+)\s+[\d.]+\s+Tf')
+            .firstMatch(field.defaultAppearance ?? '')
+            ?.group(1) ??
+        'Helv';
+    final size = field.appearanceFontSize;
+    return PdfFormFieldStyle(
+      font: PdfStandardFont.fromName(name),
+      size: size == 0 ? 12 : size,
+      autoSize: size == 0,
+      color: Color(0xFF000000 | (field.appearanceColor ?? 0)),
+      align: PdfTextAlign.values.firstWhere(
+          (a) => a.quadding == field.quadding,
+          orElse: () => PdfTextAlign.left),
+      multiline: field.isMultiline,
+    );
+  }
+
+  /// Restyles the text field [name] ([PdfEditor.setTextFieldStyle]): each
+  /// non-null argument is applied. [font] may be a base-14 [PdfStandardFont]
+  /// or an embedded [PdfEmbeddedFont]; [autoSize] true (or [fontSize] 0)
+  /// fits the text to the box; [color] is 0xRRGGBB. Returns false for a
+  /// missing, read-only, or non-text field.
+  bool setFormFieldStyle(
+    String name, {
+    PdfTextFont? font,
+    double? fontSize,
+    bool? autoSize,
+    int? color,
+    PdfTextAlign? align,
+    bool? multiline,
+  }) {
+    final field = acroForm?.fieldNamed(name);
+    if (field == null || field.isReadOnly || field.type != PdfFieldType.text) {
+      return false;
+    }
+    final pages = _fieldPages(name);
+    try {
+      return apply((e) {
+        final f = e.acroForm?.fieldNamed(name);
+        if (f != null) {
+          e.setTextFieldStyle(f,
+              font: font,
+              fontSize: fontSize,
+              autoSize: autoSize,
+              color: color,
+              align: align,
+              multiline: multiline);
+        }
+      }, pages: pages);
+    } on ArgumentError {
+      return false;
+    } on StateError {
+      return false;
+    }
+  }
 }

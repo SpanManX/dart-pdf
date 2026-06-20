@@ -11,6 +11,7 @@ import 'editing_color_picker.dart';
 import 'editing_controller.dart';
 import 'editing_font_controls.dart';
 import 'editing_fonts.dart';
+import 'editing_form_style.dart';
 import 'editing_measure.dart';
 import 'line_style.dart';
 import 'editing_signature.dart';
@@ -1328,6 +1329,9 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     if (annotation == null) return const _StyleFields();
     final canStroke = controller.canRestyleSelected;
     switch (annotation.subtype) {
+      case 'Widget':
+        // a form text field: its own style block, nothing else
+        return _StyleFields(formField: controller.canStyleSelectedFormField);
       case 'FreeText':
         final text = controller.canRestyleSelectedText;
         return _StyleFields(opacity: true, font: text, boxColors: text);
@@ -2023,6 +2027,7 @@ class _StyleFields {
     this.boxColors = false,
     this.shapeFill = false,
     this.eraser = false,
+    this.formField = false,
   });
 
   final bool stroke;
@@ -2045,6 +2050,10 @@ class _StyleFields {
   /// Eraser radius — replaces every other control while the eraser is armed.
   final bool eraser;
 
+  /// The form text field style block (font, alignment, auto-size, size,
+  /// multiline, colour) — a single text-field widget is selected.
+  final bool formField;
+
   bool get isEmpty =>
       !stroke &&
       !opacity &&
@@ -2053,7 +2062,8 @@ class _StyleFields {
       !font &&
       !boxColors &&
       !shapeFill &&
-      !eraser;
+      !eraser &&
+      !formField;
 }
 
 /// The style popup: sliders for stroke width, opacity, and font size,
@@ -2372,6 +2382,11 @@ class _StyleMenuState extends State<_StyleMenu> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (fields.formField)
+                    PdfFormFieldStyleControls(
+                      controller: controller,
+                      fontPicker: widget.fontPicker,
+                    ),
                   if (isEraser)
                     _slider(
                       key: const ValueKey('pdf-eraser-size'),

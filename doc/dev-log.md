@@ -3132,3 +3132,43 @@ new revision disposes the detached lift to avoid a leak. Tests:
 editing_text_edit_test.dart (releasing a transparent-box resize keeps the
 lift — `resizeClean`/`resizeHideRect` stay non-null into the afterimage
 instead of an opaque wash; the text stays shown).
+
+### Form-field discoverability + text-box styling
+
+Two gaps in the form-authoring tool: empty fields render nothing (so an
+author can't see what fields exist) and a text field's look (/DA font/size/
+colour, /Q alignment, /Ff multiline, auto-size) was uneditable from the UI.
+
+Core (`pdf_document`): the pivot is making **form appearance generation
+handle embedded Type0 fonts**, not just byte-encoded base-14. `_regenerate
+VariableText` now reparses the field's /DA→/DR font; if it's a Type0 it
+rebuilds a `PdfEmbeddedFont` via the new `PdfEmbeddedFont.fromFontDict`
+(extracted from `fromFreeText`, which now delegates) and shows text with
+`encodeHex`/`showGlyphHex` + `buildResource` into the appearance /Resources,
+measuring with the embedded metrics — so **every** fill path (setTextValue,
+setChoiceValue, resizeFormWidget) is embedded-correct with no extra plumbing,
+even after reopen (the program re-extracts from /DR FontFile2). New
+`PdfFormStyling.setTextFieldStyle` (form_styling.dart) registers the chosen
+font in /DR (base-14 Type1 under its short name, or embedded as a fresh
+`FF<n>` Type0), rewrites /DA + /Q + /Ff, then regenerates. `PdfFormField`
+gained `appearanceFontSize` (0 = auto) and `appearanceColor` (parses the /DA
+g/rg/k op).
+
+Controller: `setFormFieldStyle(name, …)`, `canStyleSelectedFormField`,
+`selectedFormFieldName`, `selectedFormFieldStyle` (a `PdfFormFieldStyle`
+struct read from /DA·/Q·/Ff), and `selectFormFieldByName` (centre hit-test).
+`pdfApplyFont` now routes to a selected form field when it isn't a free-text
+box, so the existing font menu (standard/bundled/custom-embed) works for
+fields.
+
+UI — all three surfaces funnel through `setFormFieldStyle`/`selected
+FormFieldStyle`: (1) `FormFieldLabelLayer` (editing_form_layer.dart) outlines
+every widget and tags it with its name, mounted in pdf_viewer only when
+`tool == PdfEditTool.form` (IgnorePointer, so it never steals the overlay's
+gestures); (2) the properties panel's `_formFieldControls`; (3) a shared
+`PdfFormFieldStyleControls` widget (editing_form_style.dart) used by both the
+toolbar tune popup (new `_StyleFields.formField`, 'Widget' case in
+`_selectionStyleFields`) and a field-anchored popup launched from the form
+context menu's new "Text style…" entry. Tests: form_styling_test.dart
+(pure-Dart: base-14 + embedded /DR + reopen-refill), editing_form_style_test.dart
+(controller API + labels appear with the tool + panel/tune-popup surfaces).
