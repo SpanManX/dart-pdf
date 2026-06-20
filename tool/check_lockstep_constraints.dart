@@ -132,14 +132,18 @@ class _Dep {
 }
 
 /// Dependency lines of the form `  name: <version constraint>` inside the
-/// `dependencies:` / `dev_dependencies:` blocks. Path/git/sdk deps and
+/// runtime `dependencies:` block. `dev_dependencies:` are intentionally
+/// excluded: they don't reach consumers and aren't part of pub.dev's
+/// downgrade analysis (which only compiles `lib/`), and pinning them in
+/// lockstep would create a publish-ordering cycle (e.g. pdf_cos dev-depends
+/// on pdf_test_fixtures, which depends on pdf_cos). Path/git/sdk deps and
 /// nested-map specs (no inline version) are skipped.
 List<_Dep> _dependencyConstraints(String text) {
   final lines = text.split('\n');
   final deps = <_Dep>[];
   var inDeps = false;
   for (final line in lines) {
-    if (RegExp(r'^(dependencies|dev_dependencies):\s*$').hasMatch(line)) {
+    if (RegExp(r'^dependencies:\s*$').hasMatch(line)) {
       inDeps = true;
       continue;
     }
