@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3
 
 - Free text: align a text box left, center, or right. The alignment buttons
   sit in the text style popup and the annotation properties panel — they

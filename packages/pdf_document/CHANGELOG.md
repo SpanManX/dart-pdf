@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3
 
 - Free-text annotations carry a horizontal alignment (left/center/right)
   through the `/Q` quadding: `addFreeText` and `addFreeTextRich` take an

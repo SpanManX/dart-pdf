@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.3
 
 - Added `PdfOcrDownloadCancelToken` so hosts can wire a Cancel button to
   in-flight model downloads; cancellation removes partial files and throws
