@@ -262,6 +262,25 @@ class PdfEditingController extends ChangeNotifier {
   int pageRenderStamp(int pageIndex) =>
       _renderStampEpoch + (_renderStamps[pageIndex] ?? 0);
 
+  /// Destructive-render epoch: bumped only by edits that *remove* existing
+  /// page content (a redaction burn), as opposed to the additive ones (ink,
+  /// highlights, shapes, fills) that merely lay new marks on top. The viewer
+  /// keeps the on-screen raster painted across an additive edit — so a heavy
+  /// page never flashes blank while the new render lands — but must drop it
+  /// on a destructive one, so the removed content can't linger on screen (or
+  /// in a fast-scroll preview) for even a frame. A burn recompacts the whole
+  /// file (every page may have changed), so this is a single all-pages
+  /// counter rather than a per-page map.
+  int _destructiveStampEpoch = 0;
+
+  /// A value that changes whenever content was *removed* from any page (see
+  /// [_destructiveStampEpoch]); stable across additive edits, undo, and redo.
+  /// The viewer uses it to decide whether to blank the held raster
+  /// (destructive) or keep it up until the re-render lands (additive). Takes
+  /// a page index to mirror [pageRenderStamp]'s shape, though the burn that
+  /// drives it is always document-wide.
+  int pageDestructiveStamp(int pageIndex) => _destructiveStampEpoch;
+
   PdfDocument _document;
 
   /// The document at the current revision. Changes identity on every
@@ -1182,6 +1201,10 @@ class PdfEditingController extends ChangeNotifier {
     _hardModified = true;
     _selected.clear();
     _bumpRenderStamps(null); // every page may have changed
+    // a burn removes content irreversibly — mark it destructive so the
+    // viewer blanks each page's raster instead of holding the (now
+    // un-redacted) one up while the fresh render lands
+    _destructiveStampEpoch++;
     _document = PdfDocument.open(bytes, password: _password);
     _invalidateElements();
     notifyListeners();
