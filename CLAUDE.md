@@ -202,6 +202,10 @@ reflow; `altView` = reflow-or-grid suppresses the panels/toolbar).
 ## Development session log
 
 Detailed per-session notes (gotchas, file pointers, design rationale)
-have been moved to [doc/dev-log.md](doc/dev-log.md) to keep this file
-under the context-size limit. Consult it (or git history) when you need
-the background on a specific subsystem; append new session notes there.
+live in [doc/dev-log/](doc/dev-log/) — **one file per session**, named
+`YYYY-MM-DD-slug.md`. Consult them (or git history) when you need the
+background on a specific subsystem. Record new session notes by **adding
+a new file** there (never append to a shared file — that conflicts on
+every concurrent PR); see [doc/dev-log/README.md](doc/dev-log/README.md).
+Notes written before 2026-06-22 are in the frozen
+[doc/dev-log.md](doc/dev-log.md) archive.
