@@ -31,6 +31,7 @@ part 'comment_editor.dart';
 part 'attachment_editor.dart';
 part 'content_editor.dart';
 part 'content_editor_type0.dart';
+part 'content_reflow.dart';
 part 'header_footer.dart';
 part 'outline_editor.dart';
 part 'page_labels_editor.dart';
