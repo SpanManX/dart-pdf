@@ -29,5 +29,6 @@ export 'src/pdf_ua.dart';
 export 'src/rect.dart';
 export 'src/signature.dart';
 export 'src/struct_tree.dart';
+export 'src/takeoff.dart';
 export 'src/sync.dart';
 export 'src/xmp.dart';
