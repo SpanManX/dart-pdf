@@ -489,6 +489,7 @@ class PdfViewer extends StatefulWidget {
     this.pagePreviews = true,
     this.previewWindow = 20,
     this.predictStrokes = true,
+    this.toolShortcuts = pdfEditToolShortcuts,
     this.renderWorker,
     this.rasterCache,
     this.textCache,
@@ -528,6 +529,15 @@ class PdfViewer extends StatefulWidget {
   /// always render locally. Null and the web fallback keep today's
   /// on-thread behavior.
   final PdfRenderWorker? renderWorker;
+
+  /// Single-key shortcuts that arm editing tools while [editing] is active.
+  ///
+  /// Defaults to [pdfEditToolShortcuts]. Pass a replacement map to rebind
+  /// keys, omit tools to leave them unbound, or pass an empty map to disable
+  /// tool shortcuts entirely. Modifier-based viewer/editor shortcuts (copy,
+  /// undo, paste, delete, Escape, etc.) are not affected.
+  final Map<PdfEditTool, LogicalKeyboardKey> toolShortcuts;
+
   final PdfViewerController? controller;
 
   /// Called when a tapped link or button carries an action the viewer
@@ -1206,7 +1216,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     _prerendering = true;
     try {
       while (mounted && widget.pagePreviews) {
-        if (_renderScheduler.holding || (_scrollSettleTimer?.isActive ?? false)) {
+        if (_renderScheduler.holding ||
+            (_scrollSettleTimer?.isActive ?? false)) {
           return; // restarted by the settle timer
         }
         if (_renderScheduler.hasPending) {
@@ -1323,8 +1334,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     // heights/sec). Held pages paint their low-res preview, not blank, so
     // a genuinely slow scroll only shows a brief preview before the grace
     // lapses and the page sharpens; the settle timer clears the burst.
-    final opening =
-        now - _scrollBurstStart < const Duration(milliseconds: 150);
+    final opening = now - _scrollBurstStart < const Duration(milliseconds: 150);
     final hold = opening || velocity > math.max(800, 2 * viewport);
     PdfPerfLog.log('scroll page=${_controller.currentPage} '
         'v=${velocity.toStringAsFixed(0)}px/s '
@@ -1650,9 +1660,9 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients || _viewWidth <= 0) return;
-      final target = (_slotStart(anchorPage) +
-              fraction * _scrollExtentOf(anchorPage))
-          .clamp(0.0, _scroll.position.maxScrollExtent);
+      final target =
+          (_slotStart(anchorPage) + fraction * _scrollExtentOf(anchorPage))
+              .clamp(0.0, _scroll.position.maxScrollExtent);
       if ((target - _scroll.offset).abs() > 0.5) _scroll.jumpTo(target);
     });
   }
@@ -1890,7 +1900,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
           key, index, () => PdfTextExtractor.extract(widget.document, index));
       return _textCache[index] ??= text;
     }
-    return _textCache[index] ??= PdfTextExtractor.extract(widget.document, index);
+    return _textCache[index] ??=
+        PdfTextExtractor.extract(widget.document, index);
   }
 
   Future<List<PdfSearchResult>> _searchAllPages(
@@ -2221,7 +2232,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     final hasSelection = _selRange != null;
     final hasText = _pageText(page).text.isNotEmpty;
     if (!hasSelection && !hasText) return;
-    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
     final picked = await showMenu<_TextMenuAction>(
       context: context,
       position: RelativeRect.fromRect(
@@ -3510,9 +3522,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
             ? const Color(0xFF202124)
             : const Color(0xFF404347));
     // the rubber-band marquee's chrome, matching the editing overlay's
-    final marqueeColor =
-        PdfViewerTheme.of(context).annotationChromeColor ??
-            const Color(0xFF1E88E5);
+    final marqueeColor = PdfViewerTheme.of(context).annotationChromeColor ??
+        const Color(0xFF1E88E5);
     return LayoutBuilder(builder: (context, constraints) {
       // _viewWidth still holds the previous layout's width here; a change
       // rescales every page, so pin the reading position before adopting it
@@ -3533,9 +3544,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
           // scroll/transform once this frame's new extents exist
           _pendingViewport = null;
           _appliedInitialFit = true;
-          _layoutZoom = pending.zoom <= 1
-              ? pending.zoom.clamp(widget.minZoom, 1.0)
-              : 1.0;
+          _layoutZoom =
+              pending.zoom <= 1 ? pending.zoom.clamp(widget.minZoom, 1.0) : 1.0;
           final page =
               _pages.isEmpty ? 0 : pending.page.clamp(0, _pages.length - 1);
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3689,7 +3699,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
                   // unmodified single-key tool shortcuts (V select, P pen,
                   // R rectangle, …) — safe because an open in-place text
                   // editor disables every binding above
-                  for (final entry in pdfEditToolShortcuts.entries)
+                  for (final entry in widget.toolShortcuts.entries)
                     SingleActivator(entry.value): () => _armTool(entry.key),
                 },
               },
