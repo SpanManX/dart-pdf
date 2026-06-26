@@ -69,6 +69,11 @@ void runPdfRenderWorker() {
     final page = (data.getProperty('page'.toJS) as JSNumber).toDartInt;
     final annotations =
         (data.getProperty('annotations'.toJS) as JSBoolean).toDart;
+    final imagePixelRatio =
+        (data.getProperty('imageRatio'.toJS) as JSNumber?)?.toDartDouble;
+    // Default true so an older client that doesn't send the flag still decodes.
+    final decodeImages =
+        (data.getProperty('decodeImages'.toJS) as JSBoolean?)?.toDart ?? true;
 
     final token = PdfCancellationToken();
     activeToken = token;
@@ -81,7 +86,8 @@ void runPdfRenderWorker() {
       final doc = document;
       try {
         if (doc != null) {
-          out = await _recordPageAsync(doc, page, annotations, token);
+          out = await _recordPageAsync(
+              doc, page, annotations, imagePixelRatio, decodeImages, token);
         }
       } on PdfCancelledException {
         out = null;
@@ -115,8 +121,13 @@ void runPdfRenderWorker() {
 ///
 /// Duplicated from the isolate backend deliberately: that file imports
 /// `dart:isolate`, which does not exist on web, so this entry can't share it.
-Future<Uint8List?> _recordPageAsync(PdfDocument document, int pageIndex,
-    bool annotations, PdfCancellationToken token) async {
+Future<Uint8List?> _recordPageAsync(
+    PdfDocument document,
+    int pageIndex,
+    bool annotations,
+    double? imagePixelRatio,
+    bool decodeImages,
+    PdfCancellationToken token) async {
   if (pageIndex < 0 || pageIndex >= document.pageCount) return null;
   final page = document.page(pageIndex);
   final ops = ContentStreamParser.parse(page.contentBytes());
@@ -129,6 +140,12 @@ Future<Uint8List?> _recordPageAsync(PdfDocument document, int pageIndex,
   // premultiplied RGBA so the main thread only runs the engine codec. On web
   // this matters more than on native — there is no separate raster thread, so
   // the pure-Dart inflate/colour-convert would otherwise block frames. #73.
+  // imagePixelRatio caps each image to display resolution before it crosses the
+  // postMessage boundary, so a sheet-sized raster underlay ships at a few MB
+  // instead of hundreds. decodeImages false skips the decode entirely for the
+  // fast vector-first pass of progressive rendering.
   return serializeCommands(recorder.commands,
-      cos: document.cos, decodeImages: true);
+      cos: document.cos,
+      decodeImages: decodeImages,
+      maxImagePixelRatio: imagePixelRatio);
 }

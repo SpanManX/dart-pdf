@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:pdf_document/pdf_document.dart';
+import 'package:pdf_graphics/pdf_graphics.dart' show PdfRenderCommand;
 
 import 'perf_log.dart';
 import 'preview_cache.dart';
@@ -173,6 +174,13 @@ class _PdfPageViewState extends State<PdfPageView> {
   // the detail patch takes over for the visible region.
   static const _maxPixels = 1 << 24;
   static const _maxDimension = 8192.0;
+  // Pixel budget for the progressive vector-first preview raster — a fraction
+  // of [_maxPixels]. The preview is transient (the full pass re-rasterizes at
+  // [_effectiveRatio] on settle), so bounding it keeps rasterizing a dense
+  // large-format CAD sheet's linework (~8000px wide, tens of thousands of
+  // vector ops) off the ~300ms GPU-raster spike that stutters a mid-scroll
+  // page-in. Normal-sized pages fit well under this, so they are unaffected.
+  static const _previewMaxPixels = 1 << 21;
 
   @override
   void initState() {
@@ -356,6 +364,20 @@ class _PdfPageViewState extends State<PdfPageView> {
     return math.max(ratio, 0.05);
   }
 
+  /// Resolution for the progressive vector-first preview raster: [_effectiveRatio]
+  /// further bounded by [_previewMaxPixels] so a dense large-format sheet paints
+  /// its linework quickly instead of spiking the GPU raster thread. The full
+  /// pass re-rasterizes at [_effectiveRatio] once the page settles, so the only
+  /// visible effect is a briefly softer preview while actively scrolling.
+  double _vectorFirstRatio() {
+    final size = PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation);
+    final width = math.max(1.0, size.width);
+    final height = math.max(1.0, size.height);
+    final ratio =
+        math.min(_effectiveRatio(), math.sqrt(_previewMaxPixels / (width * height)));
+    return math.max(ratio, 0.05);
+  }
+
   Future<void> _render() async {
     final scheduler = widget.renderScheduler;
     if (scheduler != null) {
@@ -389,9 +411,15 @@ class _PdfPageViewState extends State<PdfPageView> {
     final pageIndex = widget.previewIndex;
     final worker = widget.renderWorker;
     if (worker != null && worker.isActive) {
-      // priority 0: the on-screen page preempts background prefetch
+      // priority 0: the on-screen page preempts background prefetch.
+      // imagePixelRatio caps embedded images to ~2x the page's on-screen
+      // resolution so a CAD raster underlay isn't decoded/shipped/rasterized
+      // at its native 100+ megapixels (the deep-zoom patch re-rasters the
+      // visible region for sharper zoom).
       final commands = await worker.record(pageIndex,
-          annotations: widget.showAnnotations, priority: 0);
+          annotations: widget.showAnnotations,
+          priority: 0,
+          imagePixelRatio: _effectiveRatio());
       // Abandoned while the worker ran — the State was disposed or the lazy
       // list recycled it onto another page (this is the cancel() path: a
       // cancelled request returns null). Skip the local fallback: the page is
@@ -402,6 +430,7 @@ class _PdfPageViewState extends State<PdfPageView> {
       if (_abandoned(pageIndex)) return _emptyPicture();
       if (commands != null) {
         _lastInterpretPath = 'worker';
+        _logImageStats(pageIndex, commands);
         return PdfPageRenderer.pictureFromCommands(widget.page, commands,
             pageColor: widget.pageColor, rotation: widget.rotation);
       }
@@ -413,6 +442,78 @@ class _PdfPageViewState extends State<PdfPageView> {
     return PdfPageRenderer.renderPictureRecorded(widget.page,
         pageColor: widget.pageColor, annotations: widget.showAnnotations,
         rotation: widget.rotation);
+  }
+
+  /// Progressive rendering's fast first pass: records the page WITHOUT decoding
+  /// its images (so it returns quickly even when a raster underlay takes
+  /// seconds to decode) and paints the vector/text at once, images skipped.
+  /// The full pass in [_renderNow] then re-rasters with the images in. No-op
+  /// without an active worker (the local render already decodes inline).
+  ///
+  /// When the page draws no images the fast buffer is the whole page, so it is
+  /// cached as [_picture] for the full pass to reuse — no second record.
+  Future<void> _paintVectorFirst(int generation, int pageIndex) async {
+    final worker = widget.renderWorker;
+    if (worker == null || !worker.isActive) return;
+    final commands = await worker.record(pageIndex,
+        annotations: widget.showAnnotations,
+        priority: 0,
+        decodeImages: false);
+    if (_superseded(generation, pageIndex) || commands == null) return;
+
+    if (!PdfPageRenderer.hasImageDraws(commands)) {
+      // Image-free page: this fast buffer already is the complete page. Cache
+      // it so the full pass reuses it instead of recording a second time; the
+      // normal raster path below paints it.
+      _picture = PdfPageRenderer.pictureFromCommands(widget.page, commands,
+          pageColor: widget.pageColor, rotation: widget.rotation);
+      return;
+    }
+
+    final picture = await PdfPageRenderer.pictureFromCommands(
+        widget.page, commands,
+        pageColor: widget.pageColor,
+        rotation: widget.rotation,
+        includeImages: false);
+    if (_superseded(generation, pageIndex)) {
+      picture.dispose();
+      return;
+    }
+    final image = await PdfPageRenderer.rasterize(picture,
+        PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation),
+        _vectorFirstRatio());
+    picture.dispose();
+    // Adopt the vector raster only if the full pass hasn't already landed (a
+    // landed full raster has a non-null _rasteredRatio). Deliberately leave
+    // _rasteredRatio null so the full pass below is not skipped by its
+    // resolution-unchanged guard — it must re-raster to bring the images in.
+    if (_superseded(generation, pageIndex) || _rasteredRatio != null) {
+      image.dispose();
+      return;
+    }
+    setState(() {
+      _image?.dispose();
+      _image = image;
+      _preview?.dispose();
+      _preview = null;
+    });
+    PdfPerfLog.log('vector-first page=$pageIndex');
+  }
+
+  /// Reports, when the perf log is on, how many images a worker buffer carries
+  /// and their total decoded megapixels — the deciding number for why a
+  /// raster-heavy page is still slow: one oversized image escaping the
+  /// resolution cap looks very different from many tiles each capped but
+  /// summing large. The walk lives in [PdfPageRenderer.decodedImageStats] (and
+  /// is tested there); this only formats the line, and is skipped entirely when
+  /// the log is off.
+  void _logImageStats(int pageIndex, List<PdfRenderCommand> commands) {
+    if (!PdfPerfLog.enabled) return;
+    final (count, pixels) = PdfPageRenderer.decodedImageStats(commands);
+    if (count > 0) {
+      PdfPerfLog.log('images page=$pageIndex count=$count '
+          'decodedMpx=${(pixels / 1e6).toStringAsFixed(1)}');
+    }
   }
 
   /// Whether the page this render was for is gone — the widget unmounted, or
@@ -444,6 +545,14 @@ class _PdfPageViewState extends State<PdfPageView> {
     final generation = ++_renderGeneration;
     final pageIndex = widget.previewIndex;
     final firstInterpret = _picture == null;
+    // Progressive first paint: on a page's first interpret, paint its
+    // vector/text immediately (images skipped) so a heavy raster underlay —
+    // which can take seconds to decode — doesn't leave the page blank
+    // meanwhile. The full pass below then re-rasters with the images in.
+    if (firstInterpret) {
+      await _paintVectorFirst(generation, pageIndex);
+      if (_superseded(generation, pageIndex)) return;
+    }
     final sw = Stopwatch()..start();
     final picture = await (_picture ??= _interpretPicture());
     sw.stop();

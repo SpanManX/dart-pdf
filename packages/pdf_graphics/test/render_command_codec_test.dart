@@ -303,6 +303,167 @@ void main() {
       });
     }
   });
+
+  // maxImagePixelRatio caps each decoded image to ~display resolution before it
+  // crosses the worker boundary — the fix for raster-thread jank on CAD sheets
+  // whose embedded underlays are 100+ megapixels. A tiny ratio must shrink
+  // them; a null/huge ratio must leave them at native resolution; and the
+  // command transcript must be untouched either way (only the pixels change).
+  group('image resolution cap', () {
+    final files = <String>[
+      '../../test_corpora/ghent/1-CMYK/'
+          'GWG166_Softmasks_Images_DeviceCMYK_X4.pdf',
+      '../../test_corpora/ghent/1-CMYK/GWG168_Softmasks_Vector_part1_X4.pdf',
+    ];
+    for (final path in files) {
+      final file = File(path);
+      final name = path.split('/').last;
+      test(name, () {
+        if (!file.existsSync()) {
+          markTestSkipped('$path not found');
+          return;
+        }
+        final doc = PdfDocument.open(file.readAsBytesSync());
+        var sawCapped = false;
+        for (var i = 0; i < doc.pageCount; i++) {
+          final page = doc.page(i);
+          final ops = ContentStreamParser.parse(page.contentBytes());
+          final recorder = RecordingPdfDevice();
+          PdfInterpreter(cos: doc.cos, device: recorder)
+              .drawPageOperations(page, ops);
+
+          final uncapped = serializeCommands(recorder.commands,
+              cos: doc.cos, decodeImages: true);
+          if (uncapped == null) continue; // inline image: page declines
+          // A tiny ratio drives every image to display resolution; a huge ratio
+          // can never downscale (the cap never upscales).
+          final capped = serializeCommands(recorder.commands,
+              cos: doc.cos, decodeImages: true, maxImagePixelRatio: 0.002);
+          final huge = serializeCommands(recorder.commands,
+              cos: doc.cos, decodeImages: true, maxImagePixelRatio: 1e6);
+          expect(capped, isNotNull);
+          expect(huge, isNotNull);
+
+          final native = _imageCommands(deserializeCommands(uncapped));
+          final small = _imageCommands(deserializeCommands(capped!));
+          final big = _imageCommands(deserializeCommands(huge!));
+
+          // The cap only changes pixels, never the command stream.
+          expect(_transcript(deserializeCommands(capped)),
+              equals(_transcript(deserializeCommands(uncapped))),
+              reason: '$name page $i transcript diverged under the cap');
+
+          for (var k = 0; k < native.length; k++) {
+            final nat = native[k].request.decoded;
+            final cap = small[k].request.decoded;
+            final hg = big[k].request.decoded;
+            if (nat == null) {
+              // Platform-codec image: ships no pixels regardless of the ratio.
+              expect(cap, isNull);
+              expect(hg, isNull);
+              continue;
+            }
+            expect(cap, isNotNull);
+            expect(hg, isNotNull);
+            // A huge ratio leaves native resolution untouched.
+            expect(hg!.width, nat.width);
+            expect(hg.height, nat.height);
+            // A tiny ratio never exceeds native and never under-runs 1px.
+            expect(cap!.width, lessThanOrEqualTo(nat.width));
+            expect(cap.height, lessThanOrEqualTo(nat.height));
+            expect(cap.width, greaterThanOrEqualTo(1));
+            expect(cap.height, greaterThanOrEqualTo(1));
+            expect(cap.rgba.length, cap.width * cap.height * 4);
+            if (cap.width < nat.width || cap.height < nat.height) {
+              sawCapped = true;
+            }
+          }
+        }
+        expect(sawCapped, isTrue,
+            reason: '$name capped no image — the test proved nothing');
+      });
+    }
+  });
+
+  // imageBudgetFactor bounds the TOTAL decoded pixels of a page to a multiple
+  // of the page raster cap, on top of the per-image cap — the fix for sheets
+  // layered from dozens of overlapping raster tiles, where each image is near
+  // its own footprint yet their sum dwarfs the raster. A tiny factor forces
+  // the page budget to bind even on these small pages: total decoded pixels
+  // must drop below the budget, while the command transcript stays identical.
+  group('page image budget', () {
+    final files = <String>[
+      '../../test_corpora/ghent/1-CMYK/'
+          'GWG166_Softmasks_Images_DeviceCMYK_X4.pdf',
+    ];
+    for (final path in files) {
+      final file = File(path);
+      final name = path.split('/').last;
+      test(name, () {
+        if (!file.existsSync()) {
+          markTestSkipped('$path not found');
+          return;
+        }
+        final doc = PdfDocument.open(file.readAsBytesSync());
+        var sawBudgeted = false;
+        for (var i = 0; i < doc.pageCount; i++) {
+          final page = doc.page(i);
+          final ops = ContentStreamParser.parse(page.contentBytes());
+          final recorder = RecordingPdfDevice();
+          PdfInterpreter(cos: doc.cos, device: recorder)
+              .drawPageOperations(page, ops);
+
+          // Huge per-image ratio => the per-image cap is a no-op, isolating the
+          // page-budget effect. Default budget leaves these small pages native.
+          final native = serializeCommands(recorder.commands,
+              cos: doc.cos, decodeImages: true, maxImagePixelRatio: 1e6);
+          if (native == null) continue; // inline image: page declines
+          // A tiny budget (0.0005 * 16.78 MP ~ 8.4 Kpx) forces the page total
+          // down regardless of how the images are laid out.
+          const factor = 0.0005;
+          final budgeted = serializeCommands(recorder.commands,
+              cos: doc.cos,
+              decodeImages: true,
+              maxImagePixelRatio: 1e6,
+              imageBudgetFactor: factor);
+          expect(budgeted, isNotNull);
+
+          // The budget changes pixels only, never the command stream.
+          expect(_transcript(deserializeCommands(budgeted!)),
+              equals(_transcript(deserializeCommands(native))),
+              reason: '$name page $i transcript diverged under the budget');
+
+          final nativePixels = _decodedPixelSum(deserializeCommands(native));
+          final budgetedPixels =
+              _decodedPixelSum(deserializeCommands(budgeted));
+          if (nativePixels == 0) continue; // platform-codec only: nothing decoded
+          final budgetPixels = (factor * (1 << 24)).round();
+          // Total decoded pixels sit under the budget, plus a per-image ceil
+          // slop (each image rounds its target edges up).
+          final imageCount = _imageCommands(deserializeCommands(budgeted)).length;
+          expect(budgetedPixels,
+              lessThanOrEqualTo(budgetPixels + imageCount * 16 + 64),
+              reason: '$name page $i total decoded pixels ($budgetedPixels) '
+                  'exceed the page budget ($budgetPixels)');
+          expect(budgetedPixels, lessThan(nativePixels),
+              reason: '$name page $i budget did not shrink the page total');
+          sawBudgeted = true;
+        }
+        expect(sawBudgeted, isTrue,
+            reason: '$name page budget bound no page — proved nothing');
+      });
+    }
+  });
+}
+
+/// Sum of decoded pixels across every image draw (DFS, soft-mask groups too).
+int _decodedPixelSum(List<PdfRenderCommand> commands) {
+  var total = 0;
+  for (final c in _imageCommands(commands)) {
+    final d = c.request.decoded;
+    if (d != null) total += d.width * d.height;
+  }
+  return total;
 }
 
 /// Every image draw command in [commands], in replay (DFS) order, descending
