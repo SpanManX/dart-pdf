@@ -202,6 +202,13 @@ class PdfViewerController extends ChangeNotifier {
   @visibleForTesting
   PdfPagePreviewCache? get debugPreviewCache => _state?._previews;
 
+  /// The attached viewer's low-res page previews (see [PdfViewer.pagePreviews]),
+  /// or null when no viewer is attached or previews are off. The page
+  /// thumbnail panels read it to paint an instant soft placeholder while a
+  /// tile's sharp raster is still rendering — the same images the viewer
+  /// shows during a fast scroll, shared rather than re-rendered.
+  PdfPagePreviewCache? get pagePreviewCache => _state?._previews;
+
   /// Test hook: whether the attached viewer is currently holding page
   /// renders back for a fast scroll; false when no viewer is attached.
   @visibleForTesting
@@ -501,9 +508,18 @@ class PdfViewer extends StatefulWidget {
     this.rasterCache,
     this.textCache,
     this.documentId,
+    this.active = true,
   });
 
   final PdfDocument document;
+
+  /// Whether the viewer is the foreground view. Set false when another view
+  /// fully overlays it (the editor's full-area page grid) so it stops
+  /// interpreting its own pages and stops the background preview prerender —
+  /// both compete for the single render worker, and an invisible viewer
+  /// rendering its pages would starve the overlay's. The viewer stays laid
+  /// out (so programmatic navigation, e.g. tapping a grid page, still scrolls
+  /// it); only rendering pauses, resuming when this returns true.
 
   /// Persistent on-disk preview cache (see [PdfRasterCache]). When set
   /// together with [documentId], page previews are written through to the
@@ -703,6 +719,10 @@ class PdfViewer extends StatefulWidget {
   /// session plus up to ~40 MB of preview pixels on very long
   /// documents.
   final bool pagePreviews;
+
+  /// See the constructor doc — false pauses page rendering and the preview
+  /// prerender while another view overlays the viewer.
+  final bool active;
 
   /// How many pages on each side of the current page the background
   /// prerender ([pagePreviews]) warms. Each preview drives a worker record
@@ -977,6 +997,9 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     _controller = widget.controller ?? PdfViewerController();
     _ownsController = widget.controller == null;
     _controller._state = this;
+    // mounted already paused (overlaid by another view) — hold rendering from
+    // the first frame so covered pages never interpret
+    if (!widget.active) _renderScheduler.holding = true;
     _pendingViewport = widget.initialViewport;
     _zoomAnimator = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 200))
@@ -1203,7 +1226,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     _settleTimer?.cancel();
     _settleTimer = Timer(const Duration(milliseconds: 200), () {
       if (!mounted) return;
-      _renderScheduler.holding = false;
+      // stay held while the viewer is paused (a view overlays it)
+      _renderScheduler.holding = !widget.active;
       final target = math.max(1.0, _transform.value.getMaxScaleOnAxis());
       // wheel zoom never fires onInteractionEnd, so the pan flag also
       // settles here
@@ -1232,7 +1256,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       _scrollSamples.clear();
       _vectorFirstPrefetch = false;
       _jumpFocusPage = null;
-      _renderScheduler.holding = false;
+      // stay held while the viewer is paused (a view overlays it)
+      _renderScheduler.holding = !widget.active;
       if (mounted) setState(() => _settleGeneration++);
       // the prerender pauses while the user scrolls; pick it back up
       _prerenderPreviews();
@@ -1252,10 +1277,12 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
   /// the viewer is idle: it bails between pages whenever a scroll is in
   /// progress, and the scroll-settle timer restarts it.
   Future<void> _prerenderPreviews() async {
-    if (_prerendering || !mounted || !widget.pagePreviews) return;
+    if (_prerendering || !mounted || !widget.pagePreviews || !widget.active) {
+      return;
+    }
     _prerendering = true;
     try {
-      while (mounted && widget.pagePreviews) {
+      while (mounted && widget.pagePreviews && widget.active) {
         final vectorOnly =
             _vectorFirstPrefetch && (widget.renderWorker?.isActive ?? false);
         if (!vectorOnly &&
@@ -1434,7 +1461,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
         'threshold=${math.max(800, 2 * viewport).toStringAsFixed(0)} '
         'prefetch=${_vectorFirstPrefetch ? 'vector' : 'full'} '
         'opening=$opening hold=${hold ? 'ON' : 'off'}');
-    _renderScheduler.holding = hold;
+    // a paused viewer (overlaid by another view) holds unconditionally
+    _renderScheduler.holding = hold || !widget.active;
   }
 
   @override
@@ -1511,6 +1539,17 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       // editing on/off in place — entering an edit session must drop the
       // index-keyed disk backing, leaving it must restore (and re-prime) it
       _bindRasterCache();
+    }
+    // the viewer was paused (e.g. the full-area page grid overlaid it) and is
+    // foreground again — release the render hold and resume the prerender
+    if (oldWidget.active != widget.active) {
+      if (!widget.active) {
+        _renderScheduler.holding = true;
+      } else {
+        _renderScheduler.holding = false;
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _prerenderPreviews());
+      }
     }
   }
 

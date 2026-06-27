@@ -450,7 +450,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
   void _syncWorker() {
     if (identical(_session.document, _workerDoc)) return;
     _worker?.dispose();
-    _worker = PdfRenderWorker.start(_session.bytes);
+    _worker = startPdfRenderWorker(_session.bytes,
+        pageCount: _session.document.pageCount);
     _workerDoc = _session.document;
   }
 
@@ -531,6 +532,12 @@ class _PdfEditorViewState extends State<PdfEditorView> {
           final session = _session;
           final prefs = _prefs;
           final pageColor = widget.pageColor ?? prefs.pageColor;
+          // the persistent thumbnail cache, bound to this document, so the
+          // page grid/strip persist their rasters and reopen onto them
+          final key = _documentKey;
+          final thumbnailDisk = (widget.rasterCache != null && key != null)
+              ? widget.rasterCache!.forDocument(key)
+              : null;
           final showThumbnails =
               pdfShellShowThumbnailSidebar(prefs, constraints);
           // on a narrow screen the panels float up from the bottom as
@@ -564,6 +571,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                     features.pageEditing ? widget.onPickPdfToInsert : null,
                 onExportPages: widget.onExportPages,
                 renderWorker: _worker,
+                rasterCache: thumbnailDisk,
               );
           PdfSearchResultsPanel searchResults({required bool bottomSheet}) =>
               PdfSearchResultsPanel(
@@ -615,6 +623,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                 onExportPages: widget.onExportPages,
                 onOpenPage: (_) => prefs.showThumbnailView = false,
                 renderWorker: _worker,
+                rasterCache: thumbnailDisk,
               );
 
           // the full-area page grid replaces the page viewer; it wins over
@@ -898,6 +907,14 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                               rasterCache: widget.rasterCache,
                               textCache: widget.textCache,
                               documentId: _documentKey,
+                              // while the full-area page grid overlays the
+                              // viewer, pause the viewer entirely: its
+                              // (invisible) page renders and preview prerender
+                              // both compete for the single render worker and
+                              // would starve the grid's own thumbnails. It
+                              // stays laid out, so tapping a grid page still
+                              // scrolls it before the grid closes.
+                              active: !gridActive,
                             ),
                     ),
                     if (showAnnotationsPanel && !useSheets)

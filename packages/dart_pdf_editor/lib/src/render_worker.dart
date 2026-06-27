@@ -28,11 +28,29 @@ String? pdfRenderWorkerScriptUrl;
 /// outstanding, so [PdfRenderWorker.cancel] still reaches the right queue.
 ///
 /// The cost is memory: each worker opens its own copy of the document, so the
-/// pool holds N copies of the bytes plus N decode working sets. Default 1 (the
-/// historical single-worker behavior, no extra memory). The host sets this once
-/// before opening a viewer, sized to the platform — a few workers on a desktop
-/// browser, fewer on a memory-constrained device. Values below 1 mean 1.
-int pdfRenderWorkerPoolSize = 1;
+/// pool holds N copies of the bytes plus N decode working sets. Default 3 gives
+/// long documents enough parallelism for viewport-ordered thumbnails without
+/// flooding the machine. The host can set this once before opening a viewer,
+/// sized to the platform — fewer on a memory-constrained device. Values below 1
+/// mean 1.
+int pdfRenderWorkerPoolSize = 3;
+
+/// Documents with at least this many pages use a [PdfPooledRenderWorker] via
+/// [startPdfRenderWorker]; shorter ones use a single worker because extra
+/// startup and memory usually cost more than the parallelism saves.
+const int pdfRenderWorkerPoolMinPages = 12;
+
+/// Starts the right cached worker for a [pageCount]-page document: a pooled
+/// backend when the document is long enough and [pdfRenderWorkerPoolSize] asks
+/// for parallelism, otherwise a single platform worker.
+PdfRenderWorker startPdfRenderWorker(Uint8List bytes,
+    {required int pageCount}) {
+  final backend =
+      pdfRenderWorkerPoolSize > 1 && pageCount >= pdfRenderWorkerPoolMinPages
+          ? PdfPooledRenderWorker(bytes, pdfRenderWorkerPoolSize)
+          : startRenderWorker(bytes);
+  return PdfCachingRenderWorker(backend);
+}
 
 /// Records a PDF page's interpreter callbacks into a portable command buffer
 /// OFF the UI thread, so the dominant render cost — the content-stream parse
@@ -63,7 +81,8 @@ abstract class PdfRenderWorker {
   ///
   /// With [pdfRenderWorkerPoolSize] > 1 the backend is a [PdfPooledRenderWorker]
   /// that fans page records across that many platform workers, so a raster-heavy
-  /// document warms ~N× faster (see that class). Default 1 is a single worker.
+  /// document warms ~N× faster (see that class). Default 3 enables a small
+  /// pool; set it to 1 for the historical single-worker path.
   ///
   /// The backend is wrapped in a [PdfCachingRenderWorker] so a page the lazy
   /// list recycles and rebuilds is served from cache instead of being re-decoded
