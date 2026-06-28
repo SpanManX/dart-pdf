@@ -106,9 +106,10 @@ membership needed). What that means concretely:
   Store Connect to create the DartPDF app record and upload builds.
 - **iOS:** open `app/ios/Runner.xcworkspace`, pick the RES team, archive in Xcode
   (or add Fastlane), then upload to App Store Connect / TestFlight.
-- **macOS:** the CI DMG re-signs the `.app` and embedded native libraries
-  ad-hoc so unsigned builds do not mix third-party Team IDs at launch. This is
-  only a local consistency signature, not Developer ID signing. For the
+- **macOS:** the build re-signs the `.app` and embedded native libraries
+  consistently, and Release carries a library-validation exception so the
+  ad-hoc hardened app can load the bundled ONNX Runtime dylib. This is only a
+  local consistency signature, not Developer ID signing. For the
   **App Store**, archive with the RES team and submit via
   Xcode/Transporter. For a **notarized DMG** distributed outside the store, sign
   with RES's *Developer ID Application* cert
