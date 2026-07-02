@@ -896,81 +896,69 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                 ],
               ),
             Expanded(
-              // on wide screens the toolbar floats over the bottom of the
-              // content, Acrobat/Bluebeam-style; on phones it docks below
-              // (see dockToolbar) so its solid bar never hides the page
-              child: Stack(children: [
-                Positioned.fill(
-                  // keyed so a panel appearing never recreates the viewer
-                  // element (which would reset the reading position)
-                  child: Row(children: [
-                    if (showThumbnailsPanel && !useSheets)
-                      thumbnails(bottomSheet: false),
-                    if (showSearchPanel && !useSheets)
-                      searchResults(bottomSheet: false),
-                    Expanded(
-                      key: const ValueKey('pdf-shell-viewer'),
-                      child: reflowActive
-                          ? PdfReflowView(
-                              document: session.document,
-                              backgroundColor: widget.backgroundColor,
-                            )
-                          : PdfViewer(
-                              document: session.document,
-                              controller: _viewer,
-                              editing: session,
-                              onAction: widget.onAction,
-                              pageOverlayBuilder: widget.pageOverlayBuilder,
-                              annotationMenuBuilder:
-                                  widget.annotationMenuBuilder,
-                              formImagePicker: widget.formImagePicker,
-                              imagePicker: widget.imagePicker,
-                              onSnapshot: widget.onSnapshot,
-                              editingTextPrompt: widget.textPrompt,
-                              initialFit: widget.initialFit,
-                              toolShortcuts: _toolShortcuts,
-                              backgroundColor: widget.backgroundColor,
-                              pageColor: pageColor,
-                              showAnnotations: prefs.showAnnotations,
-                              highlightFormFields: prefs.highlightFormFields,
-                              renderWorker: _worker,
-                              rasterCache: widget.rasterCache,
-                              textCache: widget.textCache,
-                              documentId: _documentKey,
-                              // while the full-area page grid overlays the
-                              // viewer, pause the viewer entirely: its
-                              // (invisible) page renders and preview prerender
-                              // both compete for the single render worker and
-                              // would starve the grid's own thumbnails. It
-                              // stays laid out, so tapping a grid page still
-                              // scrolls it before the grid closes.
-                              active: !gridActive,
-                            ),
-                    ),
-                    if (showAnnotationsPanel && !useSheets)
-                      annotations(bottomSheet: false),
-                    if (showPropertiesPanel && !useSheets)
-                      properties(bottomSheet: false),
-                  ]),
-                ),
-                // the page grid covers the (still-mounted) viewer: a tap can
-                // scroll the live viewer underneath, then the grid closes to
-                // reveal the chosen page. Opaque, so the viewer takes no taps
-                // while it shows.
-                if (gridActive) Positioned.fill(child: pageGrid()),
-                if (toolbar != null && !dockToolbar)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: toolbar,
-                  ),
-                if (sheets.isNotEmpty) pdfShellBottomSheets(sheets),
-              ]),
+              child: PdfShellPanelLayout(
+                leadingPanels: [
+                  if (showThumbnailsPanel && !useSheets)
+                    thumbnails(bottomSheet: false),
+                  if (showSearchPanel && !useSheets)
+                    searchResults(bottomSheet: false),
+                ],
+                viewer: reflowActive
+                    ? PdfReflowView(
+                        document: session.document,
+                        backgroundColor: widget.backgroundColor,
+                      )
+                    : PdfViewer(
+                        document: session.document,
+                        controller: _viewer,
+                        editing: session,
+                        onAction: widget.onAction,
+                        pageOverlayBuilder: widget.pageOverlayBuilder,
+                        annotationMenuBuilder: widget.annotationMenuBuilder,
+                        formImagePicker: widget.formImagePicker,
+                        imagePicker: widget.imagePicker,
+                        onSnapshot: widget.onSnapshot,
+                        editingTextPrompt: widget.textPrompt,
+                        initialFit: widget.initialFit,
+                        toolShortcuts: _toolShortcuts,
+                        backgroundColor: widget.backgroundColor,
+                        pageColor: pageColor,
+                        showAnnotations: prefs.showAnnotations,
+                        highlightFormFields: prefs.highlightFormFields,
+                        renderWorker: _worker,
+                        rasterCache: widget.rasterCache,
+                        textCache: widget.textCache,
+                        documentId: _documentKey,
+                        // while the full-area page grid overlays the viewer,
+                        // pause the viewer entirely: its (invisible) page
+                        // renders and preview prerender both compete for the
+                        // single render worker and would starve the grid's own
+                        // thumbnails. It stays laid out, so tapping a grid
+                        // page still scrolls it before the grid closes.
+                        active: !gridActive,
+                      ),
+                trailingPanels: [
+                  if (showAnnotationsPanel && !useSheets)
+                    annotations(bottomSheet: false),
+                  if (showPropertiesPanel && !useSheets)
+                    properties(bottomSheet: false),
+                ],
+                bottomSheets: sheets,
+                overlays: [
+                  // the page grid covers the (still-mounted) viewer: a tap can
+                  // scroll the live viewer underneath, then the grid closes to
+                  // reveal the chosen page. Opaque, so the viewer takes no
+                  // taps while it shows.
+                  if (gridActive) Positioned.fill(child: pageGrid()),
+                ],
+                // on wide screens the toolbar floats over the bottom of the
+                // content, Acrobat/Bluebeam-style; on phones it docks below
+                // (see dockToolbar) so its solid bar never hides the page
+                floatingToolbar:
+                    toolbar != null && !dockToolbar ? toolbar : null,
+                dockedToolbar: toolbar != null && dockToolbar ? toolbar : null,
+              ),
             ),
-            // the mobile (solid-bar) toolbar docks below the content so it
-            // never covers the page; the floating variant stays in the Stack
-            if (toolbar != null && dockToolbar) toolbar,
           ]);
         },
       );

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:pdf_cos/pdf_cos.dart';
@@ -96,5 +97,41 @@ void main() {
 
     final data = ops[1].operands[1] as CosString;
     expect(data.bytes, [0xFF, 0xD8, 0x20, 0x45, 0x49, 0x20, 0x00, 0xFF, 0xD9]);
+  });
+
+  test('serializes regular content operations', () {
+    final bytes = ContentStreamSerializer.serialize([
+      ContentOperation('q', const []),
+      ContentOperation('cm', const [
+        CosInteger(1),
+        CosInteger(0),
+        CosInteger(0),
+        CosInteger(1),
+        CosInteger(50),
+        CosInteger(50),
+      ]),
+      ContentOperation('Tf', const [CosName('F1'), CosInteger(12)]),
+      ContentOperation('Tj', [CosString.fromText('Hi')]),
+      ContentOperation('Q', const []),
+    ]);
+
+    expect(
+        latin1.decode(bytes), 'q\n1 0 0 1 50 50 cm\n/F1 12 Tf\n(Hi) Tj\nQ\n');
+  });
+
+  test('serializes inline image operations', () {
+    final bytes = ContentStreamSerializer.serialize([
+      ContentOperation('BI', [
+        CosDictionary({
+          'W': const CosInteger(2),
+          'H': const CosInteger(1),
+          'CS': const CosName('G'),
+          'BPC': const CosInteger(8),
+        }),
+        CosString(Uint8List.fromList([0x00, 0xFF])),
+      ]),
+    ]);
+
+    expect(bytes, ascii('BI /W 2 /H 1 /CS /G /BPC 8 ID\n\x00\xff\nEI\n'));
   });
 }

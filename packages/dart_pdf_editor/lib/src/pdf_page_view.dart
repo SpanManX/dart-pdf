@@ -188,6 +188,12 @@ class _PdfPageViewState extends State<PdfPageView> {
   // page-in. Normal-sized pages fit well under this, so they are unaffected.
   static const _previewMaxPixels = 1 << 21;
 
+  PdfPageRenderPlan get _renderPlan => PdfPageRenderPlan(
+        pageColor: widget.pageColor,
+        annotations: widget.showAnnotations,
+        rotation: widget.rotation,
+      );
+
   @override
   void initState() {
     super.initState();
@@ -354,8 +360,7 @@ class _PdfPageViewState extends State<PdfPageView> {
 
   /// The resolution the current zoom actually wants, uncapped.
   double _desiredRatio() {
-    final size =
-        PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation);
+    final size = _renderPlan.pageSize(widget.page);
     final width = math.max(1.0, size.width);
     // pages display fit-width, so the raster must match the on-screen
     // width — a 612pt page across a wide window needs far more pixels
@@ -365,8 +370,7 @@ class _PdfPageViewState extends State<PdfPageView> {
   }
 
   double _effectiveRatio() {
-    final size =
-        PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation);
+    final size = _renderPlan.pageSize(widget.page);
     final width = math.max(1.0, size.width);
     final height = math.max(1.0, size.height);
     var ratio = _desiredRatio();
@@ -381,8 +385,7 @@ class _PdfPageViewState extends State<PdfPageView> {
   /// pass re-rasterizes at [_effectiveRatio] once the page settles, so the only
   /// visible effect is a briefly softer preview while actively scrolling.
   double _vectorFirstRatio() {
-    final size =
-        PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation);
+    final size = _renderPlan.pageSize(widget.page);
     final width = math.max(1.0, size.width);
     final height = math.max(1.0, size.height);
     final ratio = math.min(
@@ -443,18 +446,16 @@ class _PdfPageViewState extends State<PdfPageView> {
       if (commands != null) {
         _lastInterpretPath = 'worker';
         _logImageStats(pageIndex, commands);
-        return PdfPageRenderer.pictureFromCommands(widget.page, commands,
-            pageColor: widget.pageColor, rotation: widget.rotation);
+        return PdfPageRenderer.pictureFromCommandsWithPlan(
+            widget.page, commands, _renderPlan);
       }
     }
     if (_abandoned(pageIndex)) return _emptyPicture();
     // The worker may be active yet decline this page (it returns null), in
     // which case the interpret runs here — the log must say so, not 'worker'.
     _lastInterpretPath = 'recorded';
-    return PdfPageRenderer.renderPictureRecorded(widget.page,
-        pageColor: widget.pageColor,
-        annotations: widget.showAnnotations,
-        rotation: widget.rotation);
+    return PdfPageRenderer.renderPictureRecordedWithPlan(
+        widget.page, _renderPlan);
   }
 
   /// Progressive rendering's fast first pass: records the page WITHOUT decoding
@@ -479,15 +480,13 @@ class _PdfPageViewState extends State<PdfPageView> {
       // it so the full pass reuses it instead of recording a second time; the
       // normal raster path below paints it.
       _lastInterpretPath = 'worker';
-      _picture = PdfPageRenderer.pictureFromCommands(widget.page, commands,
-          pageColor: widget.pageColor, rotation: widget.rotation);
+      _picture = PdfPageRenderer.pictureFromCommandsWithPlan(
+          widget.page, commands, _renderPlan);
       return;
     }
 
-    final picture = await PdfPageRenderer.pictureFromCommands(
-        widget.page, commands,
-        pageColor: widget.pageColor,
-        rotation: widget.rotation,
+    final picture = await PdfPageRenderer.pictureFromCommandsWithPlan(
+        widget.page, commands, _renderPlan,
         includeImages: false);
     if (_superseded(generation, pageIndex)) {
       picture.dispose();
@@ -594,9 +593,7 @@ class _PdfPageViewState extends State<PdfPageView> {
         (effective - _rasteredRatio!).abs() > _rasteredRatio! * 0.01;
     if (stale) {
       final image = await PdfPageRenderer.rasterize(
-          picture,
-          PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation),
-          effective);
+          picture, _renderPlan.pageSize(widget.page), effective);
       if (_superseded(generation, pageIndex)) {
         image.dispose();
         return;
@@ -661,8 +658,7 @@ class _PdfPageViewState extends State<PdfPageView> {
       ((visible.bottom - pageRect.top + visible.height / 2) / pageRect.height)
           .clamp(0.0, 1.0),
     );
-    final size =
-        PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation);
+    final size = _renderPlan.pageSize(widget.page);
     final region = Rect.fromLTRB(
       fraction.left * size.width,
       fraction.top * size.height,
@@ -713,11 +709,8 @@ class _PdfPageViewState extends State<PdfPageView> {
       }
       if (widget.renderHold?.value ?? false) return;
     }
-    final picture = await (_picture ??= PdfPageRenderer.renderPicture(
-        widget.page,
-        pageColor: widget.pageColor,
-        annotations: widget.showAnnotations,
-        rotation: widget.rotation));
+    final picture = await (_picture ??=
+        PdfPageRenderer.renderPictureWithPlan(widget.page, _renderPlan));
     if (!mounted || generation != _detailGeneration) return;
     final image = await PdfPageRenderer.rasterizeRegion(picture, region, ratio);
     if (!mounted || generation != _detailGeneration) {
@@ -743,8 +736,8 @@ class _PdfPageViewState extends State<PdfPageView> {
         imageDecodeRegion: decodeRegion);
     if (_abandoned(pageIndex) || commands == null) return null;
     _logImageStats(pageIndex, commands);
-    return PdfPageRenderer.pictureFromCommands(widget.page, commands,
-        pageColor: widget.pageColor, rotation: widget.rotation);
+    return PdfPageRenderer.pictureFromCommandsWithPlan(
+        widget.page, commands, _renderPlan);
   }
 
   PdfRect _pdfRegionForRasterRegion(Rect region) {

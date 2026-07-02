@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:pdf_cos/pdf_cos.dart';
@@ -12,6 +13,60 @@ class ContentOperation {
   @override
   String toString() =>
       operands.isEmpty ? operator : '${operands.join(' ')} $operator';
+}
+
+/// Serializes parsed content-stream operations back to PDF content syntax.
+///
+/// This is intentionally narrower than [CosSerializer]: a content stream is a
+/// flat sequence of operands followed by an operator, with inline images
+/// encoded by the special `BI ... ID ... EI` form instead of ordinary COS
+/// object syntax.
+class ContentStreamSerializer {
+  ContentStreamSerializer._();
+
+  /// Serializes [operations], one operation per line.
+  static Uint8List serialize(Iterable<ContentOperation> operations) {
+    final out = BytesBuilder();
+    for (final operation in operations) {
+      writeOperation(operation, out);
+    }
+    return out.takeBytes();
+  }
+
+  /// Serializes one [operation] into [out].
+  static void writeOperation(ContentOperation operation, BytesBuilder out) {
+    if (operation.operator == 'BI') {
+      _writeInlineImage(operation, out);
+      return;
+    }
+
+    for (final operand in operation.operands) {
+      out
+        ..add(CosSerializer.serialize(operand))
+        ..addByte(0x20);
+    }
+    out.add(latin1.encode('${operation.operator}\n'));
+  }
+
+  static void _writeInlineImage(ContentOperation operation, BytesBuilder out) {
+    if (operation.operands.length < 2 ||
+        operation.operands[0] is! CosDictionary ||
+        operation.operands[1] is! CosString) {
+      throw ArgumentError.value(operation, 'operation',
+          'BI operation must contain a dictionary and raw image data');
+    }
+
+    out.add(latin1.encode('BI'));
+    final dict = operation.operands[0] as CosDictionary;
+    dict.entries.forEach((key, value) {
+      out
+        ..add(latin1.encode(' /$key '))
+        ..add(CosSerializer.serialize(value));
+    });
+    out.add(latin1.encode(' ID\n'));
+    out.add((operation.operands[1] as CosString).bytes);
+    out.add(latin1.encode('\nEI\n'));
+  }
 }
 
 /// Parses a page content stream into a flat list of operations.
