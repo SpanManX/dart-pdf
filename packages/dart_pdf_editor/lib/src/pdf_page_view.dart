@@ -38,6 +38,7 @@ class PdfPageView extends StatefulWidget {
     this.previewIndex = 0,
     this.pageEpoch = 0,
     this.contentStamp = 0,
+    this.trustContentStamp = false,
     this.destructiveStamp = 0,
     this.renderWorker,
   });
@@ -89,6 +90,12 @@ class PdfPageView extends StatefulWidget {
   /// overlay until the new raster (with it baked in) lands. 0 outside an
   /// editing session (never changes).
   final int contentStamp;
+
+  /// When true, a new [page] object with the same [contentStamp] is treated as
+  /// the same base page image. Editing revisions reopen the document and give
+  /// every page a new object even for annotation-only changes; the viewer uses
+  /// this flag when annotations are painted in a separate overlay.
+  final bool trustContentStamp;
 
   /// This page's [PdfEditingController.pageDestructiveStamp]. Unlike
   /// [contentStamp] it advances only when an edit *removed* content from
@@ -299,23 +306,29 @@ class _PdfPageViewState extends State<PdfPageView> {
       _preview?.dispose();
       _preview = null;
     }
-    final visualChanged = oldWidget.contentStamp != widget.contentStamp ||
-        !identical(oldWidget.page, widget.page) ||
-        oldWidget.rotation != widget.rotation ||
-        oldWidget.pageColor != widget.pageColor ||
-        oldWidget.showAnnotations != widget.showAnnotations;
+    final contentChanged = oldWidget.contentStamp != widget.contentStamp;
+    final pageIdentityChanged = !identical(oldWidget.page, widget.page);
+    final nonContentVisualChanged =
+        (pageIdentityChanged && !widget.trustContentStamp) ||
+            oldWidget.trustContentStamp != widget.trustContentStamp ||
+            oldWidget.rotation != widget.rotation ||
+            oldWidget.pageColor != widget.pageColor ||
+            oldWidget.showAnnotations != widget.showAnnotations;
+    final visualChanged = contentChanged || nonContentVisualChanged;
     if (blanked || visualChanged) {
       // Re-interpret at the new content/page. Unless we blanked above, the
       // old base raster stays up until the new render replaces it —
       // _dropPicture nulls _rasteredRatio so _renderNow still re-rasters —
       // so an additive edit on a heavy page never flashes blank.
-      // The deep-zoom detail patch is a sharper raster layered above the base;
-      // it must drop on any visual content change or it can cover a freshly
-      // rendered annotation for a frame after the commit afterimage clears.
-      // Dropping only that patch keeps the base page visible while the fresh
-      // detail patch renders.
       _dropPicture();
-      _dropDetail();
+      if (blanked || nonContentVisualChanged) {
+        // The deep-zoom detail patch is a sharper raster layered above the
+        // base. For additive annotation edits, keep the stale patch for
+        // sharpness and let the editing overlay's commit afterimage cover the
+        // new annotation until the fresh patch lands. For destructive edits
+        // and display-setting changes there is no safe afterimage, so drop it.
+        _dropDetail();
+      }
       _render();
     } else if (oldWidget.scale != widget.scale ||
         oldWidget.settleGeneration != widget.settleGeneration) {
@@ -643,7 +656,6 @@ class _PdfPageViewState extends State<PdfPageView> {
         _preview?.dispose();
         _preview = null;
       });
-      widget.onRasterReady?.call();
       // feed the preview cache from the picture we already paid to
       // interpret — this is how previews appear for pages the background
       // prerender hasn't reached (and refresh after edits)
@@ -656,23 +668,24 @@ class _PdfPageViewState extends State<PdfPageView> {
             rotation: widget.rotation));
       }
     }
-    await _updateDetail();
+    final detailReady = await _updateDetail();
+    if (stale && detailReady) widget.onRasterReady?.call();
   }
 
   /// Renders (or drops) the deep-zoom patch: the visible slice of the
   /// page, inflated by half a viewport on each side, at the resolution
   /// the zoom actually asks for.
-  Future<void> _updateDetail() async {
+  Future<bool> _updateDetail() async {
     final generation = ++_detailGeneration;
-    if (_renderPaused) return;
+    if (_renderPaused) return false;
     final desired = _desiredRatio();
     final effective = _effectiveRatio();
     if (desired <= effective * 1.05) {
       _dropDetail();
-      return;
+      return true;
     }
     final box = context.findRenderObject();
-    if (box is! RenderBox || !box.attached || !box.hasSize) return;
+    if (box is! RenderBox || !box.attached || !box.hasSize) return false;
     final pageRect = Rect.fromPoints(
       box.localToGlobal(Offset.zero),
       box.localToGlobal(Offset(box.size.width, box.size.height)),
@@ -681,7 +694,7 @@ class _PdfPageViewState extends State<PdfPageView> {
     final visible = pageRect.intersect(screen);
     if (visible.isEmpty || pageRect.width <= 0 || pageRect.height <= 0) {
       _dropDetail();
-      return;
+      return true;
     }
 
     // visible slice as fractions of the page, inflated 50% per side
@@ -704,7 +717,7 @@ class _PdfPageViewState extends State<PdfPageView> {
     );
     if (region.width <= 0 || region.height <= 0) {
       _dropDetail();
-      return;
+      return true;
     }
     // the patch obeys the same pixel budget as the base
     var ratio = desired;
@@ -717,7 +730,7 @@ class _PdfPageViewState extends State<PdfPageView> {
         await _detailPictureFromWorker(region, ratio, widget.previewIndex);
     if (!mounted || generation != _detailGeneration || _renderPaused) {
       workerPicture?.dispose();
-      return;
+      return false;
     }
     if (workerPicture != null) {
       final image =
@@ -725,14 +738,14 @@ class _PdfPageViewState extends State<PdfPageView> {
       workerPicture.dispose();
       if (!mounted || generation != _detailGeneration || _renderPaused) {
         image.dispose();
-        return;
+        return false;
       }
       setState(() {
         _detailImage?.dispose();
         _detailImage = image;
         _detailFraction = fraction;
       });
-      return;
+      return true;
     }
 
     // never interpret the page for the first time inline here — that is
@@ -742,23 +755,26 @@ class _PdfPageViewState extends State<PdfPageView> {
       final scheduler = widget.renderScheduler;
       if (scheduler != null) {
         scheduler.request(this, widget.previewIndex, _renderNow);
-        return;
+        return false;
       }
-      if (widget.renderHold?.value ?? false) return;
+      if (widget.renderHold?.value ?? false) return false;
     }
     final picture = await (_picture ??=
         PdfPageRenderer.renderPictureWithPlan(widget.page, _renderPlan));
-    if (!mounted || generation != _detailGeneration || _renderPaused) return;
+    if (!mounted || generation != _detailGeneration || _renderPaused) {
+      return false;
+    }
     final image = await PdfPageRenderer.rasterizeRegion(picture, region, ratio);
     if (!mounted || generation != _detailGeneration || _renderPaused) {
       image.dispose();
-      return;
+      return false;
     }
     setState(() {
       _detailImage?.dispose();
       _detailImage = image;
       _detailFraction = fraction;
     });
+    return true;
   }
 
   Future<ui.Picture?> _detailPictureFromWorker(

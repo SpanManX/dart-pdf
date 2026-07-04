@@ -164,18 +164,19 @@ void main() {
     expect(find.byType(RawImage), findsOneWidget);
   });
 
-  testWidgets('an additive content edit drops the stale detail patch only',
+  testWidgets('an additive content edit keeps the detail patch until refreshed',
       (tester) async {
     // At deep zoom a sharp detail patch paints above the capped base raster.
-    // After an annotation commit the base re-renders with the new annotation,
-    // but the old detail patch would otherwise cover it for a frame when the
-    // commit afterimage clears. Keep the base; drop only the stale patch.
+    // After an annotation commit, keep that sharp patch while the editing
+    // overlay's commit afterimage covers the new annotation. The overlay only
+    // clears once the fresh detail patch has replaced it.
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetDevicePixelRatio);
     final doc = PdfDocument.open(buildClassicPdf());
     final page = doc.page(0);
     final hold = ValueNotifier<bool>(false);
     addTearDown(hold.dispose);
+    var ready = 0;
     Widget at({int content = 0}) => Center(
           child: OverflowBox(
             maxWidth: double.infinity,
@@ -186,6 +187,7 @@ void main() {
                 page: page,
                 contentStamp: content,
                 renderHold: hold,
+                onRasterReady: () => ready++,
               ),
             ),
           ),
@@ -196,13 +198,17 @@ void main() {
     await tester.pump();
     expect(find.byType(RawImage), findsNWidgets(2),
         reason: 'base raster plus deep-zoom detail patch');
+    expect(ready, 1);
 
     hold.value = true;
     await tester.pumpWidget(at(content: 1));
     await tester.pump();
 
-    expect(find.byType(RawImage), findsOneWidget,
-        reason: 'the base stays visible, but the stale detail patch drops');
+    expect(find.byType(RawImage), findsNWidgets(2),
+        reason: 'the stale detail patch stays up for sharpness');
+    expect(ready, 1,
+        reason: 'the annotation afterimage must stay until a fresh detail '
+            'patch is ready');
   });
 
   testWidgets('raster resolution is capped at deep zoom', (tester) async {
