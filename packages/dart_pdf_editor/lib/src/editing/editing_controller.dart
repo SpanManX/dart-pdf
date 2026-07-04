@@ -1514,6 +1514,45 @@ class PdfEditingController extends ChangeNotifier {
     return false;
   }
 
+  bool _pageIsSideways(int pageIndex) {
+    final r = _page(pageIndex).rotation % 360;
+    return r == 90 || r == 270;
+  }
+
+  double _visualPageWidth(int pageIndex) {
+    final box = _page(pageIndex).cropBox;
+    return _pageIsSideways(pageIndex) ? box.height : box.width;
+  }
+
+  double _visualPageHeight(int pageIndex) {
+    final box = _page(pageIndex).cropBox;
+    return _pageIsSideways(pageIndex) ? box.width : box.height;
+  }
+
+  ({double width, double height}) _visualSizeOfPageRect(
+      int pageIndex, PdfRect rect) {
+    return _pageIsSideways(pageIndex)
+        ? (width: rect.height, height: rect.width)
+        : (width: rect.width, height: rect.height);
+  }
+
+  PdfRect _pageRectForVisualSize(
+    int pageIndex,
+    double x,
+    double y, {
+    required double width,
+    required double height,
+  }) {
+    final box = _page(pageIndex).cropBox;
+    final sideways = _pageIsSideways(pageIndex);
+    final pageW = sideways ? height : width;
+    final pageH = sideways ? width : height;
+    final cx = x.clamp(box.left + pageW / 2, box.right - pageW / 2);
+    final cy = y.clamp(box.bottom + pageH / 2, box.top - pageH / 2);
+    return PdfRect(
+        cx - pageW / 2, cy - pageH / 2, cx + pageW / 2, cy + pageH / 2);
+  }
+
   void addFreeText(int pageIndex, PdfRect rect, String text) => apply(
       (e) => e.addFreeText(pageIndex, rect, text,
           fontSize: preferences.fontSize,
@@ -1549,15 +1588,13 @@ class PdfEditingController extends ChangeNotifier {
     final value = text.trimRight();
     if (value.trim().isEmpty) return false;
     if (pageIndex < 0 || pageIndex >= _document.pageCount) return false;
-    final box = _page(pageIndex).cropBox;
     final fontSize = preferences.fontSize;
     final lineHeight = fontSize * 1.2;
     final lines = value.split('\n').length.clamp(1, 12);
-    final w = width.clamp(48.0, box.width * 0.9);
-    final h = (lineHeight * lines + fontSize).clamp(24.0, box.height * 0.9);
-    final cx = x.clamp(box.left + w / 2, box.right - w / 2);
-    final cy = y.clamp(box.bottom + h / 2, box.top - h / 2);
-    final rect = PdfRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
+    final w = width.clamp(48.0, _visualPageWidth(pageIndex) * 0.9);
+    final h = (lineHeight * lines + fontSize)
+        .clamp(24.0, _visualPageHeight(pageIndex) * 0.9);
+    final rect = _pageRectForVisualSize(pageIndex, x, y, width: w, height: h);
     final pasted = apply(
         (e) => e.addFreeText(pageIndex, rect, value,
             fontSize: fontSize,
@@ -1585,6 +1622,7 @@ class PdfEditingController extends ChangeNotifier {
           (e) => e.addStamp(pageIndex, rect, text,
               color: color ?? _colorValue,
               opacity: preferences.opacity,
+              pageRotation: _page(pageIndex).rotation,
               author: author),
           pages: [pageIndex]);
 
@@ -1650,24 +1688,22 @@ class PdfEditingController extends ChangeNotifier {
   bool _placeDecodedImage(
       int pageIndex, double x, double y, PdfEmbeddableImage image,
       {required double maxSize}) {
-    final box = _page(pageIndex).cropBox;
     final aspect = image.height == 0 ? 1.0 : image.width / image.height;
     var w = aspect >= 1 ? maxSize : maxSize * aspect;
     var h = aspect >= 1 ? maxSize / aspect : maxSize;
-    final maxW = box.width * 0.9, maxH = box.height * 0.9;
+    final maxW = _visualPageWidth(pageIndex) * 0.9;
+    final maxH = _visualPageHeight(pageIndex) * 0.9;
     if (w > maxW) (w, h) = (maxW, h * maxW / w);
     if (h > maxH) (w, h) = (w * maxH / h, maxH);
-    final cx = x.clamp(box.left + w / 2, box.right - w / 2);
-    final cy = y.clamp(box.bottom + h / 2, box.top - h / 2);
     return _addImageStamp(pageIndex,
-        PdfRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), image);
+        _pageRectForVisualSize(pageIndex, x, y, width: w, height: h), image);
   }
 
   bool _addDecodedImageInRect(
       int pageIndex, PdfRect box, PdfEmbeddableImage image) {
     if (box.width <= 0 || box.height <= 0) return false;
     final aspect = image.height == 0 ? 1.0 : image.width / image.height;
-    var w = box.width, h = box.height;
+    var (width: w, height: h) = _visualSizeOfPageRect(pageIndex, box);
     if (w / h > aspect) {
       w = h * aspect;
     } else {
@@ -1675,20 +1711,24 @@ class PdfEditingController extends ChangeNotifier {
     }
     final cx = (box.left + box.right) / 2, cy = (box.bottom + box.top) / 2;
     return _addImageStamp(pageIndex,
-        PdfRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), image);
+        _pageRectForVisualSize(pageIndex, cx, cy, width: w, height: h), image);
   }
 
   bool _addImageStamp(int pageIndex, PdfRect rect, PdfEmbeddableImage image) {
     return apply(
         (e) => e.addImageStamp(pageIndex, rect, image,
-            opacity: preferences.opacity, author: author),
+            opacity: preferences.opacity,
+            pageRotation: _page(pageIndex).rotation,
+            author: author),
         pages: [pageIndex]);
   }
 
   /// Adds a sticky note with its top-left corner at ([x], [y]).
   void addNote(int pageIndex, double x, double y, String text) => apply(
-      (e) =>
-          e.addNote(pageIndex, x, y, text, color: _colorValue, author: author),
+      (e) => e.addNote(pageIndex, x, y, text,
+          color: _colorValue,
+          pageRotation: _page(pageIndex).rotation,
+          author: author),
       pages: [pageIndex]);
 
   // ---------------------------------------------------------------------
@@ -1815,20 +1855,18 @@ class PdfEditingController extends ChangeNotifier {
   /// [color] null uses the selected toolbar colour.
   bool placeTextStamp(int pageIndex, double x, double y, String text,
       {double height = 40, int? color}) {
-    final box = _page(pageIndex).cropBox;
-    final h = height.clamp(8.0, box.height * 0.9);
+    final h = height.clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
     // mirror addStamp's appearance math (6pt padding, text 72% of the
     // height) so the caption fills the box without shrinking
     final fontSize = (h - 12) * 0.72;
     final w = (measureHelvetica(text, fontSize, bold: true) + 24)
-        .clamp(h, box.width * 0.9);
-    final cx = x.clamp(box.left + w / 2, box.right - w / 2);
-    final cy = y.clamp(box.bottom + h / 2, box.top - h / 2);
+        .clamp(h, _visualPageWidth(pageIndex) * 0.9);
+    final rect = _pageRectForVisualSize(pageIndex, x, y, width: w, height: h);
     return apply(
-        (e) => e.addStamp(pageIndex,
-            PdfRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), text,
+        (e) => e.addStamp(pageIndex, rect, text,
             color: color ?? _colorValue,
             opacity: preferences.opacity,
+            pageRotation: _page(pageIndex).rotation,
             author: author),
         pages: [pageIndex]);
   }
@@ -1855,7 +1893,10 @@ class PdfEditingController extends ChangeNotifier {
     return apply(
         (e) => e.addCheckMark(
             pageIndex, PdfRect(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2),
-            color: _colorValue, opacity: preferences.opacity, author: author),
+            color: _colorValue,
+            opacity: preferences.opacity,
+            pageRotation: _page(pageIndex).rotation,
+            author: author),
         pages: [pageIndex]);
   }
 
@@ -3647,10 +3688,16 @@ class PdfEditingController extends ChangeNotifier {
               name: nm);
         case 'Stamp':
           e.addStamp(page, rect, text,
-              color: color ?? 0xC03030, author: by, name: nm);
+              color: color ?? 0xC03030,
+              pageRotation: _page(page).rotation,
+              author: by,
+              name: nm);
         default: // 'Text'
           e.addNote(page, rect.left, rect.top, text,
-              color: color ?? 0xFFD100, author: by, name: nm);
+              color: color ?? 0xFFD100,
+              pageRotation: _page(page).rotation,
+              author: by,
+              name: nm);
       }
       // spin the freshly horizontal box back onto the resting rotation:
       // the just-added annotation is the last /Annots entry
@@ -3908,7 +3955,7 @@ class PdfEditingController extends ChangeNotifier {
   bool _replaceElementImage((int page, int id) selected,
       PdfContentElement element, PdfRect bounds, PdfEmbeddableImage image) {
     final aspect = image.height == 0 ? 1.0 : image.width / image.height;
-    var w = bounds.width, h = bounds.height;
+    var (width: w, height: h) = _visualSizeOfPageRect(selected.$1, bounds);
     if (w / h > aspect) {
       w = h * aspect;
     } else {
@@ -3920,9 +3967,13 @@ class PdfEditingController extends ChangeNotifier {
     return apply(
         (e) => e
           ..deleteElements(elements, [element.id])
-          ..addImageStamp(selected.$1,
-              PdfRect(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2), image,
-              opacity: preferences.opacity, author: author),
+          ..addImageStamp(
+              selected.$1,
+              _pageRectForVisualSize(selected.$1, cx, cy, width: w, height: h),
+              image,
+              opacity: preferences.opacity,
+              pageRotation: _page(selected.$1).rotation,
+              author: author),
         pages: [selected.$1]);
   }
 

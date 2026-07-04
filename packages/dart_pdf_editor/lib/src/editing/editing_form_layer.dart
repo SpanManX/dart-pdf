@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf_document/pdf_document.dart';
 
+import '../annotation_tap.dart';
 import '../page_geometry.dart';
 import '../theme.dart';
 import 'editing_controller.dart';
@@ -105,6 +108,7 @@ class FormInteractionLayer extends StatefulWidget {
     required this.rasterCurrent,
     this.zoom = 1,
     this.formImagePicker,
+    this.onAnnotationTap,
   });
 
   final PdfEditingController controller;
@@ -122,6 +126,9 @@ class FormInteractionLayer extends StatefulWidget {
   /// Supplies the image bytes for a push-button (signature / logo) field
   /// tap. When null, push buttons take no taps.
   final PdfFormImagePicker? formImagePicker;
+
+  /// See [PdfViewer.onAnnotationTap].
+  final PdfAnnotationTapHandler? onAnnotationTap;
 
   @override
   State<FormInteractionLayer> createState() => _FormInteractionLayerState();
@@ -361,21 +368,34 @@ class _FormInteractionLayerState extends State<FormInteractionLayer> {
     return Stack(children: [
       for (final (field, widgetIndex, annotation) in fields)
         if (_interactive(field) && field.name != _editingField)
-          _tapTarget(field, widgetIndex, geometry.toViewRect(annotation.rect)),
+          _tapTarget(field, widgetIndex, annotation,
+              geometry.toViewRect(annotation.rect)),
       if (_afterValue != null && _afterRect != null)
         _afterimage(_afterRect!, _afterValue!, _afterFont, _afterSize),
       if (_editingField != null && _editRect != null) _inlineEditor(),
     ]);
   }
 
-  Widget _tapTarget(PdfFormField field, int widgetIndex, Rect rect) {
+  Widget _tapTarget(PdfFormField field, int widgetIndex,
+      PdfAnnotation annotation, Rect rect) {
     return Positioned.fromRect(
       rect: rect,
       child: MouseRegion(
         cursor: _cursorFor(field),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: () => _onFieldTap(field, widgetIndex, rect),
+          onTapUp: (details) {
+            final pageViewPosition = rect.topLeft + details.localPosition;
+            final (x, y) = widget.geometry.toPagePoint(pageViewPosition);
+            widget.onAnnotationTap?.call(PdfAnnotationTapDetails(
+              annotation: annotation,
+              pageIndex: widget.pageIndex,
+              pagePoint: Offset(x, y),
+              pageViewPosition: pageViewPosition,
+              globalPosition: details.globalPosition,
+            ));
+            unawaited(_onFieldTap(field, widgetIndex, rect));
+          },
         ),
       ),
     );

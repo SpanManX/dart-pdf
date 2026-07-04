@@ -33,6 +33,7 @@ void main() {
     bool interactiveForms = true,
     PdfEditTool? tool,
     double? zoom,
+    PdfAnnotationTapHandler? onAnnotationTap,
   }) async {
     SharedPreferences.setMockInitialValues({});
     final session = PdfEditingController(buildAcroFormPdf());
@@ -50,6 +51,7 @@ void main() {
             editing: asReader ? null : session,
             formController: asReader ? session : null,
             interactiveForms: interactiveForms,
+            onAnnotationTap: onAnnotationTap,
           ),
         ),
       ),
@@ -127,6 +129,21 @@ void main() {
 
       await tap(tester, view(130, 510)); // the /Blue radio kid
       expect(session.acroForm!.fieldNamed('color')!.value, 'Blue');
+      await settle(tester);
+    });
+
+    testWidgets('onAnnotationTap fires for form field widgets', (tester) async {
+      final taps = <PdfAnnotationTapDetails>[];
+      final session = await pumpViewer(tester, onAnnotationTap: taps.add);
+
+      await tap(tester, view(82, 550)); // the agree check box
+
+      expect(taps, hasLength(1));
+      expect(taps.single.pageIndex, 0);
+      expect(taps.single.annotation.subtype, 'Widget');
+      expect(taps.single.pagePoint.dx, closeTo(82, 0.5));
+      expect(taps.single.pagePoint.dy, closeTo(550, 0.5));
+      expect(session.acroForm!.fieldNamed('agree')!.isChecked, isTrue);
       await settle(tester);
     });
 

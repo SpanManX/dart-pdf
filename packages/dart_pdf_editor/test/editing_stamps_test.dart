@@ -1,8 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+String appearanceText(PdfEditingController editing) {
+  final annotation = editing.document.page(0).annotations.single;
+  return latin1.decode(
+      editing.document.cos.decodeStreamData(annotation.normalAppearance!));
+}
 
 void main() {
   group('PdfCustomStamp', () {
@@ -105,6 +113,22 @@ void main() {
       expect(stamp.rect.height, moreOrLessEquals(40));
       expect((stamp.rect.left + stamp.rect.right) / 2, moreOrLessEquals(300));
       expect((stamp.rect.bottom + stamp.rect.top) / 2, moreOrLessEquals(400));
+    });
+
+    test('placeTextStamp on a rotated page uses visual orientation', () {
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..color = const Color(0xFF1565C0);
+      addTearDown(editing.dispose);
+      expect(editing.rotatePages([0], 90), isTrue);
+      expect(editing.placeTextStamp(0, 300, 400, 'REVIEWED'), isTrue);
+
+      final stamp = editing.document.page(0).annotations.single;
+      expect(stamp.subtype, 'Stamp');
+      expect(stamp.rect.width, moreOrLessEquals(40));
+      expect(stamp.rect.height, greaterThan(80));
+      final content = appearanceText(editing);
+      expect(content, contains('0 1 -1 0'));
+      expect(content, contains('(REVIEWED) Tj'));
     });
   });
 

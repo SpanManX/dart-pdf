@@ -1590,10 +1590,12 @@ extension PdfAnnotationEditing on PdfEditor {
     int? fillColor,
     int? borderColor,
     double borderWidth = 1,
-    int pageRotation = 0,
+    int? pageRotation,
     String? author,
     String? name,
   }) {
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
     // When the text contains non-Latin-1 characters and the font is a
     // standard base-14 face (which only supports WinAnsi encoding), wrap it
     // in a PdfUnicodeFont — a lightweight Type0 Identity-H font that encodes
@@ -1617,7 +1619,7 @@ extension PdfAnnotationEditing on PdfEditor {
         fillColor: fillColor,
         borderColor: borderColor,
         borderWidth: borderWidth,
-        pageRotation: pageRotation);
+        pageRotation: effectivePageRotation);
 
     String rgb(int c) =>
         ContentWriter.rgbComponents(c).map(ContentWriter.fmt).join(' ');
@@ -1663,10 +1665,12 @@ extension PdfAnnotationEditing on PdfEditor {
     int? fillColor,
     int? borderColor,
     double borderWidth = 1,
-    int pageRotation = 0,
+    int? pageRotation,
     String? author,
     String? name,
   }) {
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
     final nonEmpty = [
       for (final run in runs)
         if (run.text.isNotEmpty) run
@@ -1694,7 +1698,7 @@ extension PdfAnnotationEditing on PdfEditor {
         fillColor: fillColor,
         borderColor: borderColor,
         borderWidth: borderWidth,
-        pageRotation: pageRotation);
+        pageRotation: effectivePageRotation);
 
     final first = effective.first;
     String rgb(int c) =>
@@ -1852,10 +1856,10 @@ extension PdfAnnotationEditing on PdfEditor {
   }) {
     const pad = 3.0;
     final w = ContentWriter();
-    final vr = _freeTextVisualRect(rect, pageRotation);
+    final vr = _orientedVisualRect(rect, pageRotation);
     if (pageRotation != 0) {
       w.save();
-      _freeTextCounterRotation(w, rect, pageRotation);
+      _orientedCounterRotation(w, rect, pageRotation);
     }
     if (fillColor != null) {
       w
@@ -1927,10 +1931,10 @@ extension PdfAnnotationEditing on PdfEditor {
   }) {
     const pad = 3.0;
     final w = ContentWriter();
-    final vr = _freeTextVisualRect(rect, pageRotation);
+    final vr = _orientedVisualRect(rect, pageRotation);
     if (pageRotation != 0) {
       w.save();
-      _freeTextCounterRotation(w, rect, pageRotation);
+      _orientedCounterRotation(w, rect, pageRotation);
     }
     if (fillColor != null) {
       w
@@ -2022,11 +2026,19 @@ extension PdfAnnotationEditing on PdfEditor {
         PdfTextAlign.right => vr.right - pad - width,
       };
 
-  /// The rect in which text is laid out when [pageRotation] is active.
-  /// For 90/270 rotations the visual dimensions (what the user sees on
-  /// screen) are the page rect's height×width; for 180 they stay the same.
-  /// The visual rect is centered on the page rect.
-  static PdfRect _freeTextVisualRect(PdfRect pageRect, int pageRotation) {
+  int _appearancePageRotation(int pageIndex, int? pageRotation) =>
+      _normalizePageRotation(pageRotation ?? document.page(pageIndex).rotation);
+
+  static int _normalizePageRotation(int pageRotation) {
+    final r = pageRotation % 360;
+    return r < 0 ? r + 360 : r;
+  }
+
+  /// The rect in which oriented appearance artwork is laid out when
+  /// [pageRotation] is active. For 90/270 rotations the visual dimensions
+  /// (what the user sees on screen) are the page rect's height×width; for
+  /// 180 they stay the same. The visual rect is centered on the page rect.
+  static PdfRect _orientedVisualRect(PdfRect pageRect, int pageRotation) {
     if (pageRotation == 0) return pageRect;
     if (pageRotation == 180) return pageRect;
     final cx = (pageRect.left + pageRect.right) / 2;
@@ -2036,11 +2048,11 @@ extension PdfAnnotationEditing on PdfEditor {
     return PdfRect(cx - vw / 2, cy - vh / 2, cx + vw / 2, cy + vh / 2);
   }
 
-  /// Writes a `cm` operator that counter-rotates the content by
-  /// [pageRotation] about the center of [pageRect], so that text drawn
-  /// in the visual rect appears upright after the renderer applies the
-  /// page's display rotation.
-  static void _freeTextCounterRotation(
+  /// Writes a `cm` operator that counter-rotates content by [pageRotation]
+  /// about the center of [pageRect], so oriented artwork drawn in the
+  /// visual rect appears upright after the renderer applies the page's
+  /// display rotation.
+  static void _orientedCounterRotation(
       ContentWriter w, PdfRect pageRect, int pageRotation) {
     final cx = (pageRect.left + pageRect.right) / 2;
     final cy = (pageRect.bottom + pageRect.top) / 2;
@@ -2123,26 +2135,36 @@ extension PdfAnnotationEditing on PdfEditor {
     double y,
     String contents, {
     int color = 0xFFD100,
+    int? pageRotation,
     String? author,
     String? name,
   }) {
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
     const size = 20.0;
     final rect = PdfRect(x, y - size, x + size, y);
     _addAnnotation(
       pageIndex,
       _markupDict('Text', rect, color, contents, author)
         ..['Name'] = const CosName('Comment'),
-      _form(rect, _noteContent(rect, color)),
+      _form(
+          rect, _noteContent(rect, color, pageRotation: effectivePageRotation)),
       name: name,
     );
   }
 
   /// The sticky-note sheet appearance, drawn inside [rect]. Shared by
   /// [addNote] and [restyleAnnotation].
-  ContentWriter _noteContent(PdfRect rect, int color) {
-    final x = rect.left, y = rect.top;
-    final size = rect.height;
-    final w = ContentWriter()
+  ContentWriter _noteContent(PdfRect rect, int color, {int pageRotation = 0}) {
+    final vr = _orientedVisualRect(rect, pageRotation);
+    final x = vr.left, y = vr.top;
+    final size = math.min(vr.width, vr.height);
+    final w = ContentWriter();
+    if (pageRotation != 0) {
+      w.save();
+      _orientedCounterRotation(w, rect, pageRotation);
+    }
+    w
       // note sheet
       ..fillColor(color)
       ..strokeColor(0x404040)
@@ -2159,6 +2181,7 @@ extension PdfAnnotationEditing on PdfEditor {
         ..lineTo(x + size - 4, lineY)
         ..stroke();
     }
+    if (pageRotation != 0) w.restore();
     return w;
   }
 
@@ -2170,10 +2193,14 @@ extension PdfAnnotationEditing on PdfEditor {
     String text, {
     int color = 0xC03030,
     double opacity = 1,
+    int? pageRotation,
     String? author,
     String? name,
   }) {
-    final (w, gs) = _stampContent(rect, text, color, opacity);
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
+    final (w, gs) = _stampContent(rect, text, color, opacity,
+        pageRotation: effectivePageRotation);
     _addAnnotation(
       pageIndex,
       _markupDict('Stamp', rect, color, text, author),
@@ -2188,11 +2215,13 @@ extension PdfAnnotationEditing on PdfEditor {
   /// rounded border, sized to fit [rect]. Shared by [addStamp] and
   /// [restyleAnnotation].
   (ContentWriter, CosDictionary?) _stampContent(
-      PdfRect rect, String text, int color, double opacity) {
+      PdfRect rect, String text, int color, double opacity,
+      {int pageRotation = 0}) {
     const borderWidth = 2.0;
     const pad = 6.0;
-    var fontSize = (rect.height - 2 * pad) * 0.72;
-    final available = rect.width - 2 * pad;
+    final vr = _orientedVisualRect(rect, pageRotation);
+    var fontSize = (vr.height - 2 * pad) * 0.72;
+    final available = vr.width - 2 * pad;
     final atUnit = measureHelvetica(text, 1, bold: true);
     if (atUnit > 0 && atUnit * fontSize > available) {
       fontSize = available / atUnit;
@@ -2202,19 +2231,24 @@ extension PdfAnnotationEditing on PdfEditor {
     final w = ContentWriter();
     final gs = _alphaState(opacity);
     if (gs != null) w.extGState('GS0');
+    if (pageRotation != 0) {
+      w.save();
+      _orientedCounterRotation(w, rect, pageRotation);
+    }
     w
       ..strokeColor(color)
       ..lineWidth(borderWidth)
-      ..roundedRect(rect.left + borderWidth / 2, rect.bottom + borderWidth / 2,
-          rect.width - borderWidth, rect.height - borderWidth, 4)
+      ..roundedRect(vr.left + borderWidth / 2, vr.bottom + borderWidth / 2,
+          vr.width - borderWidth, vr.height - borderWidth, 4)
       ..stroke()
       ..beginText()
       ..font('HelvB', fontSize)
       ..fillColor(color)
-      ..textAt(rect.left + (rect.width - textWidth) / 2,
-          rect.bottom + (rect.height - fontSize * 0.718) / 2)
+      ..textAt(vr.left + (vr.width - textWidth) / 2,
+          vr.bottom + (vr.height - fontSize * 0.718) / 2)
       ..showText(text)
       ..endText();
+    if (pageRotation != 0) w.restore();
     return (w, gs);
   }
 
@@ -2228,10 +2262,14 @@ extension PdfAnnotationEditing on PdfEditor {
     PdfRect rect, {
     int color = 0x2E7D32,
     double opacity = 1,
+    int? pageRotation,
     String? author,
     String? name,
   }) {
-    final (w, gs) = _checkMarkContent(rect, color, opacity);
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
+    final (w, gs) = _checkMarkContent(rect, color, opacity,
+        pageRotation: effectivePageRotation);
     _addAnnotation(
       pageIndex,
       _markupDict('Stamp', rect, color, null, author)
@@ -2244,13 +2282,19 @@ extension PdfAnnotationEditing on PdfEditor {
   /// The check-mark appearance: a tick stroked inside [rect], centered in
   /// its largest square so it stays proportional whatever the rect aspect.
   (ContentWriter, CosDictionary?) _checkMarkContent(
-      PdfRect rect, int color, double opacity) {
+      PdfRect rect, int color, double opacity,
+      {int pageRotation = 0}) {
     final gs = _alphaState(opacity);
     final w = ContentWriter();
     if (gs != null) w.extGState('GS0');
-    final s = math.min(rect.width, rect.height);
-    final ox = rect.left + (rect.width - s) / 2;
-    final oy = rect.bottom + (rect.height - s) / 2;
+    final vr = _orientedVisualRect(rect, pageRotation);
+    if (pageRotation != 0) {
+      w.save();
+      _orientedCounterRotation(w, rect, pageRotation);
+    }
+    final s = math.min(vr.width, vr.height);
+    final ox = vr.left + (vr.width - s) / 2;
+    final oy = vr.bottom + (vr.height - s) / 2;
     w
       ..strokeColor(color)
       ..lineWidth(s * 0.16)
@@ -2259,6 +2303,7 @@ extension PdfAnnotationEditing on PdfEditor {
       ..lineTo(ox + s * 0.42, oy + s * 0.26)
       ..lineTo(ox + s * 0.82, oy + s * 0.74)
       ..stroke();
+    if (pageRotation != 0) w.restore();
     return (w, gs);
   }
 
@@ -2277,21 +2322,31 @@ extension PdfAnnotationEditing on PdfEditor {
     PdfRect rect,
     PdfEmbeddableImage image, {
     double opacity = 1,
+    int? pageRotation,
     String? author,
     String? name,
   }) {
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
     final imageRef = _updater
         .addObject(image.toXObject((smask) => _updater.addObject(smask)));
     final w = ContentWriter();
     final gs = _alphaState(opacity);
     if (gs != null) w.extGState('GS0');
-    // a unit image (1×1 at the origin) mapped onto the rect in page space —
-    // the form's BBox is the rect, so the §12.5.5 fit is the identity
+    final vr = _orientedVisualRect(rect, effectivePageRotation);
+    if (effectivePageRotation != 0) {
+      w.save();
+      _orientedCounterRotation(w, rect, effectivePageRotation);
+    }
+    // A unit image (1×1 at the origin) mapped onto the visual rect. The form's
+    // BBox remains the page-space rect, so unrotated appearances still fit as
+    // an identity mapping.
     w
       ..save()
-      ..concatMatrix(rect.width, 0, 0, rect.height, rect.left, rect.bottom)
+      ..concatMatrix(vr.width, 0, 0, vr.height, vr.left, vr.bottom)
       ..drawXObject('Img0')
       ..restore();
+    if (effectivePageRotation != 0) w.restore();
     _addAnnotation(
       pageIndex,
       _markupDict('Stamp', rect, 0xC03030, null, author),
@@ -2631,7 +2686,9 @@ extension PdfAnnotationEditing on PdfEditor {
   /// match; regenerated appearances (shapes, free text, lines) ignore the
   /// flip — a mirrored rectangle or readable-text box looks the same.
   void resizeAnnotation(int pageIndex, PdfAnnotation annotation, PdfRect to,
-      {bool flipX = false, bool flipY = false, int pageRotation = 0}) {
+      {bool flipX = false, bool flipY = false, int? pageRotation}) {
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
     final from = annotation.rect;
     if (from.width <= 0 ||
         from.height <= 0 ||
@@ -2640,7 +2697,7 @@ extension PdfAnnotationEditing on PdfEditor {
       throw ArgumentError('resizeAnnotation needs non-degenerate rects');
     }
     final regenerated = _regenerateResizedAppearance(annotation, to,
-        pageRotation: pageRotation);
+        pageRotation: effectivePageRotation);
     if (!regenerated && (flipX || flipY)) {
       final form = annotation.normalAppearance;
       if (form != null) _flipFormArtwork(form, flipX: flipX, flipY: flipY);
@@ -2786,12 +2843,14 @@ extension PdfAnnotationEditing on PdfEditor {
   /// the /Rect and point arrays stay consistent with the appearance.
   void resizeAnnotationLocal(
       int pageIndex, PdfAnnotation annotation, PdfRect localTo,
-      {bool flipX = false, bool flipY = false, int pageRotation = 0}) {
+      {bool flipX = false, bool flipY = false, int? pageRotation}) {
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
     final quad = annotation.appearanceQuad;
     final theta = quad == null ? 0.0 : _quadRotation(quad);
     if (theta == 0) {
       resizeAnnotation(pageIndex, annotation, localTo,
-          flipX: flipX, flipY: flipY, pageRotation: pageRotation);
+          flipX: flipX, flipY: flipY, pageRotation: effectivePageRotation);
       return;
     }
     if (localTo.width <= 0 || localTo.height <= 0) {
@@ -2809,12 +2868,12 @@ extension PdfAnnotationEditing on PdfEditor {
         math.sqrt((ulx - llx) * (ulx - llx) + (uly - lly) * (uly - lly));
     if (fromW < 1e-9 || fromH < 1e-9) {
       resizeAnnotation(pageIndex, annotation, localTo,
-          flipX: flipX, flipY: flipY);
+          flipX: flipX, flipY: flipY, pageRotation: effectivePageRotation);
       return;
     }
 
     if (_regenerateResizedAppearance(annotation, localTo,
-        pageRotation: pageRotation)) {
+        pageRotation: effectivePageRotation)) {
       // a fresh, unrotated appearance at the local box — re-applying the
       // resting angle is then plain rotation (which also sets /Rect).
       // PdfAnnotation parses /Rect once, so rotate a re-wrapped view of
@@ -2833,7 +2892,7 @@ extension PdfAnnotationEditing on PdfEditor {
       // nothing can be rotated without a matrix-carrying appearance;
       // degrade to a page-space resize of the bounds
       resizeAnnotation(pageIndex, annotation, localTo,
-          flipX: flipX, flipY: flipY);
+          flipX: flipX, flipY: flipY, pageRotation: effectivePageRotation);
       return;
     }
     final dict = annotation.dict;
@@ -3042,8 +3101,10 @@ extension PdfAnnotationEditing on PdfEditor {
     double? strokeWidth,
     double? opacity,
     (List<double>?,)? dashPattern,
-    int pageRotation = 0,
+    int? pageRotation,
   }) {
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
     if (color == null &&
         fillColor == null &&
         strokeWidth == null &&
@@ -3152,13 +3213,16 @@ extension PdfAnnotationEditing on PdfEditor {
         // /C is the background — or mirrors the text color when there is
         // none, the legacy form freeTextStyle reads back as "no fill"
         dict['C'] = _colorComponents(fill ?? textColor);
-        return _restyleRegenerate(pageIndex, dict, pageRotation: pageRotation);
+        return _restyleRegenerate(pageIndex, dict,
+            pageRotation: effectivePageRotation);
       case 'Text':
         dict['C'] = _colorComponents(color ?? annotation.color ?? 0xFFD100);
-        return _restyleRegenerate(pageIndex, dict);
+        return _restyleRegenerate(pageIndex, dict,
+            pageRotation: effectivePageRotation);
       case 'Stamp':
         dict['C'] = _colorComponents(color ?? annotation.color ?? 0xC03030);
-        return _restyleRegenerate(pageIndex, dict, opacity: opacity);
+        return _restyleRegenerate(pageIndex, dict,
+            opacity: opacity, pageRotation: effectivePageRotation);
     }
     return false;
   }
@@ -3221,7 +3285,8 @@ extension PdfAnnotationEditing on PdfEditor {
         if (form == null) return false;
         final color = annotation.color ?? 0xC03030;
         final (w, gs) = _stampContent(to, annotation.contents ?? '', color,
-            opacity ?? _appearanceOpacity(form));
+            opacity ?? _appearanceOpacity(form),
+            pageRotation: pageRotation);
         _replaceAppearance(annotation.dict, form, to, w,
             resources: _resources(
                 extGState: gs, font: _helvetica(bold: true, name: 'HelvB')));
@@ -3230,7 +3295,8 @@ extension PdfAnnotationEditing on PdfEditor {
         final form = annotation.normalAppearance;
         if (form == null) return false;
         final color = annotation.color ?? 0xFFD100;
-        _replaceAppearance(annotation.dict, form, to, _noteContent(to, color));
+        _replaceAppearance(annotation.dict, form, to,
+            _noteContent(to, color, pageRotation: pageRotation));
         return true;
       default:
         return false;

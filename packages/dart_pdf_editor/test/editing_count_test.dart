@@ -2,11 +2,19 @@
 // Each tap places a /Stamp check-mark annotation and bumps the running
 // tally (PdfEditingController.checkMarkCount); the marks behave like any
 // other annotation (select/move/delete) and the tally tracks undo/redo.
+import 'dart:convert';
+
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+String appearanceText(PdfEditingController editing) {
+  final annotation = editing.document.page(0).annotations.single;
+  return latin1.decode(
+      editing.document.cos.decodeStreamData(annotation.normalAppearance!));
+}
 
 void main() {
   group('PdfEditingController check-marks', () {
@@ -21,7 +29,8 @@ void main() {
       expect((mark.rect.left + mark.rect.right) / 2, closeTo(300, 1e-9));
       expect((mark.rect.bottom + mark.rect.top) / 2, closeTo(400, 1e-9));
       // a default-size square mark
-      expect(mark.rect.width, closeTo(PdfEditingController.checkMarkSize, 1e-9));
+      expect(
+          mark.rect.width, closeTo(PdfEditingController.checkMarkSize, 1e-9));
       expect(mark.rect.width, closeTo(mark.rect.height, 1e-9));
     });
 
@@ -72,6 +81,20 @@ void main() {
 
       editing.placeTextStamp(0, 200, 200, 'APPROVED');
       expect(editing.checkMarkCount, 0);
+    });
+
+    test('placeCheckMark counter-rotates on a rotated page', () {
+      SharedPreferences.setMockInitialValues({});
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+
+      expect(editing.rotatePages([0], 90), isTrue);
+      expect(editing.placeCheckMark(0, 300, 400), isTrue);
+
+      final mark = editing.document.page(0).annotations.single;
+      expect(mark.isCheckMark, isTrue);
+      expect(editing.checkMarkCount, 1);
+      expect(appearanceText(editing), contains('0 1 -1 0'));
     });
   });
 
@@ -151,15 +174,13 @@ void main() {
       editing.tool = PdfEditTool.count;
       await tester.pump();
       expect(find.byKey(tally), findsOneWidget);
-      expect(
-          find.descendant(of: find.byKey(tally), matching: find.text('0')),
+      expect(find.descendant(of: find.byKey(tally), matching: find.text('0')),
           findsOneWidget);
 
       editing.placeCheckMark(0, 100, 100);
       editing.placeCheckMark(0, 200, 200);
       await tester.pump();
-      expect(
-          find.descendant(of: find.byKey(tally), matching: find.text('2')),
+      expect(find.descendant(of: find.byKey(tally), matching: find.text('2')),
           findsOneWidget);
     });
   });

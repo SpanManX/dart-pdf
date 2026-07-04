@@ -12,6 +12,7 @@ import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_graphics/pdf_graphics.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'annotation_tap.dart';
 import 'editing/editing_controller.dart';
 import 'editing/editing_form_layer.dart';
 import 'editing/editing_menu.dart';
@@ -31,6 +32,8 @@ import 'theme.dart';
 import 'viewport.dart';
 
 export 'viewport.dart' show PdfViewport, pdfDocumentKey;
+export 'annotation_tap.dart'
+    show PdfAnnotationTapDetails, PdfAnnotationTapHandler;
 
 /// One search hit with the text around it, ready for a results list
 /// like [PdfSearchResultsPanel].
@@ -479,6 +482,7 @@ class PdfViewer extends StatefulWidget {
     required this.document,
     this.controller,
     this.onAction,
+    this.onAnnotationTap,
     this.onLaunchUrl,
     this.pageOverlayBuilder,
     this.editing,
@@ -571,6 +575,15 @@ class PdfViewer extends StatefulWidget {
   /// are the app's call — the conventional bridge for PDFs that drive the
   /// app is a URI action with a custom scheme, dispatched here.
   final PdfActionHandler? onAction;
+
+  /// Called whenever the user taps or clicks a visible annotation.
+  ///
+  /// This is a notification hook for host Flutter UI and app logic. Built-in
+  /// viewer behavior still runs: followed links still navigate or launch,
+  /// interactive form fields still fill, and editable annotations can still
+  /// enter the editor selection. Use [onLaunchUrl] and [onAction] to control
+  /// PDF link/action dispatch.
+  final PdfAnnotationTapHandler? onAnnotationTap;
 
   /// Opens the hyperlink of a tapped /URI action (and of a push button
   /// whose action is a /URI). Defaults to launching well-known external
@@ -854,6 +867,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
   double _maxPointWidth = 0;
   final Map<int, PdfPageText> _textCache = {};
   final Map<int, List<PdfAnnotation>> _annotCache = {};
+  final Map<int, List<PdfAnnotation>> _visibleAnnotCache = {};
   final Map<int, List<PdfRect>> _fieldRectCache = {};
   double _viewWidth = 0;
   double _viewHeight = 0;
@@ -1532,6 +1546,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       final sameGeometry = _sameGeometryAs(widget.document);
       _textCache.clear();
       _annotCache.clear();
+      _visibleAnnotCache.clear();
       _fieldRectCache.clear();
       _controller.clearSearch();
       _clearSelection();
@@ -2321,26 +2336,68 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
           if (!a.isHidden && !a.isNoView && a.action != null) a,
       ];
 
-  /// Visible form-field widget rects on a page, for the field
-  /// highlight. Cached beside [_annotCache] (same lifecycle: pages are
-  /// reloaded on every document swap).
+  /// All visible annotations on a page, cached for hit-testing host tap
+  /// callbacks.
+  List<PdfAnnotation> _visibleAnnots(int index) =>
+      _visibleAnnotCache[index] ??= [
+        for (final a in _pages[index].annotations)
+          if (!a.isHidden && !a.isNoView) a,
+      ];
+
+  /// Visible form-field widget rects on a page, for the field highlight.
+  /// Cached beside the annotation caches (same lifecycle: pages are reloaded
+  /// on every document swap).
   List<PdfRect> _formFieldRects(int index) => _fieldRectCache[index] ??= [
         for (final a in _pages[index].annotations)
           if (a is PdfWidgetAnnotation && !a.isHidden && !a.isNoView) a.rect,
       ];
 
-  PdfAnnotation? _annotationAt(Offset local) {
+  ({
+    int pageIndex,
+    PdfAnnotation annotation,
+    Offset pagePoint,
+    Offset pageViewPosition,
+  })? _annotationHitAt(Offset local, {required bool actionsOnly}) {
     // hidden annotations don't render, so they don't take taps either —
     // an invisible link navigating would be baffling
     if (!widget.showAnnotations) return null;
     final point = _pagePointAt(local);
     if (point == null) return null;
     final (i, x, y) = point;
+    final pageViewPosition = _toPageView(i, local);
+    final annots = actionsOnly ? _interactiveAnnots(i) : _visibleAnnots(i);
     // later /Annots entries paint on top, so they win the hit test
-    for (final annotation in _interactiveAnnots(i).reversed) {
-      if (annotation.rect.contains(x, y)) return annotation;
+    for (final annotation in annots.reversed) {
+      if (annotation.rect.contains(x, y)) {
+        return (
+          pageIndex: i,
+          annotation: annotation,
+          pagePoint: Offset(x, y),
+          pageViewPosition: pageViewPosition,
+        );
+      }
     }
     return null;
+  }
+
+  PdfAnnotation? _annotationAt(Offset local) =>
+      _annotationHitAt(local, actionsOnly: true)?.annotation;
+
+  void _notifyAnnotationTap(
+      ({
+        int pageIndex,
+        PdfAnnotation annotation,
+        Offset pagePoint,
+        Offset pageViewPosition,
+      }) hit,
+      Offset globalPosition) {
+    widget.onAnnotationTap?.call(PdfAnnotationTapDetails(
+      annotation: hit.annotation,
+      pageIndex: hit.pageIndex,
+      pagePoint: hit.pagePoint,
+      pageViewPosition: hit.pageViewPosition,
+      globalPosition: globalPosition,
+    ));
   }
 
   void _onTapUp(TapUpDetails details) {
@@ -2349,9 +2406,16 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       return;
     }
     _clearSelection();
-    final annotation = _annotationAt(details.localPosition);
-    if (annotation != null) {
-      _activate(annotation);
+    final tapHit = widget.onAnnotationTap == null
+        ? null
+        : _annotationHitAt(details.localPosition, actionsOnly: false);
+    if (tapHit != null) {
+      _notifyAnnotationTap(tapHit, details.globalPosition);
+    }
+    final actionHit =
+        _annotationHitAt(details.localPosition, actionsOnly: true);
+    if (actionHit != null) {
+      _activate(actionHit.annotation);
       return;
     }
     // selection is the default mode for mice: clicking an annotation
@@ -2632,6 +2696,9 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       // Shift held in default editing mode: a drag rubber-bands a marquee
       cursor = SystemMouseCursors.precise;
     } else if (_annotationAt(event.localPosition) != null ||
+        (widget.onAnnotationTap != null &&
+            _annotationHitAt(event.localPosition, actionsOnly: false) !=
+                null) ||
         _selectableAnnotationAt(event.localPosition)) {
       cursor = SystemMouseCursors.click;
     } else if (_textPositionAt(event.localPosition, tolerance: 8) != null) {
@@ -3894,6 +3961,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
                 formImagePicker: widget.formImagePicker,
                 imagePicker: widget.imagePicker,
                 onSnapshot: widget.onSnapshot,
+                onAnnotationTap: widget.onAnnotationTap,
                 onPanViewport: _touchGrabPanBy,
                 onPanViewportEnd: _flingViewport,
                 edgeAutoScroll: _edgeAutoScrollDelta,
@@ -4324,6 +4392,7 @@ class _PdfViewerPage extends StatefulWidget {
     required this.formImagePicker,
     required this.imagePicker,
     required this.onSnapshot,
+    required this.onAnnotationTap,
     required this.onPanViewport,
     required this.onPanViewportEnd,
     required this.edgeAutoScroll,
@@ -4400,6 +4469,7 @@ class _PdfViewerPage extends StatefulWidget {
 
   /// See [EditingPageOverlay.onSnapshot].
   final PdfSnapshotHandler? onSnapshot;
+  final PdfAnnotationTapHandler? onAnnotationTap;
   final void Function(Offset delta) onPanViewport;
 
   /// See [EditingPageOverlay.onPanViewportEnd].
@@ -4640,6 +4710,7 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
                                 rasterCurrent: _rastered,
                                 zoom: zoom,
                                 formImagePicker: widget.formImagePicker,
+                                onAnnotationTap: widget.onAnnotationTap,
                               ),
                             )
                           : const SizedBox.shrink();

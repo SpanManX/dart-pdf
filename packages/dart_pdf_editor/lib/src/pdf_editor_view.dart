@@ -203,6 +203,7 @@ class PdfEditorView extends StatefulWidget {
     this.onPickPdfToInsert,
     this.onExportPages,
     this.onAction,
+    this.onAnnotationTap,
     this.pageOverlayBuilder,
     this.annotationMenuBuilder,
     this.formImagePicker,
@@ -297,6 +298,9 @@ class PdfEditorView extends StatefulWidget {
 
   /// See [PdfViewer.onAction].
   final PdfActionHandler? onAction;
+
+  /// See [PdfViewer.onAnnotationTap].
+  final PdfAnnotationTapHandler? onAnnotationTap;
 
   /// See [PdfViewer.pageOverlayBuilder].
   final PdfPageOverlayBuilder? pageOverlayBuilder;
@@ -913,6 +917,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                         controller: _viewer,
                         editing: session,
                         onAction: widget.onAction,
+                        onAnnotationTap: widget.onAnnotationTap,
                         pageOverlayBuilder: widget.pageOverlayBuilder,
                         annotationMenuBuilder: widget.annotationMenuBuilder,
                         formImagePicker: widget.formImagePicker,
