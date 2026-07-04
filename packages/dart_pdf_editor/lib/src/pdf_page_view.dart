@@ -299,20 +299,23 @@ class _PdfPageViewState extends State<PdfPageView> {
       _preview?.dispose();
       _preview = null;
     }
-    if (blanked ||
-        oldWidget.contentStamp != widget.contentStamp ||
+    final visualChanged = oldWidget.contentStamp != widget.contentStamp ||
         !identical(oldWidget.page, widget.page) ||
         oldWidget.rotation != widget.rotation ||
         oldWidget.pageColor != widget.pageColor ||
-        oldWidget.showAnnotations != widget.showAnnotations) {
+        oldWidget.showAnnotations != widget.showAnnotations;
+    if (blanked || visualChanged) {
       // Re-interpret at the new content/page. Unless we blanked above, the
-      // old raster (and detail patch) stay up until the new render replaces
-      // them — _dropPicture nulls _rasteredRatio so _renderNow still re-
-      // rasters — so an additive edit on a heavy page never flashes blank.
-      // Only drop the detail patch when we already blanked, so a redaction
-      // or slot reuse can't keep a stale sharp slice over the cleared base.
+      // old base raster stays up until the new render replaces it —
+      // _dropPicture nulls _rasteredRatio so _renderNow still re-rasters —
+      // so an additive edit on a heavy page never flashes blank.
+      // The deep-zoom detail patch is a sharper raster layered above the base;
+      // it must drop on any visual content change or it can cover a freshly
+      // rendered annotation for a frame after the commit afterimage clears.
+      // Dropping only that patch keeps the base page visible while the fresh
+      // detail patch renders.
       _dropPicture();
-      if (blanked) _dropDetail();
+      _dropDetail();
       _render();
     } else if (oldWidget.scale != widget.scale ||
         oldWidget.settleGeneration != widget.settleGeneration) {
