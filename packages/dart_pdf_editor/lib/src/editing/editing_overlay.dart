@@ -1467,10 +1467,12 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final from = localAngle == 0 ? _selectedViewRect : _selectionChrome?.$1;
     final source = _selectedViewRect;
     final ghost = _ghost;
+    final sourceAnnotation = washSource ? _controller.selectedAnnotation : null;
     final before = _controller.document;
     commit();
     if (identical(before, _controller.document)) return;
     if (ghost == null || from == null || to == null) return;
+    final afterDocument = _controller.document;
     _clearAfterimage();
     _ghost = null;
     _ghostKey = null;
@@ -1482,12 +1484,62 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _afterGhostSourceClean = _sourceCleanPicture;
       _sourceCleanPicture = null;
       _sourceCleanFor = null;
+    } else if (washSource && sourceAnnotation != null) {
+      unawaited(_renderAfterGhostSourceClean(
+        document: before,
+        pageIndex: widget.pageIndex,
+        annotation: sourceAnnotation,
+        ghost: ghost,
+        afterDocument: afterDocument,
+      ));
     }
     _afterGhostRotation = rotation;
     _afterGhostLocalAngle = localAngle;
     _afterGhostFlipX = flipX;
     _afterGhostFlipY = flipY;
-    _afterDocument = _controller.document;
+    _afterDocument = afterDocument;
+  }
+
+  Future<void> _renderAfterGhostSourceClean({
+    required PdfDocument document,
+    required int pageIndex,
+    required PdfAnnotation annotation,
+    required ui.Picture ghost,
+    required PdfDocument afterDocument,
+  }) async {
+    // The drag/release feedback must hit the screen first. Rendering a clean
+    // page can parse and interpret a large CAD page synchronously before its
+    // first await, so defer it until the current frame is delivered.
+    await SchedulerBinding.instance.endOfFrame;
+    if (!mounted ||
+        _afterGhost != ghost ||
+        !identical(_afterDocument, afterDocument)) {
+      return;
+    }
+    final name = annotation.name;
+    try {
+      final picture = await PdfPageRenderer.renderPicture(
+        document.page(pageIndex),
+        pageColor: widget.pageColor,
+        annotations: widget.showAnnotations,
+        skipAnnotation: (a) =>
+            identical(a.dict, annotation.dict) ||
+            (name != null && a.name == name),
+      );
+      if (!mounted ||
+          _afterGhost != ghost ||
+          !identical(_afterDocument, afterDocument)) {
+        picture.dispose();
+        return;
+      }
+      setState(() {
+        _afterGhostSourceClean?.dispose();
+        _afterGhostSourceClean = picture;
+      });
+    } catch (_) {
+      // A clean-page failure leaves the existing afterimage in place. The
+      // normal page raster will still replace it when rendering completes.
+    }
   }
 
   void _captureLastStampAfterimage(PdfDocument before,
@@ -1495,16 +1547,88 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (identical(before, _controller.document)) return;
     final annotations = _controller.document.page(widget.pageIndex).annotations;
     if (annotations.isEmpty) return;
-    _clearAfterimage();
-    _afterStamp = (
-      rect: _geometry.toViewRect(annotations.last.rect),
-      text: text,
-      check: check,
-      color: color,
-      opacity: _controller.opacity.clamp(0.0, 1.0).toDouble(),
+    _setStampAfterimage(
+      (
+        rect: _geometry.toViewRect(annotations.last.rect),
+        text: text,
+        check: check,
+        color: color,
+        opacity: _controller.opacity.clamp(0.0, 1.0).toDouble(),
+      ),
+      document: _controller.document,
     );
-    _afterDocument = _controller.document;
+  }
+
+  void _setStampAfterimage(_StampAfterimage stamp, {PdfDocument? document}) {
+    _clearAfterimage();
+    _afterStamp = stamp;
+    _afterDocument = document;
     if (mounted) setState(() {});
+  }
+
+  Future<void> _commitStampWithAfterimage(
+      _StampAfterimage preview, VoidCallback commit) async {
+    // Paint first, then do the synchronous PDF edit after the frame. Without
+    // this, a large save/appearance update can leave the page visually
+    // unchanged for a few hundred milliseconds after the click.
+    _setStampAfterimage(preview);
+    await SchedulerBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final before = _controller.document;
+    commit();
+    if (!mounted) return;
+    if (identical(before, _controller.document)) {
+      _clearAfterimage();
+      setState(() {});
+      return;
+    }
+    final annotations = _controller.document.page(widget.pageIndex).annotations;
+    _afterStamp = annotations.isEmpty
+        ? preview
+        : (
+            rect: _geometry.toViewRect(annotations.last.rect),
+            text: preview.text,
+            check: preview.check,
+            color: preview.color,
+            opacity: preview.opacity,
+          );
+    _afterDocument = _controller.document;
+    setState(() {});
+  }
+
+  _StampAfterimage _stampAfterimage(Rect rect,
+          {required String? text, required Color color, bool check = false}) =>
+      (
+        rect: rect,
+        text: text,
+        check: check,
+        color: color,
+        opacity: _controller.opacity.clamp(0.0, 1.0).toDouble(),
+      );
+
+  _StampAfterimage? _activeStampAfterimageAt(Offset position) {
+    final stamp = _controller.activeStamp;
+    if (stamp == null) return null;
+    final (x, y) = _geometry.toPagePoint(position);
+    final rect = _controller.stampPlacement(widget.pageIndex, x, y);
+    if (rect == null) return null;
+    return _stampAfterimage(
+      _geometry.toViewRect(rect),
+      text: pdfResolveStampTemplateText(
+          stamp.text, _controller.resolvedStampTemplateValues),
+      color: Color(0xFF000000 | stamp.color),
+    );
+  }
+
+  _StampAfterimage _textStampAfterimageAt(
+      Offset position, String text, Color color) {
+    final (x, y) = _geometry.toPagePoint(position);
+    return _stampAfterimage(
+      _geometry.toViewRect(
+          _controller.textStampPlacement(widget.pageIndex, x, y, text)),
+      text: text,
+      color: color,
+    );
   }
 
   _StampAfterimage _countPreviewAt(Offset position) {
@@ -1726,6 +1850,12 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// commits, so the old location can be erased by restoring the real page
   /// content instead of painting a white/paper rectangle over it.
   Future<void> _ensureSourceClean() async {
+    // Do not start a clean-page render while the annotation is being moved.
+    // That render may synchronously parse/interpret a complex page before its
+    // first await, which competes directly with drag frames. If no clean page
+    // is ready on release, [_renderAfterGhostSourceClean] fills it in after
+    // the committed preview has already painted.
+    if (_moveStart != null) return;
     final slots = _controller.selectedAnnotationSlots;
     if (slots.length != 1 || slots.single.$1 != widget.pageIndex) {
       _sourceCleanPicture?.dispose();
@@ -1757,6 +1887,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       );
       if (!mounted || _sourceCleanFor != key) {
         picture.dispose();
+        return;
+      }
+      if (_moveStart != null) {
+        _sourceCleanPicture?.dispose();
+        _sourceCleanPicture = picture;
         return;
       }
       setState(() {
@@ -3163,21 +3298,20 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       case PdfEditTool.stamp:
         final stamp = _controller.activeStamp;
         if (stamp != null) {
-          final before = _controller.document;
-          _controller.addCustomStamp(widget.pageIndex, rect, stamp);
-          _captureLastStampAfterimage(before,
-              check: false,
-              text: stamp.text,
-              color: Color(0xFF000000 | stamp.color));
+          await _commitStampWithAfterimage(
+              _stampAfterimage(viewRect,
+                  text: pdfResolveStampTemplateText(
+                      stamp.text, _controller.resolvedStampTemplateValues),
+                  color: Color(0xFF000000 | stamp.color)),
+              () => _controller.addCustomStamp(widget.pageIndex, rect, stamp));
           return;
         }
         final text = await widget.textPrompt(context,
             title: 'Stamp text', initial: 'APPROVED');
         if (text == null || text.isEmpty) return;
-        final before = _controller.document;
-        _controller.addStamp(widget.pageIndex, rect, text);
-        _captureLastStampAfterimage(before,
-            check: false, text: text, color: _controller.color);
+        await _commitStampWithAfterimage(
+            _stampAfterimage(viewRect, text: text, color: _controller.color),
+            () => _controller.addStamp(widget.pageIndex, rect, text));
       case PdfEditTool.image:
         final picker = widget.imagePicker;
         if (picker == null) return;
@@ -3408,22 +3542,20 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         final stamp = _controller.activeStamp;
         if (stamp != null) {
           // an active custom stamp drops at its auto-size on tap
-          final before = _controller.document;
-          _controller.placeStamp(widget.pageIndex, x, y);
-          _captureLastStampAfterimage(before,
-              check: false,
-              text: stamp.text,
-              color: Color(0xFF000000 | stamp.color));
+          final preview = _activeStampAfterimageAt(details.localPosition);
+          if (preview == null) return;
+          await _commitStampWithAfterimage(
+              preview, () => _controller.placeStamp(widget.pageIndex, x, y));
         } else {
           // the classic flow normally drags out a box; a plain tap places
           // a default-sized stamp after prompting for its caption
           final text = await widget.textPrompt(context,
               title: 'Stamp text', initial: 'APPROVED');
           if (text == null || text.isEmpty) return;
-          final before = _controller.document;
-          _controller.placeTextStamp(widget.pageIndex, x, y, text);
-          _captureLastStampAfterimage(before,
-              check: false, text: text, color: _controller.color);
+          await _commitStampWithAfterimage(
+              _textStampAfterimageAt(
+                  details.localPosition, text, _controller.color),
+              () => _controller.placeTextStamp(widget.pageIndex, x, y, text));
         }
       case PdfEditTool.image:
         final picker = widget.imagePicker;

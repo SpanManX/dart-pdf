@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
+import 'package:dart_pdf_editor/src/editing/editing_overlay.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +18,14 @@ String appearanceText(PdfEditingController editing) {
   return latin1.decode(
       editing.document.cos.decodeStreamData(annotation.normalAppearance!));
 }
+
+dynamic overlayPainter(WidgetTester tester) => tester
+    .widget<CustomPaint>(find
+        .descendant(
+            of: find.byType(EditingPageOverlay),
+            matching: find.byType(CustomPaint))
+        .first)
+    .painter;
 
 void main() {
   group('PdfCustomStamp', () {
@@ -48,6 +57,20 @@ void main() {
             height: 28,
             imageBytes: _png,
           ),
+          PdfStampTemplateComponent.signature(
+            x: 36,
+            y: 58,
+            width: 168,
+            height: 24,
+            strokes: const [
+              [(0.0, 0.8), (0.5, 0.2), (1.0, 0.7)],
+            ],
+            pressures: const [
+              [0.0, 0.5, 1.0],
+            ],
+            color: 0x1A3E8C,
+            strokeWidth: 2.4,
+          ),
         ],
       );
       final stamp = PdfCustomStamp(
@@ -63,10 +86,44 @@ void main() {
       expect(decodedStamp.type, 'Approval');
       expect(decodedStamp.hasTag('AUDIT'), isTrue);
       expect(decodedStamp.template, template);
-      expect(decodedStamp.template!.components.length, 2);
+      expect(decodedStamp.template!.components.length, 3);
       expect(decodedStamp.template!.components.first.font,
           PdfStandardFont.timesBold);
-      expect(decodedStamp.template!.components.last.imageBytes, _png);
+      final image = decodedStamp.template!.components
+          .firstWhere((c) => c.type == PdfStampTemplateComponentType.image);
+      expect(image.imageBytes, _png);
+      final signature = decodedStamp.template!.components
+          .firstWhere((c) => c.type == PdfStampTemplateComponentType.signature);
+      expect(signature.strokes.single.last, (1.0, 0.7));
+      expect(signature.pressures.single!.last, 1.0);
+
+      final noPressure = PdfStampTemplateComponent.signature(
+        x: 0,
+        y: 0,
+        width: 80,
+        height: 24,
+        strokes: const [
+          [(0.0, 0.5), (1.0, 0.5)],
+        ],
+        color: 0x000000,
+      );
+      expect(
+          PdfStampTemplateComponent.fromJson(noPressure.toJson()), noPressure);
+      expect(
+          () => PdfStampTemplateComponent.signature(
+                x: 0,
+                y: 0,
+                width: 80,
+                height: 24,
+                strokes: const [
+                  [(0.0, 0.5), (1.0, 0.5)],
+                ],
+                pressures: const [
+                  [0.5],
+                ],
+                color: 0x000000,
+              ),
+          throwsArgumentError);
     });
 
     test('resolves template placeholders without mutating the saved template',
@@ -253,6 +310,40 @@ void main() {
           contains('(2026-07-04 09:05 Ben AMT-SP) Tj'));
     });
 
+    test('placeStamp uses the selected date and time formats', () {
+      SharedPreferences.setMockInitialValues({});
+      final template = PdfStampTemplate(
+        width: 240,
+        height: 96,
+        components: [
+          PdfStampTemplateComponent.text(
+            x: 8,
+            y: 30,
+            width: 224,
+            height: 36,
+            text: '{{date}} {{time}}',
+            color: 0x1A3E8C,
+            fontSize: 22,
+          ),
+        ],
+      );
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..stampTemplateClock = (() => DateTime(2026, 7, 4, 9, 5, 6))
+        ..stampDateFormat = PdfStampDateFormat.monthNameDayYear
+        ..stampTimeFormat = PdfStampTimeFormat.twelveHourSeconds
+        ..activeStamp = PdfCustomStamp(
+          text: '{{datetime}}',
+          color: 0x1A3E8C,
+          template: template,
+        );
+
+      expect(editing.placeStamp(0, 300, 400), isTrue);
+
+      final stamp = editing.document.page(0).annotations.single;
+      expect(stamp.contents, 'Jul 4, 2026 9:05:06 AM');
+      expect(appearanceText(editing), contains('(Jul 4, 2026 9:05:06 AM) Tj'));
+    });
+
     test('placeStamp compiles template fonts and images into the appearance',
         () {
       final template = PdfStampTemplate(
@@ -297,6 +388,45 @@ void main() {
       expect(content, contains('(TESTED) Tj'));
     });
 
+    test('placeStamp compiles hand signatures into the appearance', () {
+      final template = PdfStampTemplate(
+        width: 200,
+        height: 80,
+        components: [
+          PdfStampTemplateComponent.signature(
+            x: 20,
+            y: 20,
+            width: 160,
+            height: 40,
+            strokes: const [
+              [(0.0, 0.8), (0.5, 0.2), (1.0, 0.7)],
+            ],
+            pressures: const [
+              [0.0, 0.5, 1.0],
+            ],
+            color: 0x1A3E8C,
+            strokeWidth: 3,
+          ),
+        ],
+      );
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp = PdfCustomStamp(
+          text: 'Signed',
+          color: 0x1A3E8C,
+          template: template,
+        );
+
+      expect(editing.placeStamp(0, 300, 400), isTrue);
+
+      final appearance = appearanceText(editing);
+      expect(appearance, contains('0.102 0.243 0.549 RG'));
+      expect(appearance, contains('1 J'));
+      expect(appearance, contains('1.05 w'));
+      expect(appearance, contains('1.95 w'));
+      expect(appearance, contains(' c'));
+      expect(editing.document.page(0).annotations.single.contents, 'Signed');
+    });
+
     test('clamps so the whole stamp stays on the page', () {
       final editing = PdfEditingController(buildMultiPagePdf(1))
         ..activeStamp = approved;
@@ -306,6 +436,42 @@ void main() {
       final stamp = editing.document.page(0).annotations.single;
       expect(stamp.rect.right, lessThanOrEqualTo(box.right + 0.01));
       expect(stamp.rect.top, lessThanOrEqualTo(box.top + 0.01));
+    });
+
+    test('changing colour keeps and recolours the active saved stamp', () {
+      SharedPreferences.setMockInitialValues({});
+      final template = PdfStampTemplate.text('PAID', 0xC03030);
+      final paid =
+          PdfCustomStamp(text: 'PAID', color: 0xC03030, template: template);
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..saveCustomStamp(paid)
+        ..activeStamp = paid
+        ..tool = PdfEditTool.stamp;
+      addTearDown(editing.dispose);
+
+      editing.color = const Color(0xFF43A047);
+
+      final active = editing.activeStamp;
+      expect(active, isNotNull);
+      expect(active!.text, 'PAID');
+      expect(active.color, 0x43A047);
+      expect(editing.savedCustomStamps.single, active);
+      expect(
+          active.template!.components
+              .where((c) => c.type != PdfStampTemplateComponentType.image)
+              .map((c) => c.color),
+          everyElement(0x43A047));
+
+      editing.finishColorPick(const Color(0xFF1E88E5));
+      expect(editing.activeStamp!.text, 'PAID');
+      expect(editing.activeStamp!.color, 0x1E88E5);
+      expect(editing.savedCustomStamps.single, editing.activeStamp);
+
+      expect(editing.placeStamp(0, 300, 400), isTrue);
+      final stamp = editing.document.page(0).annotations.single;
+      expect(stamp.contents, 'PAID');
+      expect(stamp.color, 0x1E88E5);
+      expect(appearanceText(editing), contains('(PAID) Tj'));
     });
 
     test('without an active stamp nothing happens', () {
@@ -425,6 +591,59 @@ void main() {
       expect(stamp.subtype, 'Stamp');
       expect(stamp.contents, 'PAID');
       expect(appearanceText(editing), contains('(PAID) Tj'));
+    });
+
+    testWidgets('stamp taps paint a preview before the PDF edit commits',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      const stamp = PdfCustomStamp(text: 'APPROVED', color: 0x2E7D32);
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp = stamp
+        ..tool = PdfEditTool.stamp;
+      addTearDown(editing.dispose);
+
+      final page = editing.document.page(0);
+      final geometry = PdfPageGeometry(
+        cropBox: page.cropBox,
+        rotation: 0,
+        viewSize: const Size(306, 396),
+      );
+      Offset local(double x, double y) => Offset(x * 0.5, (792 - y) * 0.5);
+      await tester.pumpWidget(MaterialApp(
+        home: Material(
+          child: Center(
+            child: SizedBox(
+              width: geometry.viewSize.width,
+              height: geometry.viewSize.height,
+              child: EditingPageOverlay(
+                controller: editing,
+                pageIndex: 0,
+                geometry: geometry,
+                textPrompt: showPdfTextPrompt,
+                rasterCurrent: false,
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final origin = tester.getTopLeft(find.byType(EditingPageOverlay));
+      await tester.tapAt(origin + local(240, 420),
+          kind: PointerDeviceKind.mouse);
+
+      // The tap handler has installed the preview and yielded until the next
+      // frame, so no synchronous save has blocked the visual response.
+      expect(editing.document.page(0).annotations, isEmpty);
+
+      await tester.pump();
+      final after = overlayPainter(tester).afterStamp;
+      expect(after, isNotNull);
+      expect(after.text, 'APPROVED');
+      expect(after.color, const Color(0xFF2E7D32));
+
+      await tester.pump();
+      expect(editing.document.page(0).annotations.single.contents, 'APPROVED');
     });
 
     testWidgets('the stamp editor previews the stamp above the text field',
@@ -561,6 +780,49 @@ void main() {
           1);
     });
 
+    testWidgets('stamp editor adds hand signature components', (tester) async {
+      PdfCustomStamp? saved;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () async {
+                saved = await showPdfStampEditor(context);
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('pdf-stamp-add-signature')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-add-signature')));
+      await tester.pumpAndSettle();
+
+      final pad = find.byKey(const ValueKey('pdf-signature-pad'));
+      await tester.timedDrag(
+          pad, const Offset(90, 24), const Duration(milliseconds: 200));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      final signature = saved!.template!.components
+          .firstWhere((c) => c.type == PdfStampTemplateComponentType.signature);
+      expect(signature.strokes, hasLength(1));
+      expect(signature.strokes.single.length, greaterThanOrEqualTo(2));
+      expect(signature.color, 0x000000);
+      expect(signature.width, greaterThan(0));
+      expect(signature.height, greaterThan(0));
+    });
+
     testWidgets('stamp editor components can be moved and resized',
         (tester) async {
       PdfCustomStamp? saved;
@@ -635,6 +897,37 @@ void main() {
       await tester.pumpAndSettle();
       expect(editing.customStamps, isEmpty);
       expect(find.byType(PdfStampPreview), findsNothing);
+    });
+
+    testWidgets('the picker changes date and time formats', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () => showPdfStampPicker(context, controller: editing),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-date-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('04/07/2026').last);
+      await tester.pumpAndSettle();
+      expect(editing.stampDateFormat, PdfStampDateFormat.dayMonthYear);
+
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-time-format')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('9:05 AM').last);
+      await tester.pumpAndSettle();
+      expect(editing.stampTimeFormat, PdfStampTimeFormat.twelveHour);
     });
 
     testWidgets('the picker lists app-supplied stamps without delete controls',

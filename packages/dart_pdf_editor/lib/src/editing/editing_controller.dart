@@ -27,16 +27,6 @@ Map<String, String> _normalizeStampTemplateValues(Map<String, String> values) {
   return Map.unmodifiable(normalized);
 }
 
-String _twoDigits(int value) => value.toString().padLeft(2, '0');
-
-String _fourDigits(int value) => value.toString().padLeft(4, '0');
-
-String _stampDate(DateTime value) =>
-    '${_fourDigits(value.year)}-${_twoDigits(value.month)}-${_twoDigits(value.day)}';
-
-String _stampTime(DateTime value) =>
-    '${_twoDigits(value.hour)}:${_twoDigits(value.minute)}';
-
 /// The annotation tools a [PdfEditingController] can arm.
 ///
 /// Text markups (highlight, underline, strike-out, squiggly) are not
@@ -738,7 +728,10 @@ class PdfEditingController extends ChangeNotifier {
   /// style properties live in [preferences]).
   Color get color => preferences.color;
 
-  set color(Color value) => preferences.color = value;
+  set color(Color value) {
+    preferences.color = value;
+    if (_tool == PdfEditTool.stamp) _recolorActiveStamp(value);
+  }
 
   /// Stroke width for ink and shape annotations, in PDF points. Persisted.
   double get strokeWidth => preferences.strokeWidth;
@@ -905,6 +898,18 @@ class PdfEditingController extends ChangeNotifier {
   /// placeholders. Override in tests or when a host app needs a fixed clock.
   DateTime Function() stampTemplateClock = DateTime.now;
 
+  /// Format used for the built-in `{{date}}` stamp field. Persisted.
+  PdfStampDateFormat get stampDateFormat => preferences.stampDateFormat;
+
+  set stampDateFormat(PdfStampDateFormat value) =>
+      preferences.stampDateFormat = value;
+
+  /// Format used for the built-in `{{time}}` stamp field. Persisted.
+  PdfStampTimeFormat get stampTimeFormat => preferences.stampTimeFormat;
+
+  set stampTimeFormat(PdfStampTimeFormat value) =>
+      preferences.stampTimeFormat = value;
+
   /// Field names the stamp editor should offer for insertion.
   ///
   /// This includes the built-ins plus the current custom value keys.
@@ -933,10 +938,12 @@ class PdfEditingController extends ChangeNotifier {
 
   Map<String, String> _resolvedStampTemplateValues() {
     final now = stampTemplateClock();
+    final date = stampDateFormat.format(now);
+    final time = stampTimeFormat.format(now);
     return {
-      'date': _stampDate(now),
-      'time': _stampTime(now),
-      'datetime': '${_stampDate(now)} ${_stampTime(now)}',
+      'date': date,
+      'time': time,
+      'datetime': '$date $time',
       'username': author ?? '',
       ..._stampTemplateValues,
     };
@@ -1057,7 +1064,7 @@ class PdfEditingController extends ChangeNotifier {
   /// [opacity]'s job) as the annotation [color].
   void finishColorPick(Color picked) {
     _pickingColor = false;
-    preferences.color = Color(0xFF000000 | (picked.toARGB32() & 0xFFFFFF));
+    color = Color(0xFF000000 | (picked.toARGB32() & 0xFFFFFF));
     notifyListeners();
   }
 
@@ -1989,6 +1996,41 @@ class PdfEditingController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _recolorActiveStamp(Color color) {
+    final active = _activeStamp;
+    if (active == null) return;
+    final rgb = color.toARGB32() & 0xFFFFFF;
+    final next = PdfCustomStamp(
+      text: active.text,
+      color: rgb,
+      template: active.template == null
+          ? null
+          : PdfStampTemplate(
+              width: active.template!.width,
+              height: active.template!.height,
+              components: [
+                for (final component in active.template!.components)
+                  component.type == PdfStampTemplateComponentType.image
+                      ? component
+                      : component.copyWith(color: rgb),
+              ],
+            ),
+      type: active.type,
+      tags: active.tags,
+    );
+    if (next == active) return;
+    _activeStamp = next;
+    final saved = preferences.customStamps;
+    final savedIndex = saved.indexOf(active);
+    if (savedIndex == -1) {
+      notifyListeners();
+      return;
+    }
+    preferences.customStamps = [
+      for (var i = 0; i < saved.length; i++) i == savedIndex ? next : saved[i],
+    ];
+  }
+
   /// Places [activeStamp] centered on ([x], [y]) in page space,
   /// [height] points tall and auto-sized from its caption (clamped,
   /// with the center, so the whole stamp stays on the page). Returns
@@ -1998,23 +2040,9 @@ class PdfEditingController extends ChangeNotifier {
     if (stamp == null) return false;
     final template = stamp.template;
     if (template != null) {
-      final h = height.clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
-      final aspect =
-          template.height <= 0 ? 2.5 : template.width / template.height;
-      var w = h * aspect;
-      final maxW = _visualPageWidth(pageIndex) * 0.9;
-      final maxH = _visualPageHeight(pageIndex) * 0.9;
-      var fittedH = h;
-      if (w > maxW) {
-        w = maxW;
-        fittedH = w / aspect;
-      }
-      if (fittedH > maxH) {
-        fittedH = maxH;
-        w = fittedH * aspect;
-      }
       final rect =
-          _pageRectForVisualSize(pageIndex, x, y, width: w, height: fittedH);
+          _stampTemplatePlacement(pageIndex, x, y, template, height: height);
+      if (rect == null) return false;
       return apply((e) {
         final templateValues = _resolvedStampTemplateValues();
         e.addTemplateStamp(pageIndex, rect, template,
@@ -2035,6 +2063,40 @@ class PdfEditingController extends ChangeNotifier {
         stampTags: stamp.tags);
   }
 
+  /// The page-space rect [placeStamp] would use for the current
+  /// [activeStamp]. Null when no stamp is active or its template is invalid.
+  PdfRect? stampPlacement(int pageIndex, double x, double y,
+      {double height = 40}) {
+    final stamp = _activeStamp;
+    if (stamp == null) return null;
+    final template = stamp.template;
+    return template == null
+        ? textStampPlacement(pageIndex, x, y, _resolveStampText(stamp.text),
+            height: height)
+        : _stampTemplatePlacement(pageIndex, x, y, template, height: height);
+  }
+
+  PdfRect? _stampTemplatePlacement(
+      int pageIndex, double x, double y, PdfStampTemplate template,
+      {required double height}) {
+    if (!template.isValid) return null;
+    final h = height.clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
+    final aspect = template.width / template.height;
+    var w = h * aspect;
+    final maxW = _visualPageWidth(pageIndex) * 0.9;
+    final maxH = _visualPageHeight(pageIndex) * 0.9;
+    var fittedH = h;
+    if (w > maxW) {
+      w = maxW;
+      fittedH = w / aspect;
+    }
+    if (fittedH > maxH) {
+      fittedH = maxH;
+      w = fittedH * aspect;
+    }
+    return _pageRectForVisualSize(pageIndex, x, y, width: w, height: fittedH);
+  }
+
   /// Places a default-sized stamp captioned [text], centered on ([x], [y])
   /// in page space and auto-sized from the caption (like [placeStamp], but
   /// with arbitrary text/colour). This is the stamp tool's tap-to-place:
@@ -2045,13 +2107,7 @@ class PdfEditingController extends ChangeNotifier {
       int? color,
       String? stampType,
       Iterable<String> stampTags = const []}) {
-    final h = height.clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
-    // mirror addStamp's appearance math (6pt padding, text 72% of the
-    // height) so the caption fills the box without shrinking
-    final fontSize = (h - 12) * 0.72;
-    final w = (measureHelvetica(text, fontSize, bold: true) + 24)
-        .clamp(h, _visualPageWidth(pageIndex) * 0.9);
-    final rect = _pageRectForVisualSize(pageIndex, x, y, width: w, height: h);
+    final rect = textStampPlacement(pageIndex, x, y, text, height: height);
     return apply(
         (e) => e.addStamp(pageIndex, rect, text,
             color: color ?? _colorValue,
@@ -2061,6 +2117,18 @@ class PdfEditingController extends ChangeNotifier {
             stampType: stampType,
             stampTags: stampTags),
         pages: [pageIndex]);
+  }
+
+  /// The page-space rect [placeTextStamp] would use.
+  PdfRect textStampPlacement(int pageIndex, double x, double y, String text,
+      {double height = 40}) {
+    final h = height.clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
+    // mirror addStamp's appearance math (6pt padding, text 72% of the
+    // height) so the caption fills the box without shrinking
+    final fontSize = (h - 12) * 0.72;
+    final w = (measureHelvetica(text, fontSize, bold: true) + 24)
+        .clamp(h, _visualPageWidth(pageIndex) * 0.9);
+    return _pageRectForVisualSize(pageIndex, x, y, width: w, height: h);
   }
 
   // ---------------------------------------------------------------------

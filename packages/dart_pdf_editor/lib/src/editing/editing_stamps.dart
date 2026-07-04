@@ -4,10 +4,78 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:pdf_document/pdf_document.dart';
 
 import 'editing_controller.dart';
+import 'editing_signature.dart';
 import 'text_prompt.dart';
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+String _fourDigits(int value) => value.toString().padLeft(4, '0');
+
+const _monthNames = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// Date formats used by the built-in `{{date}}` and `{{datetime}}` stamp
+/// template fields.
+enum PdfStampDateFormat {
+  iso,
+  dayMonthYear,
+  monthDayYear,
+  dayMonthNameYear,
+  monthNameDayYear;
+
+  String format(DateTime value) {
+    final year = _fourDigits(value.year);
+    final month = _twoDigits(value.month);
+    final day = _twoDigits(value.day);
+    final monthName = _monthNames[value.month - 1];
+    return switch (this) {
+      PdfStampDateFormat.iso => '$year-$month-$day',
+      PdfStampDateFormat.dayMonthYear => '$day/$month/$year',
+      PdfStampDateFormat.monthDayYear => '$month/$day/$year',
+      PdfStampDateFormat.dayMonthNameYear => '${value.day} $monthName $year',
+      PdfStampDateFormat.monthNameDayYear => '$monthName ${value.day}, $year',
+    };
+  }
+}
+
+/// Time formats used by the built-in `{{time}}` and `{{datetime}}` stamp
+/// template fields.
+enum PdfStampTimeFormat {
+  twentyFourHour,
+  twelveHour,
+  twentyFourHourSeconds,
+  twelveHourSeconds;
+
+  String format(DateTime value) {
+    final hour = _twoDigits(value.hour);
+    final minute = _twoDigits(value.minute);
+    final second = _twoDigits(value.second);
+    final suffix = value.hour < 12 ? 'AM' : 'PM';
+    final hour12 = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    return switch (this) {
+      PdfStampTimeFormat.twentyFourHour => '$hour:$minute',
+      PdfStampTimeFormat.twelveHour => '$hour12:$minute $suffix',
+      PdfStampTimeFormat.twentyFourHourSeconds => '$hour:$minute:$second',
+      PdfStampTimeFormat.twelveHourSeconds => '$hour12:$minute:$second $suffix',
+    };
+  }
+}
 
 /// A reusable rubber stamp: visual template plus optional app metadata.
 ///
@@ -165,6 +233,8 @@ class PdfStampPickerDialog extends StatelessWidget {
                           )
                         : null,
                   ),
+                const Divider(height: 24),
+                _StampDateTimeFormatControls(controller: controller),
               ],
             ),
           ),
@@ -178,6 +248,64 @@ class PdfStampPickerDialog extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+}
+
+class _StampDateTimeFormatControls extends StatelessWidget {
+  const _StampDateTimeFormatControls({required this.controller});
+
+  static final _sample = DateTime(2026, 7, 4, 9, 5, 6);
+
+  final PdfEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        KeyedSubtree(
+          key: ValueKey(
+              'pdf-stamp-date-format-field-${controller.stampDateFormat.name}'),
+          child: DropdownButtonFormField<PdfStampDateFormat>(
+            key: const ValueKey('pdf-stamp-date-format'),
+            initialValue: controller.stampDateFormat,
+            decoration: const InputDecoration(labelText: 'Date format'),
+            items: [
+              for (final format in PdfStampDateFormat.values)
+                DropdownMenuItem<PdfStampDateFormat>(
+                  key: ValueKey('pdf-stamp-date-format-${format.name}'),
+                  value: format,
+                  child: Text(format.format(_sample)),
+                ),
+            ],
+            onChanged: (value) {
+              if (value != null) controller.stampDateFormat = value;
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        KeyedSubtree(
+          key: ValueKey(
+              'pdf-stamp-time-format-field-${controller.stampTimeFormat.name}'),
+          child: DropdownButtonFormField<PdfStampTimeFormat>(
+            key: const ValueKey('pdf-stamp-time-format'),
+            initialValue: controller.stampTimeFormat,
+            decoration: const InputDecoration(labelText: 'Time format'),
+            items: [
+              for (final format in PdfStampTimeFormat.values)
+                DropdownMenuItem<PdfStampTimeFormat>(
+                  key: ValueKey('pdf-stamp-time-format-${format.name}'),
+                  value: format,
+                  child: Text(format.format(_sample)),
+                ),
+            ],
+            onChanged: (value) {
+              if (value != null) controller.stampTimeFormat = value;
+            },
+          ),
         ),
       ],
     );
@@ -461,6 +589,33 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
     });
   }
 
+  Future<void> _addSignature() async {
+    final signature = await showPdfSignatureDialog(context);
+    if (signature == null || !mounted) return;
+    final aspect = signature.aspect > 0 ? signature.aspect : 2.0;
+    var width = math.min(132.0, _templateWidth * 0.62);
+    var height = width / aspect;
+    if (height > _templateHeight * 0.55) {
+      height = _templateHeight * 0.55;
+      width = height * aspect;
+    }
+    final component = PdfStampTemplateComponent.signature(
+      x: (_templateWidth - width) / 2,
+      y: (_templateHeight - height) / 2,
+      width: width,
+      height: height,
+      strokes: signature.strokes,
+      pressures: signature.pressures,
+      color: signature.color,
+      strokeWidth: math.max(0.8, width / 75),
+    );
+    setState(() {
+      _color = signature.color;
+      _components = [..._components, component];
+      _selected = _components.length - 1;
+    });
+  }
+
   void _deleteSelected() {
     final index = _selected;
     if (index == null || _components.length <= 1) return;
@@ -640,6 +795,12 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
                     icon: const Icon(Icons.image_outlined),
                     label: const Text('Image'),
                   ),
+                  OutlinedButton.icon(
+                    key: const ValueKey('pdf-stamp-add-signature'),
+                    onPressed: _addSignature,
+                    icon: const Icon(Icons.draw),
+                    label: const Text('Signature'),
+                  ),
                   IconButton(
                     key: const ValueKey('pdf-stamp-delete-component'),
                     onPressed: _components.length > 1 ? _deleteSelected : null,
@@ -733,6 +894,9 @@ enum _StampDragMode { move, resize }
 class _StampTemplateCanvasState extends State<_StampTemplateCanvas> {
   _StampDragMode? _dragMode;
   Offset? _lastTemplatePoint;
+  _StampDragMode? _pendingMode;
+  Offset _pendingDelta = Offset.zero;
+  bool _pendingFrame = false;
 
   double _scale(Size size) => size.width / widget.templateSize.width;
 
@@ -786,17 +950,38 @@ class _StampTemplateCanvasState extends State<_StampTemplateCanvas> {
     _lastTemplatePoint = point;
     if (last == null) return;
     final delta = point - last;
-    switch (_dragMode) {
+    _queueDelta(delta);
+  }
+
+  void _queueDelta(Offset delta) {
+    if (_dragMode == null || delta == Offset.zero) return;
+    _pendingMode ??= _dragMode;
+    _pendingDelta += delta;
+    if (_pendingFrame) return;
+    _pendingFrame = true;
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      _pendingFrame = false;
+      _flushPendingDelta();
+    });
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
+  void _flushPendingDelta() {
+    final mode = _pendingMode;
+    final delta = _pendingDelta;
+    _pendingMode = null;
+    _pendingDelta = Offset.zero;
+    if (!mounted || mode == null || delta == Offset.zero) return;
+    switch (mode) {
       case _StampDragMode.move:
         widget.onMoveSelected(delta);
       case _StampDragMode.resize:
         widget.onResizeSelected(delta);
-      case null:
-        break;
     }
   }
 
   void _end() {
+    _flushPendingDelta();
     _dragMode = null;
     _lastTemplatePoint = null;
   }
@@ -1061,6 +1246,64 @@ class _StampTemplatePainter extends CustomPainter {
           rect,
           Paint(),
         );
+      case PdfStampTemplateComponentType.signature:
+        _paintSignature(canvas, c, rect);
+    }
+  }
+
+  void _paintSignature(Canvas canvas, PdfStampTemplateComponent c, Rect rect) {
+    if (c.strokes.isEmpty || rect.width <= 0 || rect.height <= 0) return;
+    final basePaint = Paint()
+      ..color = Color(0xFF000000 | c.color)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = c.strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    for (var i = 0; i < c.strokes.length; i++) {
+      final stroke = [
+        for (final (x, y) in c.strokes[i])
+          Offset(rect.left + x * rect.width, rect.top + y * rect.height),
+      ];
+      if (stroke.isEmpty) continue;
+      final pressure = i < c.pressures.length ? c.pressures[i] : null;
+      final controls =
+          pdfInkCurveControls([for (final p in stroke) (p.dx, p.dy)]);
+      if (pressure == null || pressure.length != stroke.length) {
+        if (stroke.length == 1) {
+          canvas.drawCircle(stroke.single, c.strokeWidth / 2,
+              Paint()..color = basePaint.color);
+          continue;
+        }
+        final path = Path()..moveTo(stroke.first.dx, stroke.first.dy);
+        for (var j = 0; j < stroke.length - 1; j++) {
+          final ((c1x, c1y), (c2x, c2y)) = controls[j];
+          path.cubicTo(c1x, c1y, c2x, c2y, stroke[j + 1].dx, stroke[j + 1].dy);
+        }
+        canvas.drawPath(path, basePaint);
+        continue;
+      }
+      if (stroke.length == 1) {
+        canvas.drawCircle(
+            stroke.single,
+            pdfInkStrokeWidth(c.strokeWidth, pressure.first) / 2,
+            Paint()..color = basePaint.color);
+        continue;
+      }
+      final segment = Paint()
+        ..color = basePaint.color
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      for (var j = 0; j < stroke.length - 1; j++) {
+        segment.strokeWidth = pdfInkStrokeWidth(
+            c.strokeWidth, (pressure[j] + pressure[j + 1]) / 2);
+        final ((c1x, c1y), (c2x, c2y)) = controls[j];
+        canvas.drawPath(
+            Path()
+              ..moveTo(stroke[j].dx, stroke[j].dy)
+              ..cubicTo(c1x, c1y, c2x, c2y, stroke[j + 1].dx, stroke[j + 1].dy),
+            segment);
+      }
     }
   }
 

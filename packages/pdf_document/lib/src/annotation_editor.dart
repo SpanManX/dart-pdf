@@ -2392,6 +2392,13 @@ extension PdfAnnotationEditing on PdfEditor {
               bottom: bottom,
               width: width,
               height: height);
+        case PdfStampTemplateComponentType.signature:
+          _stampTemplateSignature(w, c,
+              left: left,
+              bottom: bottom,
+              width: width,
+              height: height,
+              scale: math.min(sx, sy));
       }
     }
 
@@ -2482,6 +2489,83 @@ extension PdfAnnotationEditing on PdfEditor {
       ..concatMatrix(width, 0, 0, height, left, bottom)
       ..drawXObject(name)
       ..restore();
+  }
+
+  void _stampTemplateSignature(
+    ContentWriter w,
+    PdfStampTemplateComponent c, {
+    required double left,
+    required double bottom,
+    required double width,
+    required double height,
+    required double scale,
+  }) {
+    if (width <= 0 || height <= 0 || c.strokes.isEmpty) return;
+    final strokeWidth = math.max(0.1, c.strokeWidth * scale);
+    final top = bottom + height;
+    final strokes = [
+      for (final stroke in c.strokes)
+        if (stroke.isNotEmpty)
+          [
+            for (final (x, y) in stroke) (left + x * width, top - y * height),
+          ],
+    ];
+    if (strokes.isEmpty) return;
+    final List<List<double>?> pressures = c.pressures.length == c.strokes.length
+        ? c.pressures
+        : const <List<double>?>[];
+    final controls = [
+      for (final stroke in strokes) pdfInkCurveControls(stroke),
+    ];
+    w
+      ..strokeColor(c.color)
+      ..lineWidth(strokeWidth)
+      ..roundLines();
+    var mappedIndex = 0;
+    for (var i = 0; i < c.strokes.length; i++) {
+      if (c.strokes[i].isEmpty) continue;
+      final stroke = strokes[mappedIndex];
+      final control = controls[mappedIndex];
+      final rawPressure = i < pressures.length ? pressures[i] : null;
+      final pressure =
+          rawPressure != null && rawPressure.length == c.strokes[i].length
+              ? rawPressure
+              : null;
+      mappedIndex++;
+      final (x0, y0) = stroke.first;
+      if (pressure == null) {
+        w
+          ..lineWidth(strokeWidth)
+          ..moveTo(x0, y0);
+        if (stroke.length == 1) w.lineTo(x0, y0);
+        for (var j = 0; j < stroke.length - 1; j++) {
+          final ((c1x, c1y), (c2x, c2y)) = control[j];
+          final (x, y) = stroke[j + 1];
+          w.curveTo(c1x, c1y, c2x, c2y, x, y);
+        }
+        w.stroke();
+        continue;
+      }
+      if (stroke.length == 1) {
+        w
+          ..lineWidth(pdfInkStrokeWidth(strokeWidth, pressure.first))
+          ..moveTo(x0, y0)
+          ..lineTo(x0, y0)
+          ..stroke();
+        continue;
+      }
+      for (var j = 0; j < stroke.length - 1; j++) {
+        final (xa, ya) = stroke[j];
+        final ((c1x, c1y), (c2x, c2y)) = control[j];
+        final (xb, yb) = stroke[j + 1];
+        w
+          ..lineWidth(pdfInkStrokeWidth(
+              strokeWidth, (pressure[j] + pressure[j + 1]) / 2))
+          ..moveTo(xa, ya)
+          ..curveTo(c1x, c1y, c2x, c2y, xb, yb)
+          ..stroke();
+      }
+    }
   }
 
   /// Adds a count check-mark: a checkmark drawn inside [rect], modelled as
