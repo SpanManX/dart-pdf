@@ -2782,6 +2782,10 @@ class _StyleMenuState extends State<_StyleMenu> {
                             child: PdfFontMenuButton(
                               controller: controller,
                               fontPicker: widget.fontPicker,
+                              currentFont: selectedStyle?.font ??
+                                  captionStyle?.font ??
+                                  controller.activeFont ??
+                                  controller.fontFamily,
                             ),
                           ),
                         ),

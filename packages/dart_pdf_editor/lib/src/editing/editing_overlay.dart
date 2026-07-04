@@ -347,15 +347,6 @@ Color _inlineTextHandleColor(BuildContext context) {
       const Color(0xFF2196F3);
 }
 
-enum _InlineTextFontChoice {
-  sans,
-  serif,
-  mono,
-  bundledSans,
-  bundledSerif,
-  bundledMono
-}
-
 /// A single-selection move drag's floating preview: the dragged
 /// annotation's appearance, reported up to [PdfViewer] so it paints above
 /// every page.
@@ -499,11 +490,11 @@ class EditingPageOverlay extends StatefulWidget {
   final void Function(Offset globalPosition, int pageIndex,
       {(double, double)? pagePoint})? onShowAnnotationMenu;
 
-  /// Opens the form-field context menu (rename/convert/delete/flatten)
+  /// Opens the form-field context menu (edit/rename/convert/delete/flatten)
   /// at a global position — the touch long-press counterpart of
   /// right-clicking a field widget with the form tool armed.
-  final void Function(Offset globalPosition, String fieldName)?
-      onShowFormFieldMenu;
+  final void Function(Offset globalPosition, String fieldName,
+      {int? widgetIndex})? onShowFormFieldMenu;
 
   /// Resolves a global point to the page index and page-space coordinates
   /// under it — lets a move drag that ends over a *different* page re-home
@@ -2507,7 +2498,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       final field = _controller.formFieldAt(widget.pageIndex, x, y);
       if (field == null) return;
       HapticFeedback.selectionClick();
-      widget.onShowFormFieldMenu?.call(details.globalPosition, field.$1.name);
+      widget.onShowFormFieldMenu
+          ?.call(details.globalPosition, field.$1.name, widgetIndex: field.$2);
       return;
     }
     final hit = _controller.selectableAnnotationAt(widget.pageIndex, x, y);
@@ -3661,89 +3653,18 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   Future<void> _showInlineTextFontMenu(BuildContext context) async {
     if (!_canStyleInlineTextSelection) return;
-    final box = context.findRenderObject() as RenderBox?;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) return;
-    final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
-    final bottomRight =
-        box.localToGlobal(box.size.bottomRight(Offset.zero), ancestor: overlay);
     _textEditStyleMenuOpen = true;
     _textEditFocus.requestFocus();
-    final choice = await showMenu<_InlineTextFontChoice>(
+    await showPdfFontMenu(
         context: context,
-        position: RelativeRect.fromRect(
-            Rect.fromPoints(topLeft, bottomRight), Offset.zero & overlay.size),
-        items: const [
-          PopupMenuItem(
-              key: ValueKey('pdf-inline-font-std-sans'),
-              value: _InlineTextFontChoice.sans,
-              child: Text('Sans (Helvetica)',
-                  style: TextStyle(fontFamily: 'Helvetica'))),
-          PopupMenuItem(
-              key: ValueKey('pdf-inline-font-std-serif'),
-              value: _InlineTextFontChoice.serif,
-              child: Text('Serif (Times)',
-                  style: TextStyle(fontFamily: 'Times New Roman'))),
-          PopupMenuItem(
-              key: ValueKey('pdf-inline-font-std-mono'),
-              value: _InlineTextFontChoice.mono,
-              child: Text('Mono (Courier)',
-                  style: TextStyle(fontFamily: 'Courier'))),
-          PopupMenuDivider(),
-          PopupMenuItem(
-              key: ValueKey('pdf-inline-font-bundled-sans'),
-              value: _InlineTextFontChoice.bundledSans,
-              child: Text('DejaVu Sans',
-                  style: TextStyle(
-                      fontFamily: 'DejaVu Sans', package: 'dart_pdf_editor'))),
-          PopupMenuItem(
-              key: ValueKey('pdf-inline-font-bundled-serif'),
-              value: _InlineTextFontChoice.bundledSerif,
-              child: Text('DejaVu Serif',
-                  style: TextStyle(
-                      fontFamily: 'DejaVu Serif', package: 'dart_pdf_editor'))),
-          PopupMenuItem(
-              key: ValueKey('pdf-inline-font-bundled-mono'),
-              value: _InlineTextFontChoice.bundledMono,
-              child: Text('DejaVu Sans Mono',
-                  style: TextStyle(
-                      fontFamily: 'DejaVu Sans Mono',
-                      package: 'dart_pdf_editor'))),
-        ]);
+        controller: _controller,
+        currentFont: _currentInlineTextStyle().font,
+        onSelected: (font) {
+          if (!mounted || !_canStyleInlineTextSelection) return;
+          _applyInlineTextStyle(font: font);
+        });
     _textEditStyleMenuOpen = false;
     if (mounted && _textEditRect != null) _textEditFocus.requestFocus();
-    if (choice == null || !mounted || !_canStyleInlineTextSelection) return;
-    final current = _currentInlineTextStyle().font;
-    PdfStandardFont standard(PdfStandardFontFamily family) =>
-        PdfStandardFont.styled(family,
-            bold: current is PdfStandardFont && current.isBold,
-            italic: current is PdfStandardFont && current.isItalic);
-    switch (choice) {
-      case _InlineTextFontChoice.sans:
-        _applyInlineTextStyle(font: standard(PdfStandardFontFamily.sans));
-      case _InlineTextFontChoice.serif:
-        _applyInlineTextStyle(font: standard(PdfStandardFontFamily.serif));
-      case _InlineTextFontChoice.mono:
-        _applyInlineTextStyle(font: standard(PdfStandardFontFamily.mono));
-      case _InlineTextFontChoice.bundledSans:
-      case _InlineTextFontChoice.bundledSerif:
-      case _InlineTextFontChoice.bundledMono:
-        final index = switch (choice) {
-          _InlineTextFontChoice.bundledSans => 0,
-          _InlineTextFontChoice.bundledSerif => 1,
-          _InlineTextFontChoice.bundledMono => 2,
-          _ => 0,
-        };
-        try {
-          final bytes = await loadBundledFont(pdfBundledFonts[index]);
-          if (mounted && _canStyleInlineTextSelection) {
-            _applyInlineTextStyle(font: PdfEmbeddedFont.parse(bytes));
-          }
-        } catch (_) {
-          // Missing/corrupt bundled assets leave the current style alone.
-        }
-    }
   }
 
   Future<void> _pickInlineTextColor(BuildContext context, Color initial) async {

@@ -625,7 +625,7 @@ class PdfViewer extends StatefulWidget {
   final PdfFormImagePicker? formImagePicker;
 
   /// How the form field "Text style…" popup loads a custom `.ttf`/`.otf`
-  /// font (its "More fonts → Load font…" entry) — typically a file picker
+  /// font (its "Font → Load font…" entry) — typically a file picker
   /// returning the font bytes. With none, that popup still offers the
   /// standard and bundled fonts; only the load-custom entry is hidden.
   final PdfFontPicker? fontPicker;
@@ -2383,15 +2383,19 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     final (page, x, y) = point;
     final editing = widget.editing;
     if (editing != null && !editing.isPickingColor) {
-      // form mode: a right-clicked field widget gets the field menu
-      // (rename/convert/delete/flatten) instead of the annotation menu
-      if (editing.tool == PdfEditTool.form) {
+      // existing form widgets get their field menu in normal/select/form
+      // modes. Drawing/content tools own the page, so they do not.
+      if (editing.tool == null ||
+          editing.tool == PdfEditTool.select ||
+          editing.tool == PdfEditTool.form) {
         final field = editing.formFieldAt(page, x, y);
         if (field != null) {
-          await _showFormFieldMenu(details.globalPosition, field.$1.name);
+          await _showFormFieldMenu(details.globalPosition, field.$1.name,
+              widgetIndex: field.$2);
           return;
         }
-      } else {
+      }
+      if (editing.tool != PdfEditTool.form) {
         final hit = editing.selectableAnnotationAt(page, x, y);
         // an annotation, or empty page area with something to paste,
         // gets the annotation menu
@@ -2507,8 +2511,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
 
   /// The form-field context menu, shared by right-click and the editing
   /// overlay's touch long-press (both with the form tool armed).
-  Future<void> _showFormFieldMenu(
-      Offset globalPosition, String fieldName) async {
+  Future<void> _showFormFieldMenu(Offset globalPosition, String fieldName,
+      {int? widgetIndex}) async {
     final editing = widget.editing;
     if (editing == null) return;
     await showPdfFormFieldMenu(
@@ -2516,8 +2520,10 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       position: globalPosition,
       controller: editing,
       fieldName: fieldName,
+      widgetIndex: widgetIndex,
       textPrompt: widget.editingTextPrompt ?? showPdfTextPrompt,
       fontPicker: widget.fontPicker,
+      formImagePicker: widget.formImagePicker,
     );
   }
 
@@ -4395,8 +4401,8 @@ class _PdfViewerPage extends StatefulWidget {
       {(double, double)? pagePoint}) onShowAnnotationMenu;
 
   /// See [EditingPageOverlay.onShowFormFieldMenu].
-  final void Function(Offset globalPosition, String fieldName)
-      onShowFormFieldMenu;
+  final void Function(Offset globalPosition, String fieldName,
+      {int? widgetIndex}) onShowFormFieldMenu;
 
   /// See [EditingPageOverlay.onResolvePagePoint].
   final (int, double, double)? Function(Offset globalPosition)
