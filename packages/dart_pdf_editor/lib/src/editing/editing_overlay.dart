@@ -3164,8 +3164,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         final stamp = _controller.activeStamp;
         if (stamp != null) {
           final before = _controller.document;
-          _controller.addStamp(widget.pageIndex, rect, stamp.text,
-              color: stamp.color);
+          _controller.addCustomStamp(widget.pageIndex, rect, stamp);
           _captureLastStampAfterimage(before,
               check: false,
               text: stamp.text,

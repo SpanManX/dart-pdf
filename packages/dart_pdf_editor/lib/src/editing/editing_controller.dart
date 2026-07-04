@@ -17,6 +17,26 @@ import 'thumbnail_cache.dart';
 PdfEmbeddableImage _decodeEmbeddableImage(Uint8List bytes) =>
     PdfEmbeddableImage.decode(bytes);
 
+Map<String, String> _normalizeStampTemplateValues(Map<String, String> values) {
+  final normalized = <String, String>{};
+  for (final entry in values.entries) {
+    final key = entry.key.trim().toLowerCase();
+    if (key.isEmpty) continue;
+    normalized[key] = entry.value;
+  }
+  return Map.unmodifiable(normalized);
+}
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+String _fourDigits(int value) => value.toString().padLeft(4, '0');
+
+String _stampDate(DateTime value) =>
+    '${_fourDigits(value.year)}-${_twoDigits(value.month)}-${_twoDigits(value.day)}';
+
+String _stampTime(DateTime value) =>
+    '${_twoDigits(value.hour)}:${_twoDigits(value.minute)}';
+
 /// The annotation tools a [PdfEditingController] can arm.
 ///
 /// Text markups (highlight, underline, strike-out, squiggly) are not
@@ -223,6 +243,15 @@ class PdfFormFieldStyle {
 /// )
 /// ```
 class PdfEditingController extends ChangeNotifier {
+  /// Field names that the stamp editor offers by default for `{{field}}`
+  /// placeholders. Apps can add more names with [stampTemplateValues].
+  static const stampTemplateBuiltinFields = [
+    'date',
+    'time',
+    'datetime',
+    'username',
+  ];
+
   PdfEditingController(Uint8List bytes,
       {String password = '', PdfEditingPreferences? preferences})
       : _bytes = bytes,
@@ -852,6 +881,69 @@ class PdfEditingController extends ChangeNotifier {
   String? get author => preferences.author;
 
   set author(String? value) => preferences.author = value;
+
+  Map<String, String> _stampTemplateValues = const {};
+
+  /// App-supplied values for `{{field}}` placeholders in saved stamp
+  /// templates. Keys are normalized to lowercase, matched case-insensitively,
+  /// and are not persisted: they describe the current app/session data rather
+  /// than the saved stamp design.
+  ///
+  /// Built-ins are added at placement time: `date`, `time`, `datetime`, and
+  /// `username` (which defaults to [author]). Entries here override those
+  /// built-ins, so a host can provide its own date formatting or user label.
+  Map<String, String> get stampTemplateValues => _stampTemplateValues;
+
+  set stampTemplateValues(Map<String, String> value) {
+    final normalized = _normalizeStampTemplateValues(value);
+    if (mapEquals(_stampTemplateValues, normalized)) return;
+    _stampTemplateValues = normalized;
+    notifyListeners();
+  }
+
+  /// Clock used for the built-in `date`, `time`, and `datetime` stamp
+  /// placeholders. Override in tests or when a host app needs a fixed clock.
+  DateTime Function() stampTemplateClock = DateTime.now;
+
+  /// Field names the stamp editor should offer for insertion.
+  ///
+  /// This includes the built-ins plus the current custom value keys.
+  List<String> get stampTemplateFieldNames => [
+        ...stampTemplateBuiltinFields,
+        for (final key in _stampTemplateValues.keys)
+          if (!stampTemplateBuiltinFields.contains(key)) key,
+      ];
+
+  /// The actual values used for the next stamp placement.
+  Map<String, String> get resolvedStampTemplateValues =>
+      _resolvedStampTemplateValues();
+
+  /// Sets or removes one custom stamp-template value.
+  void setStampTemplateValue(String name, String? value) {
+    final key = name.trim().toLowerCase();
+    if (key.isEmpty) return;
+    final next = {..._stampTemplateValues};
+    if (value == null) {
+      next.remove(key);
+    } else {
+      next[key] = value;
+    }
+    stampTemplateValues = next;
+  }
+
+  Map<String, String> _resolvedStampTemplateValues() {
+    final now = stampTemplateClock();
+    return {
+      'date': _stampDate(now),
+      'time': _stampTime(now),
+      'datetime': '${_stampDate(now)} ${_stampTime(now)}',
+      'username': author ?? '',
+      ..._stampTemplateValues,
+    };
+  }
+
+  String _resolveStampText(String text) =>
+      pdfResolveStampTemplateText(text, _resolvedStampTemplateValues());
 
   // ---------------------------------------------------------------------
   // in-place text editing
@@ -1626,6 +1718,28 @@ class PdfEditingController extends ChangeNotifier {
               author: author),
           pages: [pageIndex]);
 
+  void addCustomStamp(int pageIndex, PdfRect rect, PdfCustomStamp stamp) =>
+      apply((e) {
+        final templateValues = _resolvedStampTemplateValues();
+        final text = pdfResolveStampTemplateText(stamp.text, templateValues);
+        final template = stamp.template;
+        if (template == null) {
+          e.addStamp(pageIndex, rect, text,
+              color: stamp.color,
+              opacity: preferences.opacity,
+              pageRotation: _page(pageIndex).rotation,
+              author: author);
+        } else {
+          e.addTemplateStamp(pageIndex, rect, template,
+              contents: text,
+              color: stamp.color,
+              opacity: preferences.opacity,
+              pageRotation: _page(pageIndex).rotation,
+              author: author,
+              templateValues: templateValues);
+        }
+      }, pages: [pageIndex]);
+
   /// Places [imageBytes] (PNG or JPEG) centered on ([x], [y]) in page
   /// space, [maxSize] points on its longest side, preserving the image's
   /// aspect ratio and clamped so the whole image stays on the page.
@@ -1844,7 +1958,37 @@ class PdfEditingController extends ChangeNotifier {
   bool placeStamp(int pageIndex, double x, double y, {double height = 40}) {
     final stamp = _activeStamp;
     if (stamp == null) return false;
-    return placeTextStamp(pageIndex, x, y, stamp.text,
+    final template = stamp.template;
+    if (template != null) {
+      final h = height.clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
+      final aspect =
+          template.height <= 0 ? 2.5 : template.width / template.height;
+      var w = h * aspect;
+      final maxW = _visualPageWidth(pageIndex) * 0.9;
+      final maxH = _visualPageHeight(pageIndex) * 0.9;
+      var fittedH = h;
+      if (w > maxW) {
+        w = maxW;
+        fittedH = w / aspect;
+      }
+      if (fittedH > maxH) {
+        fittedH = maxH;
+        w = fittedH * aspect;
+      }
+      final rect =
+          _pageRectForVisualSize(pageIndex, x, y, width: w, height: fittedH);
+      return apply((e) {
+        final templateValues = _resolvedStampTemplateValues();
+        e.addTemplateStamp(pageIndex, rect, template,
+            contents: pdfResolveStampTemplateText(stamp.text, templateValues),
+            color: stamp.color,
+            opacity: preferences.opacity,
+            pageRotation: _page(pageIndex).rotation,
+            author: author,
+            templateValues: templateValues);
+      }, pages: [pageIndex]);
+    }
+    return placeTextStamp(pageIndex, x, y, _resolveStampText(stamp.text),
         height: height, color: stamp.color);
   }
 

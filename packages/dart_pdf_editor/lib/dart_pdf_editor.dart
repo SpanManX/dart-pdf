@@ -1,6 +1,13 @@
 /// Flutter widgets for viewing and editing PDF documents.
 library;
 
+export 'package:pdf_document/pdf_document.dart'
+    show
+        PdfStampTemplate,
+        PdfStampTemplateComponent,
+        PdfStampTemplateComponentType,
+        pdfResolveStampTemplateText;
+
 export 'src/annotation_tap.dart';
 export 'src/canvas_device.dart';
 export 'src/comparison/comparison_view.dart';

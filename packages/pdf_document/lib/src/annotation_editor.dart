@@ -2252,6 +2252,159 @@ extension PdfAnnotationEditing on PdfEditor {
     return (w, gs);
   }
 
+  /// Adds a rubber-stamp annotation from an editable vector [template].
+  ///
+  /// The placed annotation is still one /Stamp: the template's parts are
+  /// compiled into its normal appearance. That keeps placed stamps simple to
+  /// move, resize, flatten, sync, and print, while the saved template remains
+  /// editable for future placements.
+  void addTemplateStamp(
+    int pageIndex,
+    PdfRect rect,
+    PdfStampTemplate template, {
+    String? contents,
+    int color = 0xC03030,
+    double opacity = 1,
+    int? pageRotation,
+    String? author,
+    String? name,
+    Map<String, String> templateValues = const {},
+  }) {
+    if (!template.isValid) return;
+    final effectivePageRotation =
+        _appearancePageRotation(pageIndex, pageRotation);
+    final (w, gs) = _stampTemplateContent(rect, template, opacity,
+        pageRotation: effectivePageRotation, templateValues: templateValues);
+    _addAnnotation(
+      pageIndex,
+      _markupDict(
+          'Stamp',
+          rect,
+          color,
+          contents == null
+              ? null
+              : pdfResolveStampTemplateText(contents, templateValues),
+          author),
+      _form(rect, w,
+          resources: _resources(
+              extGState: gs, font: _helvetica(bold: true, name: 'HelvB'))),
+      name: name,
+    );
+  }
+
+  (ContentWriter, CosDictionary?) _stampTemplateContent(
+      PdfRect rect, PdfStampTemplate template, double opacity,
+      {int pageRotation = 0, Map<String, String> templateValues = const {}}) {
+    final resolvedTemplate = template.resolveText(templateValues);
+    final vr = _orientedVisualRect(rect, pageRotation);
+    final sx = vr.width / resolvedTemplate.width;
+    final sy = vr.height / resolvedTemplate.height;
+    final w = ContentWriter();
+    final gs = _alphaState(opacity);
+    if (gs != null) w.extGState('GS0');
+    if (pageRotation != 0) {
+      w.save();
+      _orientedCounterRotation(w, rect, pageRotation);
+    }
+
+    for (final c in resolvedTemplate.components) {
+      if (c.width <= 0 || c.height <= 0) continue;
+      final left = vr.left + c.x * sx;
+      final top = vr.top - c.y * sy;
+      final width = c.width * sx;
+      final height = c.height * sy;
+      final bottom = top - height;
+      switch (c.type) {
+        case PdfStampTemplateComponentType.rectangle:
+          _stampTemplateShape(w, c,
+              left: left,
+              bottom: bottom,
+              width: width,
+              height: height,
+              scale: math.min(sx, sy),
+              ellipse: false);
+        case PdfStampTemplateComponentType.ellipse:
+          _stampTemplateShape(w, c,
+              left: left,
+              bottom: bottom,
+              width: width,
+              height: height,
+              scale: math.min(sx, sy),
+              ellipse: true);
+        case PdfStampTemplateComponentType.text:
+          _stampTemplateText(w, c,
+              left: left, bottom: bottom, width: width, height: height);
+      }
+    }
+
+    if (pageRotation != 0) w.restore();
+    return (w, gs);
+  }
+
+  void _stampTemplateShape(
+    ContentWriter w,
+    PdfStampTemplateComponent c, {
+    required double left,
+    required double bottom,
+    required double width,
+    required double height,
+    required double scale,
+    required bool ellipse,
+  }) {
+    final strokeWidth = math.max(0.1, c.strokeWidth * scale);
+    final inset = strokeWidth / 2;
+    final x = left + inset;
+    final y = bottom + inset;
+    final shapeWidth = math.max(0.0, width - strokeWidth);
+    final shapeHeight = math.max(0.0, height - strokeWidth);
+    if (shapeWidth <= 0 || shapeHeight <= 0) return;
+
+    if (c.fillColor != null) w.fillColor(c.fillColor!);
+    w
+      ..strokeColor(c.color)
+      ..lineWidth(strokeWidth);
+    if (ellipse) {
+      w.ellipse(x + shapeWidth / 2, y + shapeHeight / 2, shapeWidth / 2,
+          shapeHeight / 2);
+    } else {
+      w.roundedRect(x, y, shapeWidth, shapeHeight, c.radius * scale);
+    }
+    if (c.fillColor != null) {
+      w.fillAndStroke();
+    } else {
+      w.stroke();
+    }
+  }
+
+  void _stampTemplateText(
+    ContentWriter w,
+    PdfStampTemplateComponent c, {
+    required double left,
+    required double bottom,
+    required double width,
+    required double height,
+  }) {
+    final text = c.text.trim();
+    if (text.isEmpty || width <= 0 || height <= 0) return;
+    final templateFontSize = c.fontSize ?? c.height * 0.72;
+    var fontSize = templateFontSize * (height / c.height);
+    fontSize = math.min(fontSize, height * 0.9);
+    if (fontSize <= 0) return;
+    final atUnit = measureHelvetica(text, 1, bold: true);
+    if (atUnit > 0 && atUnit * fontSize > width) {
+      fontSize = width / atUnit;
+    }
+    final textWidth = atUnit * fontSize;
+    w
+      ..beginText()
+      ..font('HelvB', fontSize)
+      ..fillColor(c.color)
+      ..textAt(left + (width - textWidth) / 2,
+          bottom + (height - fontSize * 0.718) / 2)
+      ..showText(text)
+      ..endText();
+  }
+
   /// Adds a count check-mark: a checkmark drawn inside [rect], modelled as
   /// a /Stamp with /Name /Check so the editing UI can tally them
   /// Bluebeam-style (see [PdfAnnotation.isCheckMark]). Being a stamp, it
