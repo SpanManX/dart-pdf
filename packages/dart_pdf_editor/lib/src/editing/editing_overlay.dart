@@ -542,6 +542,17 @@ typedef _AfterGhost = ({
   bool flipY,
 });
 
+/// A just-placed text/check stamp painted while the full page raster catches
+/// up. [rect] is view-space; this preview is intentionally lightweight but
+/// follows the PDF appearance geometry closely enough to avoid a blank gap.
+typedef _StampAfterimage = ({
+  Rect rect,
+  String? text,
+  bool check,
+  Color color,
+  double opacity,
+});
+
 /// A Square/Circle drawn for a resize preview (or its committed
 /// afterimage). The editor *regenerates* a shape's appearance at the new
 /// rect with a constant stroke width rather than stretching the old one,
@@ -828,6 +839,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   bool _afterGhostFlipX = false;
   bool _afterGhostFlipY = false;
   ({Rect rect, PdfEditTool tool, Color color, double strokeWidth})? _afterShape;
+  _StampAfterimage? _afterStamp;
   // a just-committed Square/Circle resize, held (constant stroke width)
   // until the new revision's raster lands — see [_shapeResizeStyle]
   _ShapeResize? _afterShapeResize;
@@ -1410,6 +1422,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _afterGhostFlipX = false;
     _afterGhostFlipY = false;
     _afterShape = null;
+    _afterStamp = null;
     _afterShapeResize = null;
     _afterPath = null;
     _afterText = null;
@@ -1471,6 +1484,23 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _afterGhostFlipX = flipX;
     _afterGhostFlipY = flipY;
     _afterDocument = _controller.document;
+  }
+
+  void _captureLastStampAfterimage(PdfDocument before,
+      {required bool check, required String? text, required Color color}) {
+    if (identical(before, _controller.document)) return;
+    final annotations = _controller.document.page(widget.pageIndex).annotations;
+    if (annotations.isEmpty) return;
+    _clearAfterimage();
+    _afterStamp = (
+      rect: _geometry.toViewRect(annotations.last.rect),
+      text: text,
+      check: check,
+      color: color,
+      opacity: _controller.opacity.clamp(0.0, 1.0).toDouble(),
+    );
+    _afterDocument = _controller.document;
+    if (mounted) setState(() {});
   }
 
   /// The selection's text style when a resize commit will RE-WRAP it at
@@ -3107,14 +3137,22 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       case PdfEditTool.stamp:
         final stamp = _controller.activeStamp;
         if (stamp != null) {
+          final before = _controller.document;
           _controller.addStamp(widget.pageIndex, rect, stamp.text,
               color: stamp.color);
+          _captureLastStampAfterimage(before,
+              check: false,
+              text: stamp.text,
+              color: Color(0xFF000000 | stamp.color));
           return;
         }
         final text = await widget.textPrompt(context,
             title: 'Stamp text', initial: 'APPROVED');
         if (text == null || text.isEmpty) return;
+        final before = _controller.document;
         _controller.addStamp(widget.pageIndex, rect, text);
+        _captureLastStampAfterimage(before,
+            check: false, text: text, color: _controller.color);
       case PdfEditTool.image:
         final picker = widget.imagePicker;
         if (picker == null) return;
@@ -3331,7 +3369,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         _controller.addNote(widget.pageIndex, x, y, text);
       case PdfEditTool.count:
         // each tap drops a check-mark and bumps the running tally
+        final before = _controller.document;
         _controller.placeCheckMark(widget.pageIndex, x, y);
+        _captureLastStampAfterimage(before,
+            check: true, text: null, color: _controller.color);
       case PdfEditTool.signature:
         _placeSignature(details.localPosition);
       case PdfEditTool.freeText:
@@ -3339,16 +3380,25 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         _openTextEditor(_defaultPlacementRect(details.localPosition),
             existing: false);
       case PdfEditTool.stamp:
-        if (_controller.activeStamp != null) {
+        final stamp = _controller.activeStamp;
+        if (stamp != null) {
           // an active custom stamp drops at its auto-size on tap
+          final before = _controller.document;
           _controller.placeStamp(widget.pageIndex, x, y);
+          _captureLastStampAfterimage(before,
+              check: false,
+              text: stamp.text,
+              color: Color(0xFF000000 | stamp.color));
         } else {
           // the classic flow normally drags out a box; a plain tap places
           // a default-sized stamp after prompting for its caption
           final text = await widget.textPrompt(context,
               title: 'Stamp text', initial: 'APPROVED');
           if (text == null || text.isEmpty) return;
+          final before = _controller.document;
           _controller.placeTextStamp(widget.pageIndex, x, y, text);
+          _captureLastStampAfterimage(before,
+              check: false, text: text, color: _controller.color);
         }
       case PdfEditTool.image:
         final picker = widget.imagePicker;
@@ -4275,6 +4325,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                     rotateCursor: _rotateCursor,
                     afterGhost: afterGhost,
                     afterShape: _afterShape,
+                    afterStamp: _afterStamp,
                     afterPath: _afterPath,
                     showHandles: selected != null &&
                         _controller.canResizeSelected &&
@@ -4766,6 +4817,7 @@ class _EditingPreviewPainter extends CustomPainter {
     this.rotateCursor,
     required this.afterGhost,
     required this.afterShape,
+    required this.afterStamp,
     required this.afterPath,
     required this.showHandles,
     required this.showRotateHandle,
@@ -4910,6 +4962,9 @@ class _EditingPreviewPainter extends CustomPainter {
     double strokeWidth
   })? afterShape;
 
+  /// A just-committed tap/drag stamp preview, held until the new raster lands.
+  final _StampAfterimage? afterStamp;
+
   /// A just-committed line-family preview, held until the new raster lands.
   final ({
     List<Offset> points,
@@ -4985,6 +5040,76 @@ class _EditingPreviewPainter extends CustomPainter {
       default:
         canvas.drawRect(rect, paint);
     }
+  }
+
+  void _paintStampAfterimage(Canvas canvas, _StampAfterimage stamp) {
+    final rect = stamp.rect;
+    if (rect.isEmpty) return;
+    final color = stamp.color.withValues(alpha: stamp.opacity);
+    if (stamp.check) {
+      final s = math.min(rect.width, rect.height);
+      if (s <= 0) return;
+      final ox = rect.left + (rect.width - s) / 2;
+      final oy = rect.top + (rect.height - s) / 2;
+      final path = Path()
+        ..moveTo(ox + s * 0.18, oy + s * 0.50)
+        ..lineTo(ox + s * 0.42, oy + s * 0.74)
+        ..lineTo(ox + s * 0.82, oy + s * 0.26);
+      canvas.drawPath(
+          path,
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = s * 0.16
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round);
+      return;
+    }
+
+    final borderWidth = math.max(0.5, 2 * geometry.scale);
+    final pad = 6 * geometry.scale;
+    final box = rect.deflate(borderWidth / 2);
+    if (box.width > 0 && box.height > 0) {
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(box, Radius.circular(4 * geometry.scale)),
+          Paint()
+            ..color = color
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = borderWidth);
+    }
+
+    final text = stamp.text;
+    if (text == null || text.isEmpty) return;
+    final availableWidth = math.max(0.0, rect.width - 2 * pad);
+    final availableHeight = math.max(0.0, rect.height - 2 * pad);
+    if (availableWidth == 0 || availableHeight == 0) return;
+    var fontSize = availableHeight * 0.72;
+    if (fontSize <= 0) return;
+
+    TextPainter painterFor(double size) => TextPainter(
+          text: TextSpan(
+            text: text,
+            style: TextStyle(
+              color: color,
+              fontFamily: 'Helvetica',
+              fontWeight: FontWeight.bold,
+              fontSize: size,
+              height: 1,
+            ),
+          ),
+          textDirection: _flutterTextDirection(text),
+          maxLines: 1,
+        )..layout(maxWidth: double.infinity);
+
+    var textPainter = painterFor(fontSize);
+    if (textPainter.width > availableWidth && textPainter.width > 0) {
+      fontSize *= availableWidth / textPainter.width;
+      textPainter = painterFor(fontSize);
+    }
+    textPainter.paint(
+        canvas,
+        Offset(rect.left + (rect.width - textPainter.width) / 2,
+            rect.top + (rect.height - textPainter.height) / 2));
   }
 
   /// Draws a Square/Circle at [s.rect] the way the editor regenerates it:
@@ -5155,6 +5280,11 @@ class _EditingPreviewPainter extends CustomPainter {
     if (after != null) {
       _paintShapePreview(
           canvas, after.rect, after.tool, after.color, after.strokeWidth);
+    }
+
+    final afterStamp = this.afterStamp;
+    if (afterStamp != null) {
+      _paintStampAfterimage(canvas, afterStamp);
     }
 
     final afterPath = this.afterPath;
@@ -5478,6 +5608,7 @@ class _EditingPreviewPainter extends CustomPainter {
       oldDelegate.rotateCursor != rotateCursor ||
       oldDelegate.afterGhost != afterGhost ||
       oldDelegate.afterShape != afterShape ||
+      oldDelegate.afterStamp != afterStamp ||
       oldDelegate.showHandles != showHandles ||
       oldDelegate.showRotateHandle != showRotateHandle ||
       oldDelegate.elementRect != elementRect ||

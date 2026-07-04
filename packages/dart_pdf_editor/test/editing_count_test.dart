@@ -5,6 +5,8 @@
 import 'dart:convert';
 
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
+import 'package:dart_pdf_editor/src/editing/editing_overlay.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
@@ -15,6 +17,16 @@ String appearanceText(PdfEditingController editing) {
   return latin1.decode(
       editing.document.cos.decodeStreamData(annotation.normalAppearance!));
 }
+
+/// The editing overlay's preview painter, read through a dynamic cast
+/// (the painter class is private to the library).
+dynamic overlayPainter(WidgetTester tester) => tester
+    .widget<CustomPaint>(find
+        .descendant(
+            of: find.byType(EditingPageOverlay),
+            matching: find.byType(CustomPaint))
+        .first)
+    .painter;
 
 void main() {
   group('PdfEditingController check-marks', () {
@@ -145,6 +157,55 @@ void main() {
       expect(marks.length, 2);
       expect(marks.every((a) => a.isCheckMark), isTrue);
       expect(editing.checkMarkCount, 2);
+    });
+
+    testWidgets('count taps paint an immediate afterimage before the raster',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..color = const Color(0xFF2E7D32)
+        ..tool = PdfEditTool.count;
+      addTearDown(editing.dispose);
+
+      final page = editing.document.page(0);
+      final geometry = PdfPageGeometry(
+        cropBox: page.cropBox,
+        rotation: 0,
+        viewSize: const Size(306, 396),
+      );
+      Offset local(double x, double y) => Offset(x * 0.5, (792 - y) * 0.5);
+      await tester.pumpWidget(MaterialApp(
+        home: Material(
+          child: Center(
+            child: SizedBox(
+              width: geometry.viewSize.width,
+              height: geometry.viewSize.height,
+              child: EditingPageOverlay(
+                controller: editing,
+                pageIndex: 0,
+                geometry: geometry,
+                textPrompt: showPdfTextPrompt,
+                rasterCurrent: false,
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final origin = tester.getTopLeft(find.byType(EditingPageOverlay));
+      await tester.tapAt(origin + local(240, 420),
+          kind: PointerDeviceKind.mouse);
+      await tester.pump();
+
+      final mark = editing.document.page(0).annotations.single;
+      final after = overlayPainter(tester).afterStamp;
+      expect(after, isNotNull);
+      expect(after.check, isTrue);
+      expect(after.text, isNull);
+      expect(after.color, const Color(0xFF2E7D32));
+      expect(after.rect,
+          rectMoreOrLessEquals(geometry.toViewRect(mark.rect), epsilon: 0.01));
     });
 
     testWidgets('the toolbar shows the running tally while the tool is armed',
