@@ -195,6 +195,17 @@ class PdfStampPickerDialog extends StatelessWidget {
     if (context.mounted) Navigator.of(context).pop();
   }
 
+  Future<void> _edit(BuildContext context, PdfCustomStamp stamp) async {
+    final edited = await showPdfStampEditor(
+      context,
+      fields: controller.stampTemplateFieldNames,
+      imagePicker: imagePicker,
+      initial: stamp,
+    );
+    if (edited == null) return;
+    controller.replaceCustomStamp(stamp, edited);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -225,11 +236,21 @@ class PdfStampPickerDialog extends StatelessWidget {
                         ? null
                         : Text(_stampDetail(stamp)!),
                     trailing: controller.isSavedCustomStamp(stamp)
-                        ? IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            tooltip: 'Delete stamp',
-                            onPressed: () =>
-                                controller.removeCustomStamp(stamp),
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined),
+                                tooltip: 'Edit stamp',
+                                onPressed: () => _edit(context, stamp),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                tooltip: 'Delete stamp',
+                                onPressed: () =>
+                                    controller.removeCustomStamp(stamp),
+                              ),
+                            ],
                           )
                         : null,
                   ),
@@ -318,12 +339,14 @@ class _StampDateTimeFormatControls extends StatelessWidget {
 Future<PdfCustomStamp?> showPdfStampEditor(BuildContext context,
         {Iterable<String> fields =
             PdfEditingController.stampTemplateBuiltinFields,
-        PdfImagePicker? imagePicker}) =>
+        PdfImagePicker? imagePicker,
+        PdfCustomStamp? initial}) =>
     showDialog<PdfCustomStamp>(
       context: context,
       builder: (context) => PdfStampEditorDialog(
         fields: fields,
         imagePicker: imagePicker,
+        initial: initial,
       ),
     );
 
@@ -334,10 +357,12 @@ class PdfStampEditorDialog extends StatefulWidget {
     super.key,
     this.fields = const [],
     this.imagePicker,
+    this.initial,
   });
 
   final Iterable<String> fields;
   final PdfImagePicker? imagePicker;
+  final PdfCustomStamp? initial;
 
   @override
   State<PdfStampEditorDialog> createState() => _PdfStampEditorDialogState();
@@ -345,26 +370,40 @@ class PdfStampEditorDialog extends StatefulWidget {
 
 class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
   static const _inks = [0xC03030, 0x2E7D32, 0x1A3E8C, 0xEF6C00, 0x000000];
-  static const _defaultTemplateWidth = 240.0;
-  static const _defaultTemplateHeight = 96.0;
 
-  final _text = TextEditingController(text: 'APPROVED');
+  late final TextEditingController _text;
   late final TextEditingController _width;
   late final TextEditingController _height;
   late List<PdfStampTemplateComponent> _components;
   late final List<String> _fields;
-  int? _selected = 1;
-  int _color = _inks.first;
-  double _templateWidth = _defaultTemplateWidth;
-  double _templateHeight = _defaultTemplateHeight;
+  int? _selected;
+  late int _color;
+  late double _templateWidth;
+  late double _templateHeight;
 
   @override
   void initState() {
     super.initState();
     _fields = _normalizeFields(widget.fields);
+    final initial = widget.initial;
+    final template = initial?.template ??
+        PdfStampTemplate.text(
+          initial?.text ?? 'APPROVED',
+          initial?.color ?? _inks.first,
+        );
+    _templateWidth = template.width;
+    _templateHeight = template.height;
+    _components = List.of(template.components);
+    _selected = _initialSelection(_components);
+    _color = initial?.color ?? _primaryColor;
+    final selected = _selectedComponent;
+    _text = TextEditingController(
+      text: selected?.type == PdfStampTemplateComponentType.text
+          ? selected!.text
+          : initial?.text ?? 'APPROVED',
+    );
     _width = TextEditingController(text: _templateWidth.round().toString());
     _height = TextEditingController(text: _templateHeight.round().toString());
-    _components = List.of(PdfStampTemplate.text(_text.text, _color).components);
   }
 
   @override
@@ -377,6 +416,13 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
 
   PdfStampTemplateComponent? get _selectedComponent =>
       _selected == null ? null : _components[_selected!];
+
+  int? _initialSelection(List<PdfStampTemplateComponent> components) {
+    for (var i = 0; i < components.length; i++) {
+      if (components[i].type == PdfStampTemplateComponentType.text) return i;
+    }
+    return components.isEmpty ? null : 0;
+  }
 
   String get _caption {
     for (final component in _components) {
@@ -635,7 +681,7 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
     final selected = _selectedComponent;
     final selectedIsText = selected?.type == PdfStampTemplateComponentType.text;
     return AlertDialog(
-      title: const Text('New stamp'),
+      title: Text(widget.initial == null ? 'New stamp' : 'Edit stamp'),
       content: SizedBox(
         width: 340,
         child: SingleChildScrollView(
@@ -821,11 +867,16 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
         FilledButton(
           onPressed: _components.isEmpty
               ? null
-              : () => Navigator.of(context).pop(PdfCustomStamp(
+              : () {
+                  final initial = widget.initial;
+                  Navigator.of(context).pop(PdfCustomStamp(
                     text: _caption,
                     color: _primaryColor,
                     template: _template,
-                  )),
+                    type: initial?.type,
+                    tags: initial?.tags ?? const [],
+                  ));
+                },
           child: const Text('Save'),
         ),
       ],

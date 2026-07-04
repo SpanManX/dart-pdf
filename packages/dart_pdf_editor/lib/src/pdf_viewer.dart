@@ -4627,40 +4627,45 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
                   // default-mode (mouse click) annotation selection, or
                   // a pending attention flash (the sidebar's zoom-to —
                   // links and form fields flash without a selection)
-                  builder: (context, _) => editing.tool == null &&
-                          !editing.isPickingColor &&
-                          !editing.hasAnnotationSelection &&
-                          editing.pendingFlash == null &&
-                          (_rastered ||
-                              editing.committedInkOn(widget.index) == null)
-                      ? const SizedBox.shrink()
-                      : Positioned.fill(
-                          child: ValueListenableBuilder<double>(
-                            valueListenable: widget.transformScale,
-                            builder: (context, zoom, _) => EditingPageOverlay(
-                              controller: editing,
-                              pageIndex: widget.index,
-                              geometry: geometry,
-                              textPrompt: widget.editingTextPrompt,
-                              formImagePicker: widget.formImagePicker,
-                              imagePicker: widget.imagePicker,
-                              onSnapshot: widget.onSnapshot,
-                              pageColor: widget.pageColor,
-                              showAnnotations: widget.showAnnotations,
-                              onPanViewport: widget.onPanViewport,
-                              onPanViewportEnd: widget.onPanViewportEnd,
-                              edgeAutoScroll: widget.edgeAutoScroll,
-                              onShowAnnotationMenu: widget.onShowAnnotationMenu,
-                              onShowFormFieldMenu: widget.onShowFormFieldMenu,
-                              onResolvePagePoint: widget.onResolvePagePoint,
-                              onMoveDragPreview: widget.onMoveDragPreview,
-                              onTextEditClosed: widget.onTextEditClosed,
-                              rasterCurrent: _rastered,
-                              zoom: zoom,
-                              predictStrokes: widget.predictStrokes,
+                  builder: (context, _) {
+                    final rasterCurrent = _rastered &&
+                        identical(widget.page.document, editing.document);
+                    return editing.tool == null &&
+                            !editing.isPickingColor &&
+                            !editing.hasAnnotationSelection &&
+                            editing.pendingFlash == null &&
+                            (rasterCurrent ||
+                                editing.committedInkOn(widget.index) == null)
+                        ? const SizedBox.shrink()
+                        : Positioned.fill(
+                            child: ValueListenableBuilder<double>(
+                              valueListenable: widget.transformScale,
+                              builder: (context, zoom, _) => EditingPageOverlay(
+                                controller: editing,
+                                pageIndex: widget.index,
+                                geometry: geometry,
+                                textPrompt: widget.editingTextPrompt,
+                                formImagePicker: widget.formImagePicker,
+                                imagePicker: widget.imagePicker,
+                                onSnapshot: widget.onSnapshot,
+                                pageColor: widget.pageColor,
+                                showAnnotations: widget.showAnnotations,
+                                onPanViewport: widget.onPanViewport,
+                                onPanViewportEnd: widget.onPanViewportEnd,
+                                edgeAutoScroll: widget.edgeAutoScroll,
+                                onShowAnnotationMenu:
+                                    widget.onShowAnnotationMenu,
+                                onShowFormFieldMenu: widget.onShowFormFieldMenu,
+                                onResolvePagePoint: widget.onResolvePagePoint,
+                                onMoveDragPreview: widget.onMoveDragPreview,
+                                onTextEditClosed: widget.onTextEditClosed,
+                                rasterCurrent: rasterCurrent,
+                                zoom: zoom,
+                                predictStrokes: widget.predictStrokes,
+                              ),
                             ),
-                          ),
-                        ),
+                          );
+                  },
                 ),
               // field-name labels: while the form-authoring tool is armed,
               // outline every field and tag it with its name so empty

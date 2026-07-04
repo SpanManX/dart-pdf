@@ -200,6 +200,30 @@ void main() {
       expect(editing.activeStamp, isNull);
     });
 
+    test('replace keeps saved stamp metadata and the active selection', () {
+      const paid = PdfCustomStamp(
+        text: 'PAID',
+        color: 0xC03030,
+        type: 'Approval',
+        tags: ['audit'],
+      );
+      const reviewed = PdfCustomStamp(
+        text: 'REVIEWED',
+        color: 0x2E7D32,
+        type: 'Approval',
+        tags: ['audit'],
+      );
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..saveCustomStamp(paid)
+        ..activeStamp = paid;
+      addTearDown(editing.dispose);
+
+      expect(editing.replaceCustomStamp(paid, reviewed), isTrue);
+      expect(editing.savedCustomStamps, [reviewed]);
+      expect(editing.activeStamp, reviewed);
+      expect(editing.replaceCustomStamp(draft, reviewed), isFalse);
+    });
+
     test('combines host-supplied stamps with saved stamps', () {
       const audit = PdfCustomStamp(
         text: 'AUDIT',
@@ -646,6 +670,59 @@ void main() {
       expect(editing.document.page(0).annotations.single.contents, 'APPROVED');
     });
 
+    testWidgets('template stamp taps paint the template before the PDF commit',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final template = PdfStampTemplate.text('PAID', 0x2E7D32);
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp =
+            PdfCustomStamp(text: 'PAID', color: 0x2E7D32, template: template)
+        ..tool = PdfEditTool.stamp;
+      addTearDown(editing.dispose);
+
+      final page = editing.document.page(0);
+      final geometry = PdfPageGeometry(
+        cropBox: page.cropBox,
+        rotation: 0,
+        viewSize: const Size(306, 396),
+      );
+      Offset local(double x, double y) => Offset(x * 0.5, (792 - y) * 0.5);
+      await tester.pumpWidget(MaterialApp(
+        home: Material(
+          child: Center(
+            child: SizedBox(
+              width: geometry.viewSize.width,
+              height: geometry.viewSize.height,
+              child: EditingPageOverlay(
+                controller: editing,
+                pageIndex: 0,
+                geometry: geometry,
+                textPrompt: showPdfTextPrompt,
+                rasterCurrent: false,
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final origin = tester.getTopLeft(find.byType(EditingPageOverlay));
+      await tester.tapAt(origin + local(240, 420),
+          kind: PointerDeviceKind.mouse);
+
+      expect(editing.document.page(0).annotations, isEmpty);
+
+      await tester.pump();
+      final after = overlayPainter(tester).afterStamp;
+      expect(after, isNotNull);
+      expect(after.text, 'PAID');
+      expect(after.template, template);
+      expect(after.color, const Color(0xFF2E7D32));
+
+      await tester.pump();
+      expect(editing.document.page(0).annotations.single.contents, 'PAID');
+    });
+
     testWidgets('the stamp editor previews the stamp above the text field',
         (tester) async {
       PdfCustomStamp? saved;
@@ -899,6 +976,51 @@ void main() {
       expect(find.byType(PdfStampPreview), findsNothing);
     });
 
+    testWidgets('the picker edits saved stamps', (tester) async {
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+      final paid = PdfCustomStamp(
+        text: 'PAID',
+        color: 0xC03030,
+        template: PdfStampTemplate.text('PAID', 0xC03030),
+        type: 'Approval',
+        tags: const ['audit'],
+      );
+      editing
+        ..saveCustomStamp(paid)
+        ..activeStamp = paid;
+
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () => showPdfStampPicker(context, controller: editing),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Edit stamp'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit stamp'), findsOneWidget);
+
+      await tester.enterText(
+          find.byKey(const ValueKey('pdf-stamp-text')), 'REVIEWED');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PdfStampPickerDialog), findsOneWidget);
+      expect(editing.savedCustomStamps.single.text, 'REVIEWED');
+      expect(editing.savedCustomStamps.single.type, 'Approval');
+      expect(editing.savedCustomStamps.single.tags, ['audit']);
+      expect(editing.activeStamp, editing.savedCustomStamps.single);
+      expect(find.byType(PdfStampPreview), findsOneWidget);
+    });
+
     testWidgets('the picker changes date and time formats', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final editing = PdfEditingController(buildMultiPagePdf(1));
@@ -958,6 +1080,7 @@ void main() {
 
       expect(find.byType(PdfStampPreview), findsOneWidget);
       expect(find.text('Audit · external'), findsOneWidget);
+      expect(find.byTooltip('Edit stamp'), findsNothing);
       expect(find.byTooltip('Delete stamp'), findsNothing);
     });
   });

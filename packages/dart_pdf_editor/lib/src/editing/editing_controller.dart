@@ -1970,6 +1970,19 @@ class PdfEditingController extends ChangeNotifier {
   void saveCustomStamp(PdfCustomStamp stamp) =>
       preferences.customStamps = [...preferences.customStamps, stamp];
 
+  /// Replaces a user-saved stamp with [next]. If [stamp] is active, the
+  /// edited stamp remains active. Returns false for app-supplied stamps.
+  bool replaceCustomStamp(PdfCustomStamp stamp, PdfCustomStamp next) {
+    final saved = preferences.customStamps;
+    final index = saved.indexOf(stamp);
+    if (index == -1) return false;
+    if (_activeStamp == stamp) _activeStamp = next;
+    preferences.customStamps = [
+      for (var i = 0; i < saved.length; i++) i == index ? next : saved[i],
+    ];
+    return true;
+  }
+
   /// Removes [stamp] from the saved list. If it was the active stamp,
   /// the stamp tool falls back to prompting for text.
   void removeCustomStamp(PdfCustomStamp stamp) {

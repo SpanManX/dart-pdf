@@ -548,6 +548,7 @@ typedef _AfterGhost = ({
 typedef _StampAfterimage = ({
   Rect rect,
   String? text,
+  PdfStampTemplate? template,
   bool check,
   Color color,
   double opacity,
@@ -1480,18 +1481,38 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _afterGhostFrom = from;
     _afterGhostTo = to;
     _afterGhostSourceRect = washSource ? source : null;
-    if (washSource && _sourceCleanPicture != null) {
+    final sourceCleanKey = washSource && sourceAnnotation != null
+        ? (
+            document: before,
+            page: widget.pageIndex,
+            annotation: sourceAnnotation.dict,
+            color: widget.pageColor,
+            showAnnotations: widget.showAnnotations,
+          )
+        : null;
+    if (washSource &&
+        _sourceCleanPicture != null &&
+        _sourceCleanFor == sourceCleanKey) {
       _afterGhostSourceClean = _sourceCleanPicture;
       _sourceCleanPicture = null;
       _sourceCleanFor = null;
-    } else if (washSource && sourceAnnotation != null) {
-      unawaited(_renderAfterGhostSourceClean(
-        document: before,
-        pageIndex: widget.pageIndex,
-        annotation: sourceAnnotation,
-        ghost: ghost,
-        afterDocument: afterDocument,
-      ));
+    } else {
+      if (_sourceCleanPicture != null) {
+        _sourceCleanPicture!.dispose();
+        _sourceCleanPicture = null;
+        _sourceCleanFor = null;
+      }
+      if (washSource &&
+          sourceAnnotation != null &&
+          sourceAnnotation.subtype != 'Stamp') {
+        unawaited(_renderAfterGhostSourceClean(
+          document: before,
+          pageIndex: widget.pageIndex,
+          annotation: sourceAnnotation,
+          ghost: ghost,
+          afterDocument: afterDocument,
+        ));
+      }
     }
     _afterGhostRotation = rotation;
     _afterGhostLocalAngle = localAngle;
@@ -1551,6 +1572,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       (
         rect: _geometry.toViewRect(annotations.last.rect),
         text: text,
+        template: null,
         check: check,
         color: color,
         opacity: _controller.opacity.clamp(0.0, 1.0).toDouble(),
@@ -1588,6 +1610,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         : (
             rect: _geometry.toViewRect(annotations.last.rect),
             text: preview.text,
+            template: preview.template,
             check: preview.check,
             color: preview.color,
             opacity: preview.opacity,
@@ -1597,10 +1620,14 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   _StampAfterimage _stampAfterimage(Rect rect,
-          {required String? text, required Color color, bool check = false}) =>
+          {required String? text,
+          required Color color,
+          PdfStampTemplate? template,
+          bool check = false}) =>
       (
         rect: rect,
         text: text,
+        template: template,
         check: check,
         color: color,
         opacity: _controller.opacity.clamp(0.0, 1.0).toDouble(),
@@ -1612,10 +1639,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final (x, y) = _geometry.toPagePoint(position);
     final rect = _controller.stampPlacement(widget.pageIndex, x, y);
     if (rect == null) return null;
+    final values = _controller.resolvedStampTemplateValues;
     return _stampAfterimage(
       _geometry.toViewRect(rect),
-      text: pdfResolveStampTemplateText(
-          stamp.text, _controller.resolvedStampTemplateValues),
+      text: pdfResolveStampTemplateText(stamp.text, values),
+      template: stamp.template?.resolveText(values),
       color: Color(0xFF000000 | stamp.color),
     );
   }
@@ -1647,6 +1675,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         cy + s / 2,
       )),
       text: null,
+      template: null,
       check: true,
       color: _controller.color,
       opacity: _controller.opacity.clamp(0.0, 1.0).toDouble(),
@@ -1874,7 +1903,13 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       showAnnotations: widget.showAnnotations,
     );
     if (_sourceCleanFor == key) return;
+    _sourceCleanPicture?.dispose();
+    _sourceCleanPicture = null;
     _sourceCleanFor = key;
+    // Moving stamps is a hot path: pre-rendering the entire page without the
+    // stamp can synchronously parse a complex CAD page and make the drag feel
+    // sticky. Use the committed source wash until the normal page raster lands.
+    if (annotation.subtype == 'Stamp') return;
     final name = annotation.name;
     try {
       final picture = await PdfPageRenderer.renderPicture(
@@ -3298,10 +3333,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       case PdfEditTool.stamp:
         final stamp = _controller.activeStamp;
         if (stamp != null) {
+          final values = _controller.resolvedStampTemplateValues;
           await _commitStampWithAfterimage(
               _stampAfterimage(viewRect,
-                  text: pdfResolveStampTemplateText(
-                      stamp.text, _controller.resolvedStampTemplateValues),
+                  text: pdfResolveStampTemplateText(stamp.text, values),
+                  template: stamp.template?.resolveText(values),
                   color: Color(0xFF000000 | stamp.color)),
               () => _controller.addCustomStamp(widget.pageIndex, rect, stamp));
           return;
@@ -4246,7 +4282,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             to: _afterGhostTo!,
             source: _afterGhostSourceRect,
             sourceClean: _afterGhostSourceClean,
-            sourceWash: null,
+            sourceWash: _afterGhostSourceRect != null &&
+                    _afterGhostSourceClean == null
+                ? Color.alphaBlend(widget.pageColor, const Color(0xFFFFFFFF))
+                : null,
             rotation: _afterGhostRotation,
             localAngle: _afterGhostLocalAngle,
             flipX: _afterGhostFlipX,
@@ -5224,6 +5263,11 @@ class _EditingPreviewPainter extends CustomPainter {
     final rect = stamp.rect;
     if (rect.isEmpty) return;
     final color = stamp.color.withValues(alpha: stamp.opacity);
+    final template = stamp.template;
+    if (template != null) {
+      _paintStampTemplateAfterimage(canvas, rect, template, stamp.opacity);
+      return;
+    }
     if (stamp.check) {
       final s = math.min(rect.width, rect.height);
       if (s <= 0) return;
@@ -5288,6 +5332,169 @@ class _EditingPreviewPainter extends CustomPainter {
         canvas,
         Offset(rect.left + (rect.width - textPainter.width) / 2,
             rect.top + (rect.height - textPainter.height) / 2));
+  }
+
+  void _paintStampTemplateAfterimage(
+      Canvas canvas, Rect rect, PdfStampTemplate template, double opacity) {
+    if (!template.isValid || rect.isEmpty) return;
+    canvas.saveLayer(
+        rect,
+        Paint()
+          ..color = const Color(0xFFFFFFFF)
+              .withValues(alpha: opacity.clamp(0.0, 1.0)));
+    final sx = rect.width / template.width;
+    final sy = rect.height / template.height;
+    final strokeScale = math.min(sx, sy);
+    for (final component in template.components) {
+      if (component.width <= 0 || component.height <= 0) continue;
+      final componentRect = Rect.fromLTWH(
+        rect.left + component.x * sx,
+        rect.top + component.y * sy,
+        component.width * sx,
+        component.height * sy,
+      );
+      _paintStampTemplateComponent(
+          canvas, component, componentRect, strokeScale);
+    }
+    canvas.restore();
+  }
+
+  void _paintStampTemplateComponent(Canvas canvas,
+      PdfStampTemplateComponent component, Rect rect, double strokeScale) {
+    final strokeWidth = math.max(0.1, component.strokeWidth * strokeScale);
+    switch (component.type) {
+      case PdfStampTemplateComponentType.rectangle:
+        final shape = rect.deflate(strokeWidth / 2);
+        if (shape.isEmpty) return;
+        final rrect = RRect.fromRectAndRadius(
+            shape, Radius.circular(component.radius * strokeScale));
+        if (component.fillColor != null) {
+          canvas.drawRRect(
+              rrect, Paint()..color = Color(0xFF000000 | component.fillColor!));
+        }
+        canvas.drawRRect(
+            rrect,
+            Paint()
+              ..color = Color(0xFF000000 | component.color)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = strokeWidth);
+      case PdfStampTemplateComponentType.ellipse:
+        final shape = rect.deflate(strokeWidth / 2);
+        if (shape.isEmpty) return;
+        if (component.fillColor != null) {
+          canvas.drawOval(
+              shape, Paint()..color = Color(0xFF000000 | component.fillColor!));
+        }
+        canvas.drawOval(
+            shape,
+            Paint()
+              ..color = Color(0xFF000000 | component.color)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = strokeWidth);
+      case PdfStampTemplateComponentType.text:
+        final text = component.text.trim();
+        if (text.isEmpty || rect.width <= 0 || rect.height <= 0) return;
+        var fontSize =
+            (component.fontSize ?? component.height * 0.72) * strokeScale;
+        fontSize = math.min(fontSize, rect.height * 0.9);
+        if (fontSize <= 0) return;
+        TextPainter painterFor(double size) => TextPainter(
+              text: TextSpan(
+                text: text,
+                style: TextStyle(
+                  color: Color(0xFF000000 | component.color),
+                  fontFamily: _textEditUiFamily(component.font),
+                  fontWeight: component.font.isBold
+                      ? FontWeight.bold
+                      : FontWeight.normal,
+                  fontStyle: component.font.isItalic
+                      ? FontStyle.italic
+                      : FontStyle.normal,
+                  fontSize: size,
+                  height: 1,
+                ),
+              ),
+              textDirection: _flutterTextDirection(text),
+              maxLines: 1,
+            )..layout(maxWidth: double.infinity);
+        var textPainter = painterFor(fontSize);
+        if (textPainter.width > rect.width && textPainter.width > 0) {
+          fontSize *= rect.width / textPainter.width;
+          textPainter = painterFor(fontSize);
+        }
+        textPainter.paint(
+            canvas,
+            Offset(rect.left + (rect.width - textPainter.width) / 2,
+                rect.top + (rect.height - textPainter.height) / 2));
+      case PdfStampTemplateComponentType.image:
+        canvas.drawRect(
+            rect, Paint()..color = const Color(0xFFE0E0E0).withAlpha(0x99));
+        canvas.drawRect(
+            rect.deflate(0.5),
+            Paint()
+              ..color = Color(0xFF000000 | component.color)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = math.max(0.5, strokeScale));
+      case PdfStampTemplateComponentType.signature:
+        _paintStampTemplateSignature(canvas, component, rect, strokeScale);
+    }
+  }
+
+  void _paintStampTemplateSignature(Canvas canvas,
+      PdfStampTemplateComponent component, Rect rect, double strokeScale) {
+    if (component.strokes.isEmpty || rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+    final baseWidth = math.max(0.1, component.strokeWidth * strokeScale);
+    final color = Color(0xFF000000 | component.color);
+    for (var i = 0; i < component.strokes.length; i++) {
+      final stroke = [
+        for (final (x, y) in component.strokes[i])
+          Offset(rect.left + x * rect.width, rect.top + y * rect.height),
+      ];
+      if (stroke.isEmpty) continue;
+      final controls =
+          pdfInkCurveControls([for (final p in stroke) (p.dx, p.dy)]);
+      final pressure =
+          i < component.pressures.length ? component.pressures[i] : null;
+      if (stroke.length == 1) {
+        canvas.drawCircle(
+            stroke.single,
+            pdfInkStrokeWidth(
+                    baseWidth,
+                    pressure == null || pressure.length != 1
+                        ? 0.5
+                        : pressure.first) /
+                2,
+            Paint()..color = color);
+        continue;
+      }
+      final paint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      if (pressure == null || pressure.length != stroke.length) {
+        paint.strokeWidth = baseWidth;
+        final path = Path()..moveTo(stroke.first.dx, stroke.first.dy);
+        for (var j = 0; j < stroke.length - 1; j++) {
+          final ((c1x, c1y), (c2x, c2y)) = controls[j];
+          path.cubicTo(c1x, c1y, c2x, c2y, stroke[j + 1].dx, stroke[j + 1].dy);
+        }
+        canvas.drawPath(path, paint);
+        continue;
+      }
+      for (var j = 0; j < stroke.length - 1; j++) {
+        paint.strokeWidth =
+            pdfInkStrokeWidth(baseWidth, (pressure[j] + pressure[j + 1]) / 2);
+        final ((c1x, c1y), (c2x, c2y)) = controls[j];
+        canvas.drawPath(
+            Path()
+              ..moveTo(stroke[j].dx, stroke[j].dy)
+              ..cubicTo(c1x, c1y, c2x, c2y, stroke[j + 1].dx, stroke[j + 1].dy),
+            paint);
+      }
+    }
   }
 
   /// Draws a Square/Circle at [s.rect] the way the editor regenerates it:
