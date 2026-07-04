@@ -208,6 +208,59 @@ void main() {
           rectMoreOrLessEquals(geometry.toViewRect(mark.rect), epsilon: 0.01));
     });
 
+    testWidgets('count tool previews the check mark under the mouse',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..color = const Color(0xFF2E7D32)
+        ..tool = PdfEditTool.count;
+      addTearDown(editing.dispose);
+
+      final page = editing.document.page(0);
+      final geometry = PdfPageGeometry(
+        cropBox: page.cropBox,
+        rotation: 0,
+        viewSize: const Size(306, 396),
+      );
+      Offset local(double x, double y) => Offset(x * 0.5, (792 - y) * 0.5);
+      await tester.pumpWidget(MaterialApp(
+        home: Material(
+          child: Center(
+            child: SizedBox(
+              width: geometry.viewSize.width,
+              height: geometry.viewSize.height,
+              child: EditingPageOverlay(
+                controller: editing,
+                pageIndex: 0,
+                geometry: geometry,
+                textPrompt: showPdfTextPrompt,
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final origin = tester.getTopLeft(find.byType(EditingPageOverlay));
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: origin + local(200, 420));
+      await tester.pump();
+      await gesture.moveTo(origin + local(240, 420));
+      await tester.pump();
+
+      final preview = overlayPainter(tester).countPreview;
+      expect(preview, isNotNull);
+      expect(preview.check, isTrue);
+      expect(preview.text, isNull);
+      expect(preview.color, const Color(0xFF2E7D32));
+      expect(preview.rect.center,
+          offsetMoreOrLessEquals(local(240, 420), epsilon: 0.01));
+      expect(editing.document.page(0).annotations, isEmpty);
+
+      await gesture.removePointer();
+      await tester.pump();
+    });
+
     testWidgets('the toolbar shows the running tally while the tool is armed',
         (tester) async {
       SharedPreferences.setMockInitialValues({});

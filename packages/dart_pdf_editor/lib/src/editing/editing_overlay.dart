@@ -707,6 +707,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// drawn colour and width are visible before a stroke is started.
   Offset? _penCursor;
 
+  /// The count tool's check-mark cursor: the mark that will be placed by a
+  /// click, centered on the mouse and clamped the same way the commit is.
+  Offset? _countCursor;
+
   /// The rotate knob's cursor position (hover over the knob, or live
   /// through a rotate drag): Flutter has no rotation cursor, so the
   /// system cursor is hidden here and a small curved-arrow glyph is
@@ -1501,6 +1505,28 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     );
     _afterDocument = _controller.document;
     if (mounted) setState(() {});
+  }
+
+  _StampAfterimage _countPreviewAt(Offset position) {
+    final (x, y) = _geometry.toPagePoint(position);
+    final box = _controller.pageAt(widget.pageIndex).cropBox;
+    final s = PdfEditingController.checkMarkSize
+        .clamp(4.0, math.min(box.width, box.height) * 0.9)
+        .toDouble();
+    final cx = x.clamp(box.left + s / 2, box.right - s / 2).toDouble();
+    final cy = y.clamp(box.bottom + s / 2, box.top - s / 2).toDouble();
+    return (
+      rect: _geometry.toViewRect(PdfRect(
+        cx - s / 2,
+        cy - s / 2,
+        cx + s / 2,
+        cy + s / 2,
+      )),
+      text: null,
+      check: true,
+      color: _controller.color,
+      opacity: _controller.opacity.clamp(0.0, 1.0).toDouble(),
+    );
   }
 
   /// The selection's text style when a resize commit will RE-WRAP it at
@@ -3495,6 +3521,13 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         setState(() => _eraserCursor = event.localPosition);
       }
       cursor = SystemMouseCursors.none;
+    } else if (_tool == PdfEditTool.count) {
+      // the painted check-mark is the cursor, showing exactly what a click
+      // will place before the page gets a new annotation.
+      if (_countCursor != event.localPosition) {
+        setState(() => _countCursor = event.localPosition);
+      }
+      cursor = SystemMouseCursors.none;
     } else if (_tool == PdfEditTool.signature) {
       // the live preview rides the mouse; a click commits it
       if (_controller.signature != null &&
@@ -3541,6 +3574,9 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
     if (_tool != PdfEditTool.ink && _penCursor != null) {
       setState(() => _penCursor = null);
+    }
+    if (_tool != PdfEditTool.count && _countCursor != null) {
+      setState(() => _countCursor = null);
     }
     if (cursor != _cursor) setState(() => _cursor = cursor);
   }
@@ -4203,6 +4239,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                 (_signaturePreview == null || _signatureDrag) &&
                 (_eraserCursor == null || _erasePath.isNotEmpty) &&
                 _penCursor == null &&
+                _countCursor == null &&
                 (_rotateCursor == null || _rotateStartAngle != null) &&
                 _polyHover == null) {
               return;
@@ -4213,6 +4250,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
               if (!_signatureDrag) _signaturePreview = null;
               if (_erasePath.isEmpty) _eraserCursor = null;
               _penCursor = null;
+              _countCursor = null;
               if (_rotateStartAngle == null) _rotateCursor = null;
               _polyHover = null;
             });
@@ -4322,6 +4360,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                         ? _penCursor
                         : null,
                     penOpacity: _controller.opacity,
+                    countPreview:
+                        _tool == PdfEditTool.count && _countCursor != null
+                            ? _countPreviewAt(_countCursor!)
+                            : null,
                     rotateCursor: _rotateCursor,
                     afterGhost: afterGhost,
                     afterShape: _afterShape,
@@ -4814,6 +4856,7 @@ class _EditingPreviewPainter extends CustomPainter {
     this.eraserRadius = 0,
     this.penCursor,
     this.penOpacity = 1,
+    this.countPreview,
     this.rotateCursor,
     required this.afterGhost,
     required this.afterShape,
@@ -4942,6 +4985,10 @@ class _EditingPreviewPainter extends CustomPainter {
   /// will be drawn are visible before the stroke starts.
   final Offset? penCursor;
   final double penOpacity;
+
+  /// The count tool's hover preview: the check mark that a click will place,
+  /// already clamped to the same page-space rect as the committed annotation.
+  final _StampAfterimage? countPreview;
 
   /// The rotate knob's cursor: a small curved-arrow glyph painted here
   /// (Flutter has no built-in rotation cursor, so the system cursor is
@@ -5516,6 +5563,11 @@ class _EditingPreviewPainter extends CustomPainter {
       );
     }
 
+    final count = countPreview;
+    if (count != null) {
+      _paintStampAfterimage(canvas, count);
+    }
+
     // the rotate knob's cursor: a curved arrow (no system rotation cursor)
     final rotate = rotateCursor;
     if (rotate != null) {
@@ -5605,6 +5657,7 @@ class _EditingPreviewPainter extends CustomPainter {
       oldDelegate.eraserRadius != eraserRadius ||
       oldDelegate.penCursor != penCursor ||
       oldDelegate.penOpacity != penOpacity ||
+      oldDelegate.countPreview != countPreview ||
       oldDelegate.rotateCursor != rotateCursor ||
       oldDelegate.afterGhost != afterGhost ||
       oldDelegate.afterShape != afterShape ||

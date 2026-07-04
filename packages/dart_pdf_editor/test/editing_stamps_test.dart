@@ -209,7 +209,7 @@ void main() {
       expect(stamp.contents, 'PAID');
     });
 
-    testWidgets('the picker can revert to typing the caption', (tester) async {
+    testWidgets('the picker lists and deletes saved stamps', (tester) async {
       final editing = PdfEditingController(buildMultiPagePdf(1));
       addTearDown(editing.dispose);
       const paid = PdfCustomStamp(text: 'PAID', color: 0xC03030);
@@ -231,14 +231,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(PdfStampPreview), findsOneWidget);
-      await tester.tap(find.text('Type the text for each stamp'));
-      await tester.pumpAndSettle();
-      expect(editing.activeStamp, isNull);
-      expect(find.byType(PdfStampPickerDialog), findsNothing);
 
-      // reopen and delete the saved stamp
-      await tester.tap(find.text('open'));
-      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Delete stamp'));
       await tester.pumpAndSettle();
       expect(editing.customStamps, isEmpty);

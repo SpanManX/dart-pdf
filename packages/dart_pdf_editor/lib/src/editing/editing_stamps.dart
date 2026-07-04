@@ -81,15 +81,6 @@ class PdfStampPickerDialog extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ListTile(
-                  leading: const Icon(Icons.keyboard_alt_outlined),
-                  title: const Text('Type the text for each stamp'),
-                  selected: controller.activeStamp == null,
-                  onTap: () {
-                    controller.activeStamp = null;
-                    Navigator.of(context).pop();
-                  },
-                ),
                 for (final stamp in controller.customStamps)
                   ListTile(
                     title: Align(

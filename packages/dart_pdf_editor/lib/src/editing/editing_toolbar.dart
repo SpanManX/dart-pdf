@@ -15,6 +15,7 @@ import 'editing_fonts.dart';
 import 'editing_form_style.dart';
 import 'editing_value_field.dart';
 import 'editing_measure.dart';
+import 'editing_takeoff.dart';
 import 'line_style.dart';
 import 'editing_signature.dart';
 import 'editing_stamps.dart';
@@ -854,6 +855,9 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         ));
       }
     }
+    if (group.id == 'measure') {
+      toolButtons.add(_takeoffButton(context));
+    }
 
     final settings = _groupSettings(context, group);
     final row = IntrinsicHeight(
@@ -1414,6 +1418,29 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     );
   }
 
+  Widget _takeoffButton(BuildContext context) {
+    return _LabeledToolButton(
+      key: const ValueKey('pdf-takeoff-totals'),
+      icon: Icons.functions,
+      label: 'Totals',
+      tooltip: 'Takeoff totals',
+      active: false,
+      onTap: () => _showTakeoffPanel(context),
+    );
+  }
+
+  void _showTakeoffPanel(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: PdfTakeoffPanel(controller: controller),
+        ),
+      ),
+    );
+  }
+
   /// The tune popup trigger (and nothing else), or empty when
   /// [PdfEditingToolbar.showStyle] is off or [fields] carries nothing
   /// relevant. A font context renders the trigger as the design's font
@@ -1818,6 +1845,18 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
               }
             },
           ),
+        if (group.id == 'measure')
+          _SheetToolTile(
+            key: const ValueKey('pdf-takeoff-totals'),
+            icon: Icons.functions,
+            label: 'Totals',
+            active: false,
+            enabled: true,
+            onTap: () {
+              Navigator.of(context).pop();
+              if (mounted) _showTakeoffPanel(this.context);
+            },
+          ),
       ],
     );
   }
@@ -2057,6 +2096,7 @@ class _GroupChip extends StatelessWidget {
 /// document-altering operations they trigger.
 class _LabeledToolButton extends StatelessWidget {
   const _LabeledToolButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.tooltip,
@@ -2113,6 +2153,7 @@ class _LabeledToolButton extends StatelessWidget {
 /// A tile in the mobile sheet's tool grid: icon above a label.
 class _SheetToolTile extends StatelessWidget {
   const _SheetToolTile({
+    super.key,
     required this.icon,
     required this.label,
     required this.active,
