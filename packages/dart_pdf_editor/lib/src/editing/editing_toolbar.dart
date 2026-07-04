@@ -990,7 +990,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
           icon: const Icon(Icons.style),
           tooltip: 'Custom stamps…',
           isSelected: controller.activeStamp != null,
-          onPressed: () => showPdfStampPicker(context, controller: controller),
+          onPressed: () => showPdfStampPicker(context,
+              controller: controller, imagePicker: widget.imagePicker),
         ),
       if (controller.tool == PdfEditTool.signature)
         IconButton(

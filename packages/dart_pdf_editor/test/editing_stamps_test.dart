@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+final Uint8List _png = base64.decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAGUlEQVR4nGP4z8DwHwgb'
+    'WBgZ/jNyicr7AgA3BAUOTnqjAAAAAABJRU5ErkJggg==');
 
 String appearanceText(PdfEditingController editing) {
   final annotation = editing.document.page(0).annotations.single;
@@ -23,13 +28,45 @@ void main() {
     });
 
     test('round-trips editable templates through JSON', () {
-      final template = PdfStampTemplate.text('APPROVED', 0xC03030);
-      final stamp =
-          PdfCustomStamp(text: 'APPROVED', color: 0xC03030, template: template);
+      final template = PdfStampTemplate(
+        width: 240,
+        height: 96,
+        components: [
+          PdfStampTemplateComponent.text(
+            x: 12,
+            y: 14,
+            width: 180,
+            height: 30,
+            text: 'APPROVED',
+            color: 0xC03030,
+            font: PdfStandardFont.timesBold,
+          ),
+          PdfStampTemplateComponent.image(
+            x: 190,
+            y: 16,
+            width: 28,
+            height: 28,
+            imageBytes: _png,
+          ),
+        ],
+      );
+      final stamp = PdfCustomStamp(
+        text: 'APPROVED',
+        color: 0xC03030,
+        template: template,
+        type: 'Approval',
+        tags: const ['audit', 'tested'],
+      );
       final decoded = PdfCustomStamp.decode(stamp.encode());
       expect(decoded, stamp);
-      expect(decoded!.template, template);
-      expect(decoded.template!.components.length, 2);
+      final decodedStamp = decoded!;
+      expect(decodedStamp.type, 'Approval');
+      expect(decodedStamp.hasTag('AUDIT'), isTrue);
+      expect(decodedStamp.template, template);
+      expect(decodedStamp.template!.components.length, 2);
+      expect(decodedStamp.template!.components.first.font,
+          PdfStandardFont.timesBold);
+      expect(decodedStamp.template!.components.last.imageBytes, _png);
     });
 
     test('resolves template placeholders without mutating the saved template',
@@ -106,6 +143,45 @@ void main() {
       expect(editing.activeStamp, isNull);
     });
 
+    test('combines host-supplied stamps with saved stamps', () {
+      const audit = PdfCustomStamp(
+        text: 'AUDIT',
+        color: 0x1A3E8C,
+        type: 'Audit',
+        tags: ['external'],
+      );
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..providedCustomStamps = const [audit]
+        ..saveCustomStamp(approved);
+
+      expect(editing.customStamps, [audit, approved]);
+      expect(editing.savedCustomStamps, [approved]);
+      expect(editing.isSavedCustomStamp(audit), isFalse);
+      expect(editing.isSavedCustomStamp(approved), isTrue);
+
+      editing.activeStamp = audit;
+      editing.providedCustomStamps = const [];
+      expect(editing.activeStamp, isNull);
+      expect(editing.customStamps, [approved]);
+    });
+
+    test('placeStamp writes custom stamp metadata onto text stamps', () {
+      const audit = PdfCustomStamp(
+        text: 'AUDIT',
+        color: 0x1A3E8C,
+        type: 'Audit',
+        tags: ['external', 'field'],
+      );
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp = audit;
+
+      expect(editing.placeStamp(0, 300, 400), isTrue);
+
+      final stamp = editing.document.page(0).annotations.single;
+      expect(stamp.stampType, 'Audit');
+      expect(stamp.stampTags, ['external', 'field']);
+    });
+
     test('placeStamp centers an auto-sized Stamp annotation', () {
       final editing = PdfEditingController(buildMultiPagePdf(1))
         ..activeStamp = approved;
@@ -175,6 +251,50 @@ void main() {
       expect(stamp.contents, 'Issued 2026-07-04 for AMT-SP');
       expect(appearanceText(editing),
           contains('(2026-07-04 09:05 Ben AMT-SP) Tj'));
+    });
+
+    test('placeStamp compiles template fonts and images into the appearance',
+        () {
+      final template = PdfStampTemplate(
+        width: 240,
+        height: 96,
+        components: [
+          PdfStampTemplateComponent.image(
+            x: 16,
+            y: 18,
+            width: 42,
+            height: 42,
+            imageBytes: _png,
+          ),
+          PdfStampTemplateComponent.text(
+            x: 64,
+            y: 30,
+            width: 160,
+            height: 28,
+            text: 'TESTED',
+            color: 0x1A3E8C,
+            font: PdfStandardFont.timesBold,
+          ),
+        ],
+      );
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp = PdfCustomStamp(
+          text: 'TESTED',
+          color: 0x1A3E8C,
+          template: template,
+          type: 'Tested',
+          tags: const ['qa'],
+        );
+
+      expect(editing.placeStamp(0, 300, 400), isTrue);
+
+      final stamp = editing.document.page(0).annotations.single;
+      expect(stamp.stampType, 'Tested');
+      expect(stamp.stampTags, ['qa']);
+      final content = appearanceText(editing);
+      expect(content, contains('/Img0 Do'));
+      expect(content, contains('/TimesBold'));
+      expect(content, contains('(TESTED) Tj'));
     });
 
     test('clamps so the whole stamp stays on the page', () {
@@ -382,6 +502,65 @@ void main() {
       expect(text.text, contains('{{date}}'));
     });
 
+    testWidgets('stamp editor changes size, font, and adds image components',
+        (tester) async {
+      PdfCustomStamp? saved;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () async {
+                saved = await showPdfStampEditor(context,
+                    imagePicker: (_) async => _png);
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const ValueKey('pdf-stamp-width')), '300');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      await tester.enterText(
+          find.byKey(const ValueKey('pdf-stamp-height')), '120');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-font-menu')));
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const ValueKey('pdf-stamp-font-courierBold')));
+      await tester.pumpAndSettle();
+
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('pdf-stamp-add-image')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-add-image')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      final template = saved!.template!;
+      expect(template.width, 300);
+      expect(template.height, 120);
+      final text = template.components
+          .firstWhere((c) => c.type == PdfStampTemplateComponentType.text);
+      expect(text.font, PdfStandardFont.courierBold);
+      expect(
+          template.components
+              .where((c) =>
+                  c.type == PdfStampTemplateComponentType.image &&
+                  c.imageBytes != null)
+              .length,
+          1);
+    });
+
     testWidgets('stamp editor components can be moved and resized',
         (tester) async {
       PdfCustomStamp? saved;
@@ -456,6 +635,37 @@ void main() {
       await tester.pumpAndSettle();
       expect(editing.customStamps, isEmpty);
       expect(find.byType(PdfStampPreview), findsNothing);
+    });
+
+    testWidgets('the picker lists app-supplied stamps without delete controls',
+        (tester) async {
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..providedCustomStamps = const [
+          PdfCustomStamp(
+            text: 'AUDIT',
+            color: 0x1A3E8C,
+            type: 'Audit',
+            tags: ['external'],
+          ),
+        ];
+      addTearDown(editing.dispose);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () => showPdfStampPicker(context, controller: editing),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PdfStampPreview), findsOneWidget);
+      expect(find.text('Audit · external'), findsOneWidget);
+      expect(find.byTooltip('Delete stamp'), findsNothing);
     });
   });
 }

@@ -709,6 +709,19 @@ void main() {
         'Helvetica-Bold');
   });
 
+  test('custom stamp metadata is readable from the annotation', () {
+    final doc = roundTrip((e) => e.addStamp(
+          0,
+          const PdfRect(100, 500, 260, 540),
+          'AUDIT',
+          stampType: 'Audit',
+          stampTags: const ['external', 'field'],
+        ));
+    final stamp = doc.page(0).annotations.single;
+    expect(stamp.stampType, 'Audit');
+    expect(stamp.stampTags, ['external', 'field']);
+  });
+
   test('oriented annotations on rotated pages counter-rotate appearances', () {
     final editor = PdfEditor(PdfDocument.open(buildClassicPdf()))
       ..rotatePages([0], 90);

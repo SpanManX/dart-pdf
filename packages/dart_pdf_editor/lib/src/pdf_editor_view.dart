@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, mapEquals;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, listEquals, mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf_document/pdf_document.dart';
@@ -10,6 +11,7 @@ import 'editing/editing_pencil.dart';
 import 'editing/editing_preferences.dart';
 import 'editing/editing_properties.dart';
 import 'editing/editing_sidebar.dart';
+import 'editing/editing_stamps.dart';
 import 'editing/editing_thumbnails.dart';
 import 'editing/editing_toolbar.dart';
 import 'editing/text_prompt.dart';
@@ -208,6 +210,7 @@ class PdfEditorView extends StatefulWidget {
     this.annotationMenuBuilder,
     this.formImagePicker,
     this.imagePicker,
+    this.customStamps = const [],
     this.fontPicker,
     this.onSnapshot,
     this.textPrompt,
@@ -313,6 +316,10 @@ class PdfEditorView extends StatefulWidget {
 
   /// See [PdfViewer.imagePicker].
   final PdfImagePicker? imagePicker;
+
+  /// Stamps supplied by the host app. These appear in the stock stamp picker
+  /// alongside user-saved stamps but are not persisted or deletable there.
+  final List<PdfCustomStamp> customStamps;
 
   /// How the font menu's "Load font…" entry loads a custom `.ttf`/`.otf`
   /// font to embed for new text. When null, only the standard families
@@ -447,6 +454,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
           widget.preferences ?? (_ownedPrefs ??= PdfEditingPreferences());
       _ownedSession = PdfEditingController(widget.bytes!, preferences: prefs);
     }
+    _session.providedCustomStamps = widget.customStamps;
     _reportedLength = _session.bytes.length;
     _session.addListener(_onSessionChanged);
     _attachPencil();
@@ -512,6 +520,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
       _openSession();
       final key = _documentKey;
       if (key != null) _viewportMemory?.rekey(key);
+    } else if (!listEquals(widget.customStamps, oldWidget.customStamps)) {
+      _session.providedCustomStamps = widget.customStamps;
     }
   }
 

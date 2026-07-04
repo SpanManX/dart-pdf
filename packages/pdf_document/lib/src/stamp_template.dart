@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'content_writer.dart';
+
 /// Editable vector template for a reusable rubber stamp.
 ///
 /// Coordinates are in template space with the origin at the top-left and y
@@ -34,6 +39,7 @@ class PdfStampTemplate {
             text: text,
             color: color,
             fontSize: 26,
+            font: PdfStandardFont.helveticaBold,
           ),
         ],
       );
@@ -116,7 +122,8 @@ class PdfStampTemplate {
 enum PdfStampTemplateComponentType {
   text,
   rectangle,
-  ellipse;
+  ellipse,
+  image;
 
   static PdfStampTemplateComponentType? fromName(Object? value) {
     if (value is! String) return null;
@@ -140,6 +147,8 @@ class PdfStampTemplateComponent {
     this.strokeWidth = 2,
     this.radius = 0,
     this.fontSize,
+    this.font = PdfStandardFont.helveticaBold,
+    this.imageBytes,
   });
 
   factory PdfStampTemplateComponent.text({
@@ -150,6 +159,7 @@ class PdfStampTemplateComponent {
     required String text,
     required int color,
     double? fontSize,
+    PdfStandardFont font = PdfStandardFont.helveticaBold,
   }) =>
       PdfStampTemplateComponent(
         type: PdfStampTemplateComponentType.text,
@@ -160,6 +170,7 @@ class PdfStampTemplateComponent {
         text: text,
         color: color,
         fontSize: fontSize,
+        font: font,
       );
 
   factory PdfStampTemplateComponent.rectangle({
@@ -204,6 +215,23 @@ class PdfStampTemplateComponent {
         strokeWidth: strokeWidth,
       );
 
+  factory PdfStampTemplateComponent.image({
+    required double x,
+    required double y,
+    required double width,
+    required double height,
+    required Uint8List imageBytes,
+  }) =>
+      PdfStampTemplateComponent(
+        type: PdfStampTemplateComponentType.image,
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        color: 0,
+        imageBytes: Uint8List.fromList(imageBytes),
+      );
+
   final PdfStampTemplateComponentType type;
   final double x;
   final double y;
@@ -215,6 +243,8 @@ class PdfStampTemplateComponent {
   final double strokeWidth;
   final double radius;
   final double? fontSize;
+  final PdfStandardFont font;
+  final Uint8List? imageBytes;
 
   PdfStampTemplateComponent copyWith({
     PdfStampTemplateComponentType? type,
@@ -228,6 +258,8 @@ class PdfStampTemplateComponent {
     double? strokeWidth,
     double? radius,
     Object? fontSize = _keep,
+    PdfStandardFont? font,
+    Object? imageBytes = _keep,
   }) =>
       PdfStampTemplateComponent(
         type: type ?? this.type,
@@ -241,6 +273,12 @@ class PdfStampTemplateComponent {
         strokeWidth: strokeWidth ?? this.strokeWidth,
         radius: radius ?? this.radius,
         fontSize: fontSize == _keep ? this.fontSize : fontSize as double?,
+        font: font ?? this.font,
+        imageBytes: imageBytes == _keep
+            ? this.imageBytes
+            : imageBytes == null
+                ? null
+                : Uint8List.fromList(imageBytes as Uint8List),
       );
 
   Map<String, Object?> toJson() => {
@@ -255,6 +293,8 @@ class PdfStampTemplateComponent {
         'stroke': strokeWidth,
         if (radius != 0) 'radius': radius,
         if (fontSize != null) 'fontSize': fontSize,
+        if (font != PdfStandardFont.helveticaBold) 'font': font.name,
+        if (imageBytes != null) 'image': base64Encode(imageBytes!),
       };
 
   static PdfStampTemplateComponent? fromJson(Object? value) {
@@ -272,13 +312,28 @@ class PdfStampTemplateComponent {
         height == null ||
         width <= 0 ||
         height <= 0 ||
-        color is! int) {
+        (color is! int && type != PdfStampTemplateComponentType.image)) {
       return null;
     }
     final fill = value['fill'];
     final stroke = _num(value['stroke']) ?? 2;
     final radius = _num(value['radius']) ?? 0;
     final fontSize = _num(value['fontSize']);
+    final font = value['font'] is String
+        ? PdfStandardFont.values.asNameMap()[value['font']] ??
+            PdfStandardFont.helveticaBold
+        : PdfStandardFont.helveticaBold;
+    Uint8List? imageBytes;
+    if (value['image'] is String) {
+      try {
+        imageBytes = base64Decode(value['image'] as String);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (type == PdfStampTemplateComponentType.image && imageBytes == null) {
+      return null;
+    }
     return PdfStampTemplateComponent(
       type: type,
       x: x,
@@ -286,11 +341,13 @@ class PdfStampTemplateComponent {
       width: width,
       height: height,
       text: value['text'] is String ? value['text'] as String : '',
-      color: color,
+      color: color is int ? color : 0,
       fillColor: fill is int ? fill : null,
       strokeWidth: stroke,
       radius: radius,
       fontSize: fontSize,
+      font: font,
+      imageBytes: imageBytes,
     );
   }
 
@@ -307,11 +364,25 @@ class PdfStampTemplateComponent {
       other.fillColor == fillColor &&
       other.strokeWidth == strokeWidth &&
       other.radius == radius &&
-      other.fontSize == fontSize;
+      other.fontSize == fontSize &&
+      other.font == font &&
+      _byteListEquals(other.imageBytes, imageBytes);
 
   @override
-  int get hashCode => Object.hash(type, x, y, width, height, text, color,
-      fillColor, strokeWidth, radius, fontSize);
+  int get hashCode => Object.hash(
+      type,
+      x,
+      y,
+      width,
+      height,
+      text,
+      color,
+      fillColor,
+      strokeWidth,
+      radius,
+      fontSize,
+      font,
+      imageBytes == null ? null : Object.hashAll(imageBytes!));
 }
 
 const _keep = Object();
@@ -324,6 +395,15 @@ double? _num(Object? value) => switch (value) {
 
 bool _listEquals<T>(List<T> a, List<T> b) {
   if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+bool _byteListEquals(Uint8List? a, Uint8List? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null || a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
     if (a[i] != b[i]) return false;
   }

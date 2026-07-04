@@ -1728,7 +1728,9 @@ class PdfEditingController extends ChangeNotifier {
               color: stamp.color,
               opacity: preferences.opacity,
               pageRotation: _page(pageIndex).rotation,
-              author: author);
+              author: author,
+              stampType: stamp.type,
+              stampTags: stamp.tags);
         } else {
           e.addTemplateStamp(pageIndex, rect, template,
               contents: text,
@@ -1736,6 +1738,8 @@ class PdfEditingController extends ChangeNotifier {
               opacity: preferences.opacity,
               pageRotation: _page(pageIndex).rotation,
               author: author,
+              stampType: stamp.type,
+              stampTags: stamp.tags,
               templateValues: templateValues);
         }
       }, pages: [pageIndex]);
@@ -1916,10 +1920,44 @@ class PdfEditingController extends ChangeNotifier {
   // ---------------------------------------------------------------------
   // custom stamps
 
+  List<PdfCustomStamp> _providedCustomStamps = const [];
+
+  /// Stamps supplied by the host app for this editing session.
+  ///
+  /// They are shown alongside [savedCustomStamps] in the picker but are not
+  /// written to [preferences]. Use this for organization/workflow stamps
+  /// managed by the Flutter app.
+  List<PdfCustomStamp> get providedCustomStamps => _providedCustomStamps;
+
+  set providedCustomStamps(List<PdfCustomStamp> value) {
+    final next = List<PdfCustomStamp>.unmodifiable(value);
+    if (listEquals(next, _providedCustomStamps)) return;
+    _providedCustomStamps = next;
+    final active = _activeStamp;
+    if (active != null &&
+        !next.contains(active) &&
+        !preferences.customStamps.contains(active)) {
+      _activeStamp = null;
+    }
+    notifyListeners();
+  }
+
+  /// User-authored custom stamps persisted on this device.
+  List<PdfCustomStamp> get savedCustomStamps => preferences.customStamps;
+
   /// The user's saved custom stamps. Persisted with the other
   /// [preferences], so they survive app restarts. Created in
   /// [showPdfStampEditor] (usually via the picker, [showPdfStampPicker]).
-  List<PdfCustomStamp> get customStamps => preferences.customStamps;
+  ///
+  /// This combines [providedCustomStamps] and [savedCustomStamps].
+  List<PdfCustomStamp> get customStamps => List.unmodifiable([
+        ..._providedCustomStamps,
+        ...preferences.customStamps,
+      ]);
+
+  /// Whether [stamp] is one of the user's saved, removable stamps.
+  bool isSavedCustomStamp(PdfCustomStamp stamp) =>
+      preferences.customStamps.contains(stamp);
 
   /// Appends [stamp] to the saved list.
   void saveCustomStamp(PdfCustomStamp stamp) =>
@@ -1985,11 +2023,16 @@ class PdfEditingController extends ChangeNotifier {
             opacity: preferences.opacity,
             pageRotation: _page(pageIndex).rotation,
             author: author,
+            stampType: stamp.type,
+            stampTags: stamp.tags,
             templateValues: templateValues);
       }, pages: [pageIndex]);
     }
     return placeTextStamp(pageIndex, x, y, _resolveStampText(stamp.text),
-        height: height, color: stamp.color);
+        height: height,
+        color: stamp.color,
+        stampType: stamp.type,
+        stampTags: stamp.tags);
   }
 
   /// Places a default-sized stamp captioned [text], centered on ([x], [y])
@@ -1998,7 +2041,10 @@ class PdfEditingController extends ChangeNotifier {
   /// tapping without dragging out a box drops a stamp at a sensible size.
   /// [color] null uses the selected toolbar colour.
   bool placeTextStamp(int pageIndex, double x, double y, String text,
-      {double height = 40, int? color}) {
+      {double height = 40,
+      int? color,
+      String? stampType,
+      Iterable<String> stampTags = const []}) {
     final h = height.clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
     // mirror addStamp's appearance math (6pt padding, text 72% of the
     // height) so the caption fills the box without shrinking
@@ -2011,7 +2057,9 @@ class PdfEditingController extends ChangeNotifier {
             color: color ?? _colorValue,
             opacity: preferences.opacity,
             pageRotation: _page(pageIndex).rotation,
-            author: author),
+            author: author,
+            stampType: stampType,
+            stampTags: stampTags),
         pages: [pageIndex]);
   }
 

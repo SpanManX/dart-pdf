@@ -6,6 +6,8 @@ export 'package:pdf_document/pdf_document.dart'
         PdfStampTemplate,
         PdfStampTemplateComponent,
         PdfStampTemplateComponentType,
+        PdfStandardFont,
+        PdfStandardFontFamily,
         pdfResolveStampTemplateText;
 
 export 'src/annotation_tap.dart';

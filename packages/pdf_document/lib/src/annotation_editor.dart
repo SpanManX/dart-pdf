@@ -2196,14 +2196,18 @@ extension PdfAnnotationEditing on PdfEditor {
     int? pageRotation,
     String? author,
     String? name,
+    String? stampType,
+    Iterable<String> stampTags = const [],
   }) {
     final effectivePageRotation =
         _appearancePageRotation(pageIndex, pageRotation);
     final (w, gs) = _stampContent(rect, text, color, opacity,
         pageRotation: effectivePageRotation);
+    final dict = _markupDict('Stamp', rect, color, text, author);
+    _applyStampMetadata(dict, type: stampType, tags: stampTags);
     _addAnnotation(
       pageIndex,
-      _markupDict('Stamp', rect, color, text, author),
+      dict,
       _form(rect, w,
           resources: _resources(
               extGState: gs, font: _helvetica(bold: true, name: 'HelvB'))),
@@ -2268,31 +2272,58 @@ extension PdfAnnotationEditing on PdfEditor {
     int? pageRotation,
     String? author,
     String? name,
+    String? stampType,
+    Iterable<String> stampTags = const [],
     Map<String, String> templateValues = const {},
   }) {
     if (!template.isValid) return;
     final effectivePageRotation =
         _appearancePageRotation(pageIndex, pageRotation);
-    final (w, gs) = _stampTemplateContent(rect, template, opacity,
+    final appearance = _stampTemplateContent(rect, template, opacity,
         pageRotation: effectivePageRotation, templateValues: templateValues);
+    final dict = _markupDict(
+        'Stamp',
+        rect,
+        color,
+        contents == null
+            ? null
+            : pdfResolveStampTemplateText(contents, templateValues),
+        author);
+    _applyStampMetadata(dict, type: stampType, tags: stampTags);
     _addAnnotation(
       pageIndex,
-      _markupDict(
-          'Stamp',
-          rect,
-          color,
-          contents == null
-              ? null
-              : pdfResolveStampTemplateText(contents, templateValues),
-          author),
-      _form(rect, w,
+      dict,
+      _form(rect, appearance.writer,
           resources: _resources(
-              extGState: gs, font: _helvetica(bold: true, name: 'HelvB'))),
+              extGState: appearance.extGState,
+              font: appearance.font,
+              xObject: appearance.xObject)),
       name: name,
     );
   }
 
-  (ContentWriter, CosDictionary?) _stampTemplateContent(
+  void _applyStampMetadata(CosDictionary dict,
+      {String? type, Iterable<String> tags = const []}) {
+    final normalizedType = type?.trim();
+    if (normalizedType != null && normalizedType.isNotEmpty) {
+      dict['DartPdfStampType'] = CosString.fromText(normalizedType);
+    }
+    final normalizedTags = [
+      for (final tag in tags)
+        if (tag.trim().isNotEmpty) tag.trim(),
+    ];
+    if (normalizedTags.isNotEmpty) {
+      dict['DartPdfStampTags'] =
+          CosArray([for (final tag in normalizedTags) CosString.fromText(tag)]);
+    }
+  }
+
+  ({
+    ContentWriter writer,
+    CosDictionary? extGState,
+    CosDictionary? font,
+    CosDictionary? xObject,
+  }) _stampTemplateContent(
       PdfRect rect, PdfStampTemplate template, double opacity,
       {int pageRotation = 0, Map<String, String> templateValues = const {}}) {
     final resolvedTemplate = template.resolveText(templateValues);
@@ -2301,10 +2332,18 @@ extension PdfAnnotationEditing on PdfEditor {
     final sy = vr.height / resolvedTemplate.height;
     final w = ContentWriter();
     final gs = _alphaState(opacity);
+    final fonts = CosDictionary();
+    final xObjects = CosDictionary();
+    var imageIndex = 0;
     if (gs != null) w.extGState('GS0');
     if (pageRotation != 0) {
       w.save();
       _orientedCounterRotation(w, rect, pageRotation);
+    }
+
+    void ensureFont(PdfStandardFont font) {
+      if (fonts.containsKey(font.resourceName)) return;
+      fonts.entries.addAll(_standardFont(font).entries);
     }
 
     for (final c in resolvedTemplate.components) {
@@ -2332,13 +2371,37 @@ extension PdfAnnotationEditing on PdfEditor {
               scale: math.min(sx, sy),
               ellipse: true);
         case PdfStampTemplateComponentType.text:
+          ensureFont(c.font);
           _stampTemplateText(w, c,
               left: left, bottom: bottom, width: width, height: height);
+        case PdfStampTemplateComponentType.image:
+          final imageBytes = c.imageBytes;
+          if (imageBytes == null) continue;
+          final PdfEmbeddableImage image;
+          try {
+            image = PdfEmbeddableImage.decode(imageBytes);
+          } catch (_) {
+            continue;
+          }
+          final name = 'Img${imageIndex++}';
+          xObjects[name] = _updater
+              .addObject(image.toXObject((smask) => _updater.addObject(smask)));
+          _stampTemplateImage(w,
+              name: name,
+              left: left,
+              bottom: bottom,
+              width: width,
+              height: height);
       }
     }
 
     if (pageRotation != 0) w.restore();
-    return (w, gs);
+    return (
+      writer: w,
+      extGState: gs,
+      font: fonts.entries.isEmpty ? null : fonts,
+      xObject: xObjects.entries.isEmpty ? null : xObjects,
+    );
   }
 
   void _stampTemplateShape(
@@ -2390,19 +2453,35 @@ extension PdfAnnotationEditing on PdfEditor {
     var fontSize = templateFontSize * (height / c.height);
     fontSize = math.min(fontSize, height * 0.9);
     if (fontSize <= 0) return;
-    final atUnit = measureHelvetica(text, 1, bold: true);
+    final atUnit = c.font.measure(text, 1);
     if (atUnit > 0 && atUnit * fontSize > width) {
       fontSize = width / atUnit;
     }
     final textWidth = atUnit * fontSize;
     w
       ..beginText()
-      ..font('HelvB', fontSize)
+      ..font(c.font.resourceName, fontSize)
       ..fillColor(c.color)
       ..textAt(left + (width - textWidth) / 2,
-          bottom + (height - fontSize * 0.718) / 2)
+          bottom + (height - fontSize * c.font.ascent / 1000) / 2)
       ..showText(text)
       ..endText();
+  }
+
+  void _stampTemplateImage(
+    ContentWriter w, {
+    required String name,
+    required double left,
+    required double bottom,
+    required double width,
+    required double height,
+  }) {
+    if (width <= 0 || height <= 0) return;
+    w
+      ..save()
+      ..concatMatrix(width, 0, 0, height, left, bottom)
+      ..drawXObject(name)
+      ..restore();
   }
 
   /// Adds a count check-mark: a checkmark drawn inside [rect], modelled as
