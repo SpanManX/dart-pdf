@@ -32,6 +32,7 @@ void main() {
     bool asReader = false,
     bool interactiveForms = true,
     PdfEditTool? tool,
+    double? zoom,
   }) async {
     SharedPreferences.setMockInitialValues({});
     final session = PdfEditingController(buildAcroFormPdf());
@@ -55,6 +56,10 @@ void main() {
     ));
     if (tool != null) session.tool = tool;
     await tester.pump();
+    if (zoom != null) {
+      viewer.setZoom(zoom);
+      await tester.pump();
+    }
     return session;
   }
 
@@ -93,6 +98,22 @@ void main() {
 
       expect(find.byKey(const ValueKey('pdf-form-text-editor')), findsNothing);
       expect(session.acroForm!.fieldNamed('name')!.value, 'Reader');
+      await settle(tester);
+    });
+
+    testWidgets('text field cursor counter-scales while zoomed',
+        (tester) async {
+      final session = await pumpViewer(tester, zoom: 2 * scale);
+
+      await tap(tester, view(186, 712));
+      final editor = find.byKey(const ValueKey('pdf-form-text-editor'));
+      expect(editor, findsOneWidget);
+      final field = tester.widget<TextField>(editor);
+      expect(field.cursorWidth, closeTo(1, 0.01));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(session.isEditingText, isFalse);
       await settle(tester);
     });
 
@@ -136,7 +157,8 @@ void main() {
         (tester) async {
       final session = await pumpViewer(tester);
       await tap(tester, view(186, 712));
-      expect(find.byKey(const ValueKey('pdf-form-text-editor')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('pdf-form-text-editor')), findsOneWidget);
       await tester.enterText(
           find.byKey(const ValueKey('pdf-form-text-editor')), 'discard me');
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);

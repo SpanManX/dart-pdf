@@ -4432,6 +4432,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                                     ? TextAlignVertical.top
                                     : TextAlignVertical.center,
                                 cursorColor: _textEditColor,
+                                cursorWidth: 2 * _chromeScale,
                                 selectionControls: _ScaledTextSelectionControls(
                                     _chromeScale,
                                     _inlineTextHandleColor(context)),
@@ -4969,9 +4970,9 @@ class _EditingPreviewPainter extends CustomPainter {
             Paint()
               ..color = color.withValues(alpha: 0.7)
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 1);
+              ..strokeWidth = 1 * chromeScale);
       case PdfEditTool.redact:
-        paintRedactionHatch(canvas, rect);
+        paintRedactionHatch(canvas, rect, chromeScale: chromeScale);
       case PdfEditTool.snapshot:
         // a selection marquee, like the region grab in a screenshot tool
         canvas.drawRect(rect, Paint()..color = _chrome.withAlpha(0x1A));
@@ -5186,7 +5187,7 @@ class _EditingPreviewPainter extends CustomPainter {
     }
 
     for (final rect in redactionRects) {
-      paintRedactionHatch(canvas, rect);
+      paintRedactionHatch(canvas, rect, chromeScale: chromeScale);
     }
 
     for (final rect in extraSelectionRects) {
@@ -5511,22 +5512,23 @@ class _EditingPreviewPainter extends CustomPainter {
 /// dark wash, a solid border, and diagonal cross-hatch lines, so a marked
 /// region is unmistakable before it is burned (after burning the area is a
 /// solid fill baked into the page content).
-void paintRedactionHatch(Canvas canvas, Rect rect) {
+void paintRedactionHatch(Canvas canvas, Rect rect, {double chromeScale = 1}) {
   if (rect.isEmpty) return;
+  final s = chromeScale.isFinite && chromeScale > 0 ? chromeScale : 1.0;
   canvas.drawRect(rect, Paint()..color = const Color(0x22000000));
   canvas.drawRect(
       rect,
       Paint()
         ..color = const Color(0xFFD32F2F)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5);
+        ..strokeWidth = 1.5 * s);
   canvas.save();
   canvas.clipRect(rect);
   final hatch = Paint()
     ..color = const Color(0x66D32F2F)
     ..style = PaintingStyle.stroke
-    ..strokeWidth = 1;
-  const step = 8.0;
+    ..strokeWidth = 1 * s;
+  final step = 8.0 * s;
   for (var x = rect.left - rect.height; x < rect.right; x += step) {
     canvas.drawLine(
         Offset(x, rect.bottom), Offset(x + rect.height, rect.top), hatch);

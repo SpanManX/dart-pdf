@@ -4129,17 +4129,25 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
                                       child: scrollable,
                                     ),
                                     // the Shift+drag marquee, drawn in this
-                                    // (list) space so it tracks the gesture and
-                                    // scales with the zoom transform
+                                    // (list) space so it tracks the gesture;
+                                    // its chrome counter-scales the zoom
+                                    // transform below.
                                     if (_marqueeStart != null &&
                                         _marqueeCurrent != null)
                                       Positioned.fill(
                                         child: IgnorePointer(
-                                          child: CustomPaint(
-                                            painter: _MarqueePainter(
-                                              Rect.fromPoints(_marqueeStart!,
-                                                  _marqueeCurrent!),
-                                              marqueeColor,
+                                          child: ValueListenableBuilder<double>(
+                                            valueListenable: _transformScale,
+                                            builder: (context, zoom, _) =>
+                                                CustomPaint(
+                                              painter: _MarqueePainter(
+                                                Rect.fromPoints(_marqueeStart!,
+                                                    _marqueeCurrent!),
+                                                marqueeColor,
+                                                zoom.isFinite && zoom > 0
+                                                    ? 1 / zoom
+                                                    : 1.0,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -4243,12 +4251,14 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
 }
 
 /// Paints the Shift+drag rubber-band marquee (a translucent fill with a
-/// hairline border), in list space so the zoom transform scales it.
+/// hairline border), in list space so it tracks the gesture while the
+/// border counter-scales the zoom transform.
 class _MarqueePainter extends CustomPainter {
-  const _MarqueePainter(this.rect, this.color);
+  const _MarqueePainter(this.rect, this.color, this.chromeScale);
 
   final Rect rect;
   final Color color;
+  final double chromeScale;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4258,13 +4268,15 @@ class _MarqueePainter extends CustomPainter {
       Paint()
         ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
+        ..strokeWidth = 1 * chromeScale,
     );
   }
 
   @override
   bool shouldRepaint(_MarqueePainter oldDelegate) =>
-      oldDelegate.rect != rect || oldDelegate.color != color;
+      oldDelegate.rect != rect ||
+      oldDelegate.color != color ||
+      oldDelegate.chromeScale != chromeScale;
 }
 
 /// Paints the slice of a cross-page move ghost that lands on a page, in
@@ -4489,12 +4501,16 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
       // it marks where fields are, everything else paints over it
       if (widget.formFields.isNotEmpty)
         Positioned.fill(
-          child: CustomPaint(
-            painter: _FormFieldPainter(
-              box: widget.page.cropBox,
-              rotation: widget.effectiveRotation,
-              fields: widget.formFields,
-              theme: PdfViewerTheme.of(context),
+          child: ValueListenableBuilder<double>(
+            valueListenable: widget.transformScale,
+            builder: (context, zoom, _) => CustomPaint(
+              painter: _FormFieldPainter(
+                box: widget.page.cropBox,
+                rotation: widget.effectiveRotation,
+                fields: widget.formFields,
+                theme: PdfViewerTheme.of(context),
+                chromeScale: zoom.isFinite && zoom > 0 ? 1 / zoom : 1.0,
+              ),
             ),
           ),
         ),
@@ -4584,10 +4600,14 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
                   child: ListenableBuilder(
                     listenable: editing,
                     builder: (context, _) => editing.tool == PdfEditTool.form
-                        ? FormFieldLabelLayer(
-                            controller: editing,
-                            pageIndex: widget.index,
-                            geometry: geometry,
+                        ? ValueListenableBuilder<double>(
+                            valueListenable: widget.transformScale,
+                            builder: (context, zoom, _) => FormFieldLabelLayer(
+                              controller: editing,
+                              pageIndex: widget.index,
+                              geometry: geometry,
+                              zoom: zoom,
+                            ),
                           )
                         : const SizedBox.shrink(),
                   ),
@@ -4609,13 +4629,18 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
                           tool == null ||
                           tool == PdfEditTool.select;
                       return active
-                          ? FormInteractionLayer(
-                              controller: formController,
-                              pageIndex: widget.index,
-                              geometry: geometry,
-                              pageColor: widget.pageColor,
-                              rasterCurrent: _rastered,
-                              formImagePicker: widget.formImagePicker,
+                          ? ValueListenableBuilder<double>(
+                              valueListenable: widget.transformScale,
+                              builder: (context, zoom, _) =>
+                                  FormInteractionLayer(
+                                controller: formController,
+                                pageIndex: widget.index,
+                                geometry: geometry,
+                                pageColor: widget.pageColor,
+                                rasterCurrent: _rastered,
+                                zoom: zoom,
+                                formImagePicker: widget.formImagePicker,
+                              ),
                             )
                           : const SizedBox.shrink();
                     },
@@ -4651,12 +4676,14 @@ class _FormFieldPainter extends CustomPainter {
     required this.rotation,
     required this.fields,
     required this.theme,
+    required this.chromeScale,
   });
 
   final PdfRect box;
   final int rotation;
   final List<PdfRect> fields;
   final PdfViewerThemeData theme;
+  final double chromeScale;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -4667,12 +4694,12 @@ class _FormFieldPainter extends CustomPainter {
     final fillPaint = Paint()..color = fill;
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
+      ..strokeWidth = 1 * chromeScale
       ..color = fill.withValues(alpha: (fill.a * 2.5).clamp(0.0, 1.0));
     for (final field in fields) {
       final rect = geometry.toViewRect(field);
       canvas.drawRect(rect, fillPaint);
-      canvas.drawRect(rect.deflate(0.5), borderPaint);
+      canvas.drawRect(rect.deflate(0.5 * chromeScale), borderPaint);
     }
   }
 
@@ -4680,7 +4707,8 @@ class _FormFieldPainter extends CustomPainter {
   bool shouldRepaint(_FormFieldPainter oldDelegate) =>
       oldDelegate.fields != fields ||
       oldDelegate.rotation != rotation ||
-      oldDelegate.theme != theme;
+      oldDelegate.theme != theme ||
+      oldDelegate.chromeScale != chromeScale;
 }
 
 class _HighlightPainter extends CustomPainter {
