@@ -90,36 +90,18 @@ jobs:
 
           path = Path(sys.argv[1])
           text = path.read_text()
-          old = '''    private Plugin _findFlutterPlugin(Map projects) {
-                  for (project in projects) {
-                      for (plugin in project.value.getPlugins()) {
-                          if (plugin.class.name == "FlutterPlugin") {
-                              return plugin;
-                          }
-                      }
-                      return _findFlutterPlugin(project.value.childProjects);
-                  }
-                  return null;
-              }
-          '''
-          new = '''    private Plugin _findFlutterPlugin(Map projects) {
-                  for (project in projects.values()) {
-                      for (plugin in project.getPlugins()) {
-                          if (plugin.class.name == "FlutterPlugin") {
-                              return plugin;
-                          }
-                      }
-                      def found = _findFlutterPlugin(project.childProjects);
+          text = text.replace('for (project in projects) {', 'for (project in projects.values()) {')
+          text = text.replace('project.value.getPlugins()', 'project.getPlugins()')
+          text = text.replace(
+              'return _findFlutterPlugin(project.value.childProjects);',
+              '''def found = _findFlutterPlugin(project.childProjects);
                       if (found != null) {
                           return found;
-                      }
-                  }
-                  return null;
-              }
-          '''
-          if old not in text:
+                      }''',
+          )
+          if 'projects.values()' not in text or 'project.value.getPlugins()' in text:
               raise SystemExit("CargoKit plugin patch target not found")
-          path.write_text(text.replace(old, new))
+          path.write_text(text)
           PY
       - name: Build APK + AAB
         working-directory: app
