@@ -53,12 +53,33 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - name: Patch onnxruntime Android compile SDK
+      - name: Patch hosted Android plugin compatibility
         run: |
           set -euo pipefail
-          gradle_file="$(find "$HOME/.pub-cache" -path '*/onnxruntime-*/android/build.gradle' -print -quit)"
-          test -n "$gradle_file"
-          sed -i 's/compileSdkVersion 33/compileSdkVersion 36/' "$gradle_file"
+
+          patch_gradle() {
+            local gradle_file="$1"
+            local namespace="${2:-}"
+            test -n "$gradle_file"
+
+            python3 - "$gradle_file" "$namespace" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          namespace = sys.argv[2]
+          text = path.read_text()
+          text = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 36', text)
+          if namespace and 'namespace ' not in text:
+              text = text.replace('android {\n', f'android {{\n    namespace "{namespace}"\n', 1)
+          path.write_text(text)
+          PY
+          }
+
+          patch_gradle "$(find "$HOME/.pub-cache" -path '*/onnxruntime-*/android/build.gradle' -print -quit)"
+          patch_gradle "$(find "$HOME/.pub-cache" -path '*/irondash_engine_context-*/android/build.gradle' -print -quit)" dev.irondash.engine_context
+          patch_gradle "$(find "$HOME/.pub-cache" -path '*/super_native_extensions-*/android/build.gradle' -print -quit)" com.superlist.super_native_extensions
       - name: Build APK + AAB
         working-directory: app
         run: |
