@@ -4405,11 +4405,13 @@ class _AnnotationAppearanceLayer extends StatefulWidget {
   const _AnnotationAppearanceLayer({
     required this.page,
     required this.rotation,
+    required this.pageEpoch,
     required this.onReady,
   });
 
   final PdfPage page;
   final int rotation;
+  final int pageEpoch;
   final VoidCallback onReady;
 
   @override
@@ -4421,6 +4423,7 @@ class _AnnotationAppearanceLayerState
     extends State<_AnnotationAppearanceLayer> {
   var _generation = 0;
   List<ui.Picture> _pictures = const [];
+  Size? _picturePageSize;
 
   @override
   void initState() {
@@ -4432,8 +4435,16 @@ class _AnnotationAppearanceLayerState
   void didUpdateWidget(_AnnotationAppearanceLayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.page, widget.page) ||
-        oldWidget.rotation != widget.rotation) {
-      _render();
+        oldWidget.rotation != widget.rotation ||
+        oldWidget.pageEpoch != widget.pageEpoch) {
+      final oldSize = PdfPageRenderer.pageSize(oldWidget.page,
+          rotation: oldWidget.rotation);
+      final newSize =
+          PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation);
+      final keepCurrent = oldWidget.pageEpoch == widget.pageEpoch &&
+          oldWidget.rotation == widget.rotation &&
+          oldSize == newSize;
+      _render(keepCurrent: keepCurrent);
     }
   }
 
@@ -4449,6 +4460,7 @@ class _AnnotationAppearanceLayerState
       picture.dispose();
     }
     _pictures = const [];
+    _picturePageSize = null;
   }
 
   void _notifyReady(int generation) {
@@ -4458,10 +4470,12 @@ class _AnnotationAppearanceLayerState
     });
   }
 
-  void _render() {
+  void _render({bool keepCurrent = false}) {
     final generation = ++_generation;
-    _disposePictures();
+    if (!keepCurrent) _disposePictures();
     final page = widget.page;
+    final pageSize =
+        PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation);
     final annotations = [
       for (final annotation in page.annotations)
         if (!annotation.isHidden &&
@@ -4470,6 +4484,7 @@ class _AnnotationAppearanceLayerState
           annotation,
     ];
     if (annotations.isEmpty) {
+      _disposePictures();
       _notifyReady(generation);
       return;
     }
@@ -4487,7 +4502,11 @@ class _AnnotationAppearanceLayerState
         }
         return;
       }
-      setState(() => _pictures = next);
+      setState(() {
+        _disposePictures();
+        _pictures = next;
+        _picturePageSize = pageSize;
+      });
       _notifyReady(generation);
     }));
   }
@@ -4509,7 +4528,7 @@ class _AnnotationAppearanceLayerState
       child: CustomPaint(
         painter: _AnnotationAppearancePainter(
           pictures: _pictures,
-          pageSize:
+          pageSize: _picturePageSize ??
               PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation),
         ),
       ),
@@ -4788,6 +4807,7 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
           child: _AnnotationAppearanceLayer(
             page: widget.page,
             rotation: widget.effectiveRotation,
+            pageEpoch: widget.pageEpoch,
             onReady: _onAnnotationLayerReady,
           ),
         ),

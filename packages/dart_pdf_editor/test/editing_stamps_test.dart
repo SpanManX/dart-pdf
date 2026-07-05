@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 import 'package:dart_pdf_editor/src/editing/editing_overlay.dart';
+import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -26,6 +29,27 @@ dynamic overlayPainter(WidgetTester tester) => tester
             matching: find.byType(CustomPaint))
         .first)
     .painter;
+
+(int r, int g, int b, int a) pixelAt(ByteData pixels, int width, int x, int y) {
+  final i = (y * width + x) * 4;
+  return (
+    pixels.getUint8(i),
+    pixels.getUint8(i + 1),
+    pixels.getUint8(i + 2),
+    pixels.getUint8(i + 3)
+  );
+}
+
+Future<({ByteData pixels, int width, int height})> captureBoundary(
+    WidgetTester tester, Key key) async {
+  final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(key));
+  final image = await tester.runAsync(() => boundary.toImage()) as ui.Image;
+  final pixels = await tester.runAsync(
+      () => image.toByteData(format: ui.ImageByteFormat.rawRgba)) as ByteData;
+  final result = (pixels: pixels, width: image.width, height: image.height);
+  image.dispose();
+  return result;
+}
 
 void main() {
   group('PdfCustomStamp', () {
@@ -668,6 +692,69 @@ void main() {
 
       await tester.pump();
       expect(editing.document.page(0).annotations.single.contents, 'APPROVED');
+    });
+
+    testWidgets('adding a stamp keeps existing annotations painted',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..color = const Color(0xFFE53935)
+        ..strokeWidth = 12
+        ..addRectangle(0, const PdfRect(120, 650, 180, 720));
+      addTearDown(editing.dispose);
+      const boundaryKey = ValueKey('annotation-layer-capture');
+
+      await tester.pumpWidget(MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: boundaryKey,
+            child: SizedBox(
+              width: 306,
+              height: 396,
+              child: ListenableBuilder(
+                listenable: editing,
+                builder: (context, _) => PdfViewer(
+                  initialFit: PdfViewerFit.width,
+                  document: editing.document,
+                  editing: editing,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final boundaryOrigin = tester.getTopLeft(find.byKey(boundaryKey));
+      final pageRect = tester.getRect(find.byType(RawImage).first);
+      Offset samplePoint(double x, double y) {
+        final page = editing.document.page(0);
+        final box = page.cropBox;
+        return pageRect.topLeft -
+            boundaryOrigin +
+            Offset((x - box.left) * pageRect.width / box.width,
+                (box.top - y) * pageRect.height / box.height);
+      }
+
+      final sample = samplePoint(123, 685);
+      var capture = await captureBoundary(tester, boundaryKey);
+      var (r, g, b, _) = pixelAt(
+          capture.pixels, capture.width, sample.dx.round(), sample.dy.round());
+      expect(r, greaterThan(180));
+      expect(g, lessThan(100));
+      expect(b, lessThan(100));
+
+      editing.placeTextStamp(0, 300, 400, 'NEW');
+      await tester.pump();
+
+      capture = await captureBoundary(tester, boundaryKey);
+      (r, g, b, _) = pixelAt(
+          capture.pixels, capture.width, sample.dx.round(), sample.dy.round());
+      expect(r, greaterThan(180),
+          reason: 'the existing annotation layer must stay up while the '
+              'new revision records its annotation appearances');
+      expect(g, lessThan(100));
+      expect(b, lessThan(100));
     });
 
     testWidgets('template stamp taps paint the template before the PDF commit',
