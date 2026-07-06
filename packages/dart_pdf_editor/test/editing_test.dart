@@ -481,6 +481,24 @@ void main() {
       await settle(tester);
     });
 
+    testWidgets('dragging with the cloud polygon tool adds a cloudy Polygon',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing.tool = PdfEditTool.cloudPolygon;
+      await tester.pump();
+
+      await drag(tester, view(100, 700), view(250, 600));
+
+      final annotation = editing.document.page(0).annotations.single;
+      expect(annotation.subtype, 'Polygon');
+      expect(annotation.hasCloudyBorder, isTrue);
+      expect(annotation.vertices, hasLength(4));
+      expect(annotation.vertices!.first.$1, closeTo(100, 1));
+      expect(annotation.vertices!.first.$2, closeTo(600, 1));
+      expect(editing.document.page(1).annotations, isEmpty);
+      await settle(tester);
+    });
+
     testWidgets('dragging with the arrow tool adds a dashed Line',
         (tester) async {
       final (editing, _) = await pumpEditor(tester);
@@ -922,9 +940,12 @@ void main() {
       await tester.tap(find.byTooltip('Ellipse (O)'));
       await tester.pump();
       expect(editing.tool, PdfEditTool.ellipse);
+      await tester.tap(find.byTooltip('Cloud polygon'));
+      await tester.pump();
+      expect(editing.tool, PdfEditTool.cloudPolygon);
       // re-tapping the active tool drops back to Select (not a no-tool
       // limbo) so you can immediately select and move things
-      await tester.tap(find.byTooltip('Ellipse (O)'));
+      await tester.tap(find.byTooltip('Cloud polygon'));
       await tester.pump();
       expect(editing.tool, PdfEditTool.select);
 

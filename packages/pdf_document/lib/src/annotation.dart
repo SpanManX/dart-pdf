@@ -258,6 +258,15 @@ class PdfAnnotation {
     return values.any((value) => value > 0) ? values : null;
   }
 
+  /// Whether the annotation asks conforming viewers to render its border as
+  /// a cloudy border effect (`/BE << /S /Cloudy ... >>`).
+  bool get hasCloudyBorder {
+    final be = document.cos.resolve(dict['BE']);
+    if (be is! CosDictionary) return false;
+    final style = document.cos.resolve(be['S']);
+    return style is CosName && style.value == 'Cloudy';
+  }
+
   /// The endpoints of a /Line annotation, page space.
   ((double, double), (double, double))? get line {
     if (subtype != 'Line') return null;

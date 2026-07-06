@@ -9,7 +9,7 @@ class AppDelegate: FlutterAppDelegate {
 
   /// Files opened before the engine was ready (cold start). Drained by the
   /// Dart side's `getInitialFile` call.
-  var pendingFiles: [String] = []
+  var pendingFiles: [[String: Any]] = []
 
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return true
@@ -33,14 +33,25 @@ class AppDelegate: FlutterAppDelegate {
 
   /// Sends a freshly opened file to Dart, or buffers it until the engine is up.
   private func deliver(path: String) {
+    let payload = payload(for: path)
     guard let channel = incomingChannel else {
-      pendingFiles.append(path)
+      pendingFiles.append(payload)
       return
     }
-    channel.invokeMethod("openFile", arguments: payload(for: path))
+    channel.invokeMethod("openFile", arguments: payload)
   }
 
   func payload(for path: String) -> [String: Any] {
-    return ["name": (path as NSString).lastPathComponent, "path": path]
+    let url = URL(fileURLWithPath: path)
+    var payload: [String: Any] = [
+      "name": url.lastPathComponent,
+      "path": path,
+    ]
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    if let data = try? Data(contentsOf: url) {
+      payload["bytes"] = FlutterStandardTypedData(bytes: data)
+    }
+    return payload
   }
 }

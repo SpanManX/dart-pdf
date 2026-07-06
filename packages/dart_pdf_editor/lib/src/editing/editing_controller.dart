@@ -66,6 +66,9 @@ enum PdfEditTool {
   /// Drag to create a sampled closed /Polygon annotation.
   polygon,
 
+  /// Drag out a rectangular cloudy /Polygon annotation.
+  cloudPolygon,
+
   /// Drag a straight segment whose real-world length is shown live and
   /// stamped as a /Line measurement (§12.9). Needs an active
   /// [PdfEditingController.measurementScale].
@@ -682,6 +685,7 @@ class PdfEditingController extends ChangeNotifier {
         PdfEditTool.arrow => 'arrow',
         PdfEditTool.polyline => 'polyline',
         PdfEditTool.polygon => 'polygon',
+        PdfEditTool.cloudPolygon => 'cloudPolygon',
         PdfEditTool.measureDistance => 'measureDistance',
         PdfEditTool.measurePerimeter => 'measurePerimeter',
         PdfEditTool.measureArea => 'measureArea',
@@ -704,7 +708,8 @@ class PdfEditingController extends ChangeNotifier {
         PdfEditTool.eraser => const {'eraserRadius'},
         PdfEditTool.rectangle ||
         PdfEditTool.ellipse ||
-        PdfEditTool.polygon =>
+        PdfEditTool.polygon ||
+        PdfEditTool.cloudPolygon =>
           const {
             'color',
             'strokeWidth',
@@ -1458,6 +1463,26 @@ class PdfEditingController extends ChangeNotifier {
           opacity: preferences.opacity,
           dashPattern: _lineDashPattern,
           author: author),
+      pages: [pageIndex],
+      contentPages: const <int>[]);
+
+  void addCloudPolygon(int pageIndex, PdfRect rect) => apply(
+      (e) => e.addPolygon(
+            pageIndex,
+            [
+              (rect.left, rect.bottom),
+              (rect.right, rect.bottom),
+              (rect.right, rect.top),
+              (rect.left, rect.top),
+            ],
+            strokeColor: _colorValue,
+            strokeWidth: preferences.strokeWidth,
+            fillColor: _rgbOf(preferences.shapeFillColor),
+            opacity: preferences.opacity,
+            dashPattern: _lineDashPattern,
+            cloudy: true,
+            author: author,
+          ),
       pages: [pageIndex],
       contentPages: const <int>[]);
 

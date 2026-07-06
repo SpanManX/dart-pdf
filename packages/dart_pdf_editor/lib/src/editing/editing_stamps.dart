@@ -278,12 +278,23 @@ class PdfStampPickerDialog extends StatelessWidget {
 class _StampDateTimeFormatControls extends StatelessWidget {
   const _StampDateTimeFormatControls({required this.controller});
 
-  static final _sample = DateTime(2026, 7, 4, 9, 5, 6);
-
   final PdfEditingController controller;
+
+  static String _timePreview(PdfStampTimeFormat format, DateTime sample) {
+    final suffix = switch (format) {
+      PdfStampTimeFormat.twentyFourHour ||
+      PdfStampTimeFormat.twentyFourHourSeconds =>
+        '24 hr',
+      PdfStampTimeFormat.twelveHour ||
+      PdfStampTimeFormat.twelveHourSeconds =>
+        '12 hr',
+    };
+    return '${format.format(sample)} ($suffix)';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final sample = controller.stampTemplateClock();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -299,7 +310,7 @@ class _StampDateTimeFormatControls extends StatelessWidget {
                 DropdownMenuItem<PdfStampDateFormat>(
                   key: ValueKey('pdf-stamp-date-format-${format.name}'),
                   value: format,
-                  child: Text(format.format(_sample)),
+                  child: Text(format.format(sample)),
                 ),
             ],
             onChanged: (value) {
@@ -320,7 +331,7 @@ class _StampDateTimeFormatControls extends StatelessWidget {
                 DropdownMenuItem<PdfStampTimeFormat>(
                   key: ValueKey('pdf-stamp-time-format-${format.name}'),
                   value: format,
-                  child: Text(format.format(_sample)),
+                  child: Text(_timePreview(format, sample)),
                 ),
             ],
             onChanged: (value) {

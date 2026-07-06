@@ -1526,15 +1526,6 @@ class _PageTile extends StatelessWidget {
                           painter: _ViewportPainter(viewport, indicator),
                         ),
                       ),
-                    // an explicit "in the selection" marker, painted last
-                    // so it rides above the page and the viewport mark —
-                    // the chip tint alone can be missed on a busy page
-                    if (selected)
-                      Positioned(
-                        top: 3,
-                        left: 3,
-                        child: _SelectionBadge(scheme: scheme),
-                      ),
                   ]),
                 );
               },
@@ -1744,28 +1735,6 @@ PopupMenuItem<_PageTileAction> _pageMenuRow(
         Flexible(child: Text(label, overflow: TextOverflow.ellipsis)),
       ]),
     );
-
-/// The check badge overlaid on a selected page's thumbnail — an
-/// unmistakable "this page is in the selection" marker that reads on any
-/// page color, where the chip tint alone can be missed. A ring in the
-/// surface color keeps it legible where the primary circle meets a
-/// same-hued page.
-class _SelectionBadge extends StatelessWidget {
-  const _SelectionBadge({required this.scheme});
-
-  final ColorScheme scheme;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          color: scheme.primary,
-          shape: BoxShape.circle,
-          border: Border.all(color: scheme.surface, width: 1.5),
-        ),
-        padding: const EdgeInsets.all(1.5),
-        child: Icon(Icons.check, size: 12, color: scheme.onPrimary),
-      );
-}
 
 /// Renders a page to a tile-resolution bitmap, served from the session's
 /// shared [PdfThumbnailCache] and keyed by the page's render stamp — an

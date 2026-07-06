@@ -661,7 +661,8 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
     });
 
-    testWidgets('a check badge marks each selected tile', (tester) async {
+    testWidgets('selected tiles use the chip frame without a check badge',
+        (tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -680,26 +681,47 @@ void main() {
       ));
       await tester.pump();
 
-      // nothing selected yet, so no tile carries the badge
+      BoxDecoration chipDecoration(int pageIndex) => tester
+          .widget<Container>(
+            find.byKey(ValueKey('pdf-thumbnail-tile-chip-$pageIndex')),
+          )
+          .decoration! as BoxDecoration;
+
+      Color chipBorderColor(int pageIndex) =>
+          (chipDecoration(pageIndex).border! as Border).top.color;
+
+      final scheme = Theme.of(
+        tester.element(find.byKey(const ValueKey('pdf-thumbnail-tile-chip-0'))),
+      ).colorScheme;
+
+      // nothing selected yet, so no tile carries a selected frame or badge
+      expect(chipBorderColor(0), Colors.transparent);
+      expect(chipBorderColor(1), Colors.transparent);
       expect(find.byIcon(Icons.check), findsNothing);
 
-      // a plain tap selects exactly one page → exactly one badge
+      // a plain tap selects exactly one page → the chip frame is the cue
       await tester.tap(find.text('Page 2'));
       await tester.pump();
       expect(editing.selectedPages, [1]);
-      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(chipBorderColor(0), Colors.transparent);
+      expect(chipBorderColor(1), scheme.primary);
+      expect(find.byIcon(Icons.check), findsNothing);
 
-      // the badge tracks the whole selection, one per selected tile
+      // the frame tracks the whole selection, one per selected tile
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
       await tester.tap(find.text('Page 3'));
       await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
       await tester.pump();
       expect(editing.selectedPages, [1, 2]);
-      expect(find.byIcon(Icons.check), findsNWidgets(2));
+      expect(chipBorderColor(1), scheme.primary);
+      expect(chipBorderColor(2), scheme.primary);
+      expect(find.byIcon(Icons.check), findsNothing);
 
-      // clearing the selection clears the badges
+      // clearing the selection clears the selected frames
       editing.clearPageSelection();
       await tester.pump();
+      expect(chipBorderColor(1), Colors.transparent);
+      expect(chipBorderColor(2), Colors.transparent);
       expect(find.byIcon(Icons.check), findsNothing);
       await tester.pump(const Duration(seconds: 2));
     });

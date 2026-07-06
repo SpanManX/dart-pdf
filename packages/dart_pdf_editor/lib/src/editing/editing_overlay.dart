@@ -1350,7 +1350,9 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       case 'PolyLine':
         return PdfEditTool.polyline;
       case 'Polygon':
-        return PdfEditTool.polygon;
+        return annotation!.hasCloudyBorder
+            ? PdfEditTool.cloudPolygon
+            : PdfEditTool.polygon;
       default:
         return null;
     }
@@ -2531,6 +2533,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         _bumpActiveStroke();
       case PdfEditTool.rectangle ||
             PdfEditTool.ellipse ||
+            PdfEditTool.cloudPolygon ||
             PdfEditTool.line ||
             PdfEditTool.arrow ||
             PdfEditTool.measureDistance ||
@@ -3311,11 +3314,15 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   Future<void> _commitRect(Rect viewRect) async {
     final rect = _geometry.toPageRect(viewRect);
     switch (_tool) {
-      case PdfEditTool.rectangle || PdfEditTool.ellipse:
+      case PdfEditTool.rectangle ||
+            PdfEditTool.ellipse ||
+            PdfEditTool.cloudPolygon:
         final tool = _tool!;
         final before = _controller.document;
         if (tool == PdfEditTool.rectangle) {
           _controller.addRectangle(widget.pageIndex, rect);
+        } else if (tool == PdfEditTool.cloudPolygon) {
+          _controller.addCloudPolygon(widget.pageIndex, rect);
         } else {
           _controller.addEllipse(widget.pageIndex, rect);
         }
@@ -4061,6 +4068,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   static const _strokeTools = {
     PdfEditTool.rectangle,
     PdfEditTool.ellipse,
+    PdfEditTool.cloudPolygon,
     PdfEditTool.line,
     PdfEditTool.arrow,
     PdfEditTool.polyline,
@@ -4463,7 +4471,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                         ? (_dragStart!, _dragCurrent!)
                         : null,
                     dragPath: polyPreview,
-                    dragPathFill: _tool == PdfEditTool.polygon &&
+                    dragPathFill: (_tool == PdfEditTool.polygon ||
+                                _tool == PdfEditTool.cloudPolygon) &&
                             _controller.shapeFillColor != null
                         ? _controller.shapeFillColor!.withValues(
                             alpha: _controller.opacity.clamp(0.0, 1.0))
@@ -5236,6 +5245,14 @@ class _EditingPreviewPainter extends CustomPainter {
     switch (tool) {
       case PdfEditTool.ellipse:
         canvas.drawOval(rect, paint);
+      case PdfEditTool.cloudPolygon:
+        _paintCloudPolygon(
+            canvas,
+            [rect.topLeft, rect.topRight, rect.bottomRight, rect.bottomLeft],
+            color,
+            null,
+            width,
+            false);
       case PdfEditTool.freeText || PdfEditTool.stamp || PdfEditTool.form:
         canvas.drawRect(
             rect,
@@ -5257,6 +5274,93 @@ class _EditingPreviewPainter extends CustomPainter {
       default:
         canvas.drawRect(rect, paint);
     }
+  }
+
+  void _paintCloudPolygon(Canvas canvas, List<Offset> points, Color color,
+      Color? fillColor, double width, bool dashed) {
+    if (points.length < 3) return;
+    final fillPath = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final point in points.skip(1)) {
+      fillPath.lineTo(point.dx, point.dy);
+    }
+    fillPath.close();
+    if (fillColor != null) {
+      canvas.drawPath(
+          fillPath,
+          Paint()
+            ..color = fillColor
+            ..style = PaintingStyle.fill);
+    }
+    final cloud = _cloudPath(points, width);
+    canvas.drawPath(
+        dashed ? _dashPath(cloud, width) : cloud,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round);
+  }
+
+  Path _cloudPath(List<Offset> points, double strokeWidth) {
+    final path = Path();
+    if (points.length < 3) return path;
+    final clockwise = _signedArea(points) < 0;
+    final radius = math.max(4.0, strokeWidth * 3.0);
+    var first = true;
+    for (var i = 0; i < points.length; i++) {
+      final a = points[i];
+      final b = points[(i + 1) % points.length];
+      final delta = b - a;
+      final length = delta.distance;
+      if (length < 0.01) continue;
+      final scallops = math.max(1, (length / (radius * 1.7)).round());
+      final unit = delta / length;
+      final normal =
+          clockwise ? Offset(-unit.dy, unit.dx) : Offset(unit.dy, -unit.dx);
+      const k = 0.5522847498307936;
+      for (var j = 0; j < scallops; j++) {
+        final t0 = j / scallops;
+        final t1 = (j + 1) / scallops;
+        final start = Offset.lerp(a, b, t0)!;
+        final end = Offset.lerp(a, b, t1)!;
+        final chord = length / scallops;
+        final bulge = math.min(radius, chord * 0.55);
+        final mid = Offset.lerp(start, end, 0.5)! + normal * bulge;
+        if (first) {
+          path.moveTo(start.dx, start.dy);
+          first = false;
+        }
+        path.cubicTo(
+          start.dx + unit.dx * chord * k * 0.5,
+          start.dy + unit.dy * chord * k * 0.5,
+          mid.dx - unit.dx * chord * k * 0.5,
+          mid.dy - unit.dy * chord * k * 0.5,
+          mid.dx,
+          mid.dy,
+        );
+        path.cubicTo(
+          mid.dx + unit.dx * chord * k * 0.5,
+          mid.dy + unit.dy * chord * k * 0.5,
+          end.dx - unit.dx * chord * k * 0.5,
+          end.dy - unit.dy * chord * k * 0.5,
+          end.dx,
+          end.dy,
+        );
+      }
+    }
+    path.close();
+    return path;
+  }
+
+  double _signedArea(List<Offset> points) {
+    var area = 0.0;
+    for (var i = 0; i < points.length; i++) {
+      final a = points[i];
+      final b = points[(i + 1) % points.length];
+      area += a.dx * b.dy - b.dx * a.dy;
+    }
+    return area / 2;
   }
 
   void _paintStampAfterimage(Canvas canvas, _StampAfterimage stamp) {
@@ -5549,9 +5653,12 @@ class _EditingPreviewPainter extends CustomPainter {
     for (final point in points.skip(1)) {
       path.lineTo(point.dx, point.dy);
     }
-    if (tool == PdfEditTool.polygon || tool == PdfEditTool.measureArea) {
+    final closed = tool == PdfEditTool.polygon ||
+        tool == PdfEditTool.cloudPolygon ||
+        tool == PdfEditTool.measureArea;
+    if (closed) {
       path.close();
-      if (fillColor != null) {
+      if (fillColor != null && tool != PdfEditTool.cloudPolygon) {
         canvas.drawPath(
             path,
             Paint()
@@ -5559,7 +5666,11 @@ class _EditingPreviewPainter extends CustomPainter {
               ..style = PaintingStyle.fill);
       }
     }
-    canvas.drawPath(dashed ? _dashPath(path, width) : path, paint);
+    if (tool == PdfEditTool.cloudPolygon) {
+      _paintCloudPolygon(canvas, points, color, fillColor, width, dashed);
+    } else {
+      canvas.drawPath(dashed ? _dashPath(path, width) : path, paint);
+    }
     if (tool == PdfEditTool.arrow) {
       final tip = points.last;
       final from = points[points.length - 2];

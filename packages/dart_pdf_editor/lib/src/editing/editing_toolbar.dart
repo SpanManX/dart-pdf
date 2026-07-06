@@ -311,6 +311,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
           _GroupTool.tool(PdfEditTool.arrow, Icons.arrow_right_alt, 'Arrow'),
           _GroupTool.tool(PdfEditTool.polyline, Icons.timeline, 'Polyline'),
           _GroupTool.tool(PdfEditTool.polygon, Icons.change_history, 'Polygon'),
+          _GroupTool.tool(
+              PdfEditTool.cloudPolygon, Icons.cloud_outlined, 'Cloud polygon'),
         ],
         defaultTool: PdfEditTool.rectangle),
     _ToolGroup(
@@ -1578,7 +1580,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
           lineEndings: tool == PdfEditTool.line || tool == PdfEditTool.polyline,
           shapeFill: tool == PdfEditTool.rectangle ||
               tool == PdfEditTool.ellipse ||
-              tool == PdfEditTool.polygon,
+              tool == PdfEditTool.polygon ||
+              tool == PdfEditTool.cloudPolygon,
         );
       case 'insert':
         return const _StyleFields(opacity: true, font: true, boxColors: true);

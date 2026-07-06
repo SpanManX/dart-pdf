@@ -32,11 +32,14 @@ void main() {
       expect(pdfEditToolShortcuts.keys, isNot(contains(PdfEditTool.polyline)));
       expect(pdfEditToolShortcuts.keys, isNot(contains(PdfEditTool.polygon)));
       expect(
+          pdfEditToolShortcuts.keys, isNot(contains(PdfEditTool.cloudPolygon)));
+      expect(
           pdfEditToolShortcuts.keys, isNot(contains(PdfEditTool.measureArea)));
     });
 
     test('tools with no shortcut report a null label', () {
       expect(pdfEditToolShortcutLabel(PdfEditTool.polyline), isNull);
+      expect(pdfEditToolShortcutLabel(PdfEditTool.cloudPolygon), isNull);
     });
 
     test('labels can be read from a custom shortcut map', () {

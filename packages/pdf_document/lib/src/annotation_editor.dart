@@ -1043,6 +1043,7 @@ extension PdfAnnotationEditing on PdfEditor {
     int? fillColor,
     double opacity = 1,
     List<double>? dashPattern,
+    bool cloudy = false,
     String? contents,
     String? author,
     String? name,
@@ -1050,18 +1051,32 @@ extension PdfAnnotationEditing on PdfEditor {
     if (vertices.length < 3) {
       throw ArgumentError.value(vertices, 'vertices', 'must have 3+ points');
     }
-    final rect = _pointBounds(vertices, strokeWidth);
+    final rect = _pointBounds(vertices,
+        cloudy ? _cloudPadding(strokeWidth) : _linePadding(strokeWidth));
     final gs = _alphaState(opacity);
-    final w = _lineContent(vertices,
-        strokeColor: strokeColor,
-        strokeWidth: strokeWidth,
-        dashPattern: dashPattern,
-        closed: true,
-        fillColor: fillColor,
-        hasAlpha: gs != null);
+    final w = cloudy
+        ? _cloudPolygonContent(vertices,
+            strokeColor: strokeColor,
+            strokeWidth: strokeWidth,
+            dashPattern: dashPattern,
+            fillColor: fillColor,
+            hasAlpha: gs != null)
+        : _lineContent(vertices,
+            strokeColor: strokeColor,
+            strokeWidth: strokeWidth,
+            dashPattern: dashPattern,
+            closed: true,
+            fillColor: fillColor,
+            hasAlpha: gs != null);
     final dict = _markupDict('Polygon', rect, strokeColor, contents, author)
       ..['Vertices'] = _pointArray(vertices)
       ..['BS'] = _borderStyle(strokeWidth, dashPattern: dashPattern);
+    if (cloudy) {
+      dict['BE'] = CosDictionary({
+        'S': const CosName('Cloudy'),
+        'I': const CosReal(1),
+      });
+    }
     if (fillColor != null) dict['IC'] = _colorComponents(fillColor);
     _addAnnotation(
         pageIndex, dict, _form(rect, w, resources: _resources(extGState: gs)),
@@ -2768,6 +2783,7 @@ extension PdfAnnotationEditing on PdfEditor {
     final width = annotation.borderWidth ?? 1;
     if (stroke == null || width <= 0) return;
     final dashed = annotation.borderDash != null;
+    final cloudy = subtype == 'Polygon' && annotation.hasCloudyBorder;
     final fill = subtype == 'Polygon' ? annotation.interiorColor : null;
     final endings = _lineEndings(annotation);
     final endingPoints = subtype == 'Polygon'
@@ -2777,19 +2793,26 @@ extension PdfAnnotationEditing on PdfEditor {
             ..._endingExtent(
                 endings.$2, points.last, points[points.length - 2], width),
           ];
-    final rect = _pointBounds(
-        [...points, ...endingPoints], width + (dashed ? width : 0));
+    final rect = _pointBounds([...points, ...endingPoints],
+        cloudy ? _cloudPadding(width) : _linePadding(width, dashed: dashed));
     final form = annotation.normalAppearance;
     final gs = _alphaState(form == null ? 1 : _appearanceOpacity(form));
-    final w = _lineContent(points,
-        strokeColor: stroke,
-        strokeWidth: width,
-        dashPattern: annotation.borderDash,
-        closed: subtype == 'Polygon',
-        fillColor: fill,
-        startEnding: endings.$1,
-        endEnding: endings.$2,
-        hasAlpha: gs != null);
+    final w = cloudy
+        ? _cloudPolygonContent(points,
+            strokeColor: stroke,
+            strokeWidth: width,
+            dashPattern: annotation.borderDash,
+            fillColor: fill,
+            hasAlpha: gs != null)
+        : _lineContent(points,
+            strokeColor: stroke,
+            strokeWidth: width,
+            dashPattern: annotation.borderDash,
+            closed: subtype == 'Polygon',
+            fillColor: fill,
+            startEnding: endings.$1,
+            endEnding: endings.$2,
+            hasAlpha: gs != null);
     final dict = annotation.dict;
     dict['Rect'] = _rectArray(rect);
     if (subtype == 'Line') {
@@ -3360,15 +3383,22 @@ extension PdfAnnotationEditing on PdfEditor {
         annotation.subtype == 'Polygon' ? annotation.interiorColor : null;
     final endings = _lineEndings(annotation);
     final gs = _alphaState(opacity ?? _appearanceOpacity(form));
-    final w = _lineContent(points,
-        strokeColor: stroke,
-        strokeWidth: width,
-        dashPattern: annotation.borderDash,
-        closed: annotation.subtype == 'Polygon',
-        fillColor: fill,
-        startEnding: endings.$1,
-        endEnding: endings.$2,
-        hasAlpha: gs != null);
+    final w = annotation.subtype == 'Polygon' && annotation.hasCloudyBorder
+        ? _cloudPolygonContent(points,
+            strokeColor: stroke,
+            strokeWidth: width,
+            dashPattern: annotation.borderDash,
+            fillColor: fill,
+            hasAlpha: gs != null)
+        : _lineContent(points,
+            strokeColor: stroke,
+            strokeWidth: width,
+            dashPattern: annotation.borderDash,
+            closed: annotation.subtype == 'Polygon',
+            fillColor: fill,
+            startEnding: endings.$1,
+            endEnding: endings.$2,
+            hasAlpha: gs != null);
     // A measurement carries a caption drawn over the line; regenerate it
     // too (recovering its font/size/color from /DA) so a width or style
     // change never drops the label, widening the BBox/Rect to keep it
@@ -4003,6 +4033,117 @@ extension PdfAnnotationEditing on PdfEditor {
           strokeColor, strokeWidth);
     }
     return w;
+  }
+
+  double _linePadding(double strokeWidth, {bool dashed = false}) =>
+      strokeWidth + (dashed ? strokeWidth : 0);
+
+  double _cloudPadding(double strokeWidth) =>
+      math.max(_linePadding(strokeWidth), math.max(4.0, strokeWidth * 3.0));
+
+  ContentWriter _cloudPolygonContent(
+    List<(double, double)> points, {
+    required int strokeColor,
+    required double strokeWidth,
+    required List<double>? dashPattern,
+    required int? fillColor,
+    required bool hasAlpha,
+  }) {
+    final dashed = dashPattern != null && dashPattern.isNotEmpty;
+    final w = ContentWriter();
+    if (hasAlpha) w.extGState('GS0');
+
+    // Fill the actual polygon footprint first. The cloudy border then
+    // protrudes from it, matching the /Vertices geometry while still
+    // producing the expected cloud outline in viewers that honor /AP.
+    if (fillColor != null) {
+      w.fillColor(fillColor);
+      w.moveTo(points.first.$1, points.first.$2);
+      for (final (x, y) in points.skip(1)) {
+        w.lineTo(x, y);
+      }
+      w.closePath();
+      w.fill();
+    }
+
+    w
+      ..strokeColor(strokeColor)
+      ..lineWidth(strokeWidth)
+      ..lineCap(1)
+      ..lineJoin(1);
+    if (dashed) w.dash(dashPattern);
+    _appendCloudPath(w, points, strokeWidth);
+    w.stroke();
+    if (dashed) w.dash(const []);
+    return w;
+  }
+
+  void _appendCloudPath(
+      ContentWriter w, List<(double, double)> points, double strokeWidth) {
+    if (points.length < 3) return;
+    final clockwise = _signedArea(points) < 0;
+    final radius = math.max(4.0, strokeWidth * 3.0);
+    var first = true;
+    for (var i = 0; i < points.length; i++) {
+      final a = points[i];
+      final b = points[(i + 1) % points.length];
+      final dx = b.$1 - a.$1;
+      final dy = b.$2 - a.$2;
+      final length = math.sqrt(dx * dx + dy * dy);
+      if (length < 0.01) continue;
+      final scallops = math.max(1, (length / (radius * 1.7)).round());
+      final ux = dx / length;
+      final uy = dy / length;
+      // For clockwise polygons the interior is on the right side of each
+      // edge; for counterclockwise polygons it is on the left. Flip that
+      // normal to make the cloud bulge outward.
+      final nx = clockwise ? -uy : uy;
+      final ny = clockwise ? ux : -ux;
+      final k = 0.5522847498307936;
+      for (var j = 0; j < scallops; j++) {
+        final t0 = j / scallops;
+        final t1 = (j + 1) / scallops;
+        final mx0 = a.$1 + dx * t0;
+        final my0 = a.$2 + dy * t0;
+        final mx1 = a.$1 + dx * t1;
+        final my1 = a.$2 + dy * t1;
+        final chord = length / scallops;
+        final bulge = math.min(radius, chord * 0.55);
+        final cx = (mx0 + mx1) / 2 + nx * bulge;
+        final cy = (my0 + my1) / 2 + ny * bulge;
+        if (first) {
+          w.moveTo(mx0, my0);
+          first = false;
+        }
+        w.curveTo(
+          mx0 + ux * chord * k * 0.5,
+          my0 + uy * chord * k * 0.5,
+          cx - ux * chord * k * 0.5,
+          cy - uy * chord * k * 0.5,
+          cx,
+          cy,
+        );
+        w.curveTo(
+          cx + ux * chord * k * 0.5,
+          cy + uy * chord * k * 0.5,
+          mx1 - ux * chord * k * 0.5,
+          my1 - uy * chord * k * 0.5,
+          mx1,
+          my1,
+        );
+      }
+    }
+    w.closePath();
+  }
+
+  double _signedArea(List<(double, double)> points) {
+    var area = 0.0;
+    for (var i = 0; i < points.length; i++) {
+      final a = points[i];
+      final b = points[(i + 1) % points.length];
+      area += a.$1 * b.$2 - b.$1 * a.$2;
+    }
+    return area / 2;
   }
 
   /// One line-ending shape (§12.5.6.7, Table 176) at endpoint [tip], with

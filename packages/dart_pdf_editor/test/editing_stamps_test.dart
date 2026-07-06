@@ -1264,7 +1264,8 @@ void main() {
 
     testWidgets('the picker changes date and time formats', (tester) async {
       SharedPreferences.setMockInitialValues({});
-      final editing = PdfEditingController(buildMultiPagePdf(1));
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..stampTemplateClock = (() => DateTime(2026, 7, 6, 17, 5, 6));
       addTearDown(editing.dispose);
 
       await tester.pumpWidget(MaterialApp(
@@ -1280,17 +1281,20 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
+      expect(find.text('2026-07-06'), findsOneWidget);
+      expect(find.text('17:05 (24 hr)'), findsOneWidget);
+
       await tester.tap(find.byKey(const ValueKey('pdf-stamp-date-format')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('04/07/2026').last);
+      await tester.tap(find.text('06/07/2026').last);
       await tester.pumpAndSettle();
       expect(editing.stampDateFormat, PdfStampDateFormat.dayMonthYear);
 
       await tester.tap(find.byKey(const ValueKey('pdf-stamp-time-format')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('9:05 AM').last);
+      await tester.tap(find.text('17:05:06 (24 hr)').last);
       await tester.pumpAndSettle();
-      expect(editing.stampTimeFormat, PdfStampTimeFormat.twelveHour);
+      expect(editing.stampTimeFormat, PdfStampTimeFormat.twentyFourHourSeconds);
     });
 
     testWidgets('the picker lists app-supplied stamps without delete controls',

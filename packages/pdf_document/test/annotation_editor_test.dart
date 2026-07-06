@@ -1076,6 +1076,37 @@ void main() {
     expect(content, contains('[6 4] 0 d'));
   });
 
+  test('cloud polygon carries border effect and generated cloud appearance',
+      () {
+    final doc = roundTrip((e) {
+      e.addPolygon(
+        0,
+        [(100, 100), (220, 100), (220, 180), (100, 180)],
+        strokeWidth: 3,
+        fillColor: 0xE8F2FF,
+        cloudy: true,
+      );
+    });
+
+    final annotation = doc.page(0).annotations.single;
+    expect(annotation.subtype, 'Polygon');
+    expect(annotation.hasCloudyBorder, isTrue);
+    expect(annotation.vertices, [
+      (100.0, 100.0),
+      (220.0, 100.0),
+      (220.0, 180.0),
+      (100.0, 180.0),
+    ]);
+    final be = doc.cos.resolve(annotation.dict['BE']) as CosDictionary;
+    expect((doc.cos.resolve(be['S']) as CosName).value, 'Cloudy');
+    expect(annotation.rect.left, lessThan(100));
+    expect(annotation.rect.right, greaterThan(220));
+    final content = appearanceText(doc, annotation);
+    expect(content, contains(' c\n'));
+    expect(content, contains('f\n'));
+    expect(content, contains('S\n'));
+  });
+
   test('resizing a dashed arrow regenerates with scaled endpoints', () {
     final first = PdfEditor(PdfDocument.open(buildClassicPdf()))
       ..addLine(0, (100, 100), (200, 140),
