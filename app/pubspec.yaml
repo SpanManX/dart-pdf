@@ -40,7 +40,6 @@ dependencies:
   # Reads the version stamped into the build artifact (derived from the
   # pubspec version above), so the About box can't drift from the release.
   package_info_plus: ^10.2.0
-  super_clipboard: ^0.1.7+6
   web: ^1.1.1
 
 dev_dependencies:

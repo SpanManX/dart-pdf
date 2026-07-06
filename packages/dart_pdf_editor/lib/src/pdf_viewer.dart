@@ -37,6 +37,8 @@ export 'viewport.dart' show PdfViewport, pdfDocumentKey;
 export 'annotation_tap.dart'
     show PdfAnnotationTapDetails, PdfAnnotationTapHandler;
 
+const double _defaultMaxZoom = 24;
+
 /// One search hit with the text around it, ready for a results list
 /// like [PdfSearchResultsPanel].
 class PdfSearchResult {
@@ -499,7 +501,7 @@ class PdfViewer extends StatefulWidget {
     this.initialFit = PdfViewerFit.page,
     this.initialViewport,
     this.minZoom = 0.25,
-    this.maxZoom = 24,
+    this.maxZoom = _defaultMaxZoom,
     this.doubleTapZoom = 2.5,
     this.backgroundColor,
     this.pageColor = const Color(0xFFFFFFFF),
@@ -680,6 +682,10 @@ class PdfViewer extends StatefulWidget {
   /// high for very wide engineering plots and long drawings: fit-width makes
   /// each PDF point tiny on screen, and the deep-zoom detail patch keeps the
   /// visible slice sharp without forcing a full-page raster at this scale.
+  ///
+  /// When the default is used on a narrow viewport, the viewer may lift the
+  /// internal fit-width multiplier so the actual-size cap still reaches at
+  /// least 2400%. Custom [maxZoom] values are respected exactly.
   final double maxZoom;
   final double doubleTapZoom;
 
@@ -1219,7 +1225,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
   }
 
   void _zoomTo(double target, Offset focal) {
-    final zoom = target.clamp(widget.minZoom, widget.maxZoom);
+    final zoom = target.clamp(widget.minZoom, _effectiveMaxZoom);
     if (zoom <= 1) {
       if (_transform.value.getMaxScaleOnAxis() > 1) {
         _transform.value = Matrix4.identity();
@@ -1832,6 +1838,19 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
       ? 1
       : _viewWidth / _maxPointWidth;
 
+  /// Gesture/controller zoom clamps are expressed as fit-width multiples.
+  /// On phone-width viewports fit-width is less than actual size, so the
+  /// stock 24x fit-width cap used to top out below 2400% actual size. Keep
+  /// the default generous there without changing explicit host caps.
+  double get _effectiveMaxZoom {
+    if (widget.maxZoom != _defaultMaxZoom) return widget.maxZoom;
+    final fitWidth = _fitWidthScale;
+    if (!fitWidth.isFinite || fitWidth <= 0 || fitWidth >= 1) {
+      return widget.maxZoom;
+    }
+    return math.max(widget.maxZoom, _defaultMaxZoom / fitWidth);
+  }
+
   /// The on-screen scale the user sees, in logical pixels per PDF point,
   /// where 1.0 is actual size (100%) — independent of the viewport. This is
   /// what [PdfViewerController.zoom] reports.
@@ -2056,7 +2075,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     } else {
       // zoom above fit-width rides the transform over fit-width pages, so
       // the page is the full viewport width here (see _zoomTo)
-      final scale = viewport.zoom.clamp(1.0, widget.maxZoom);
+      final scale = viewport.zoom.clamp(1.0, _effectiveMaxZoom);
       final scroll = listTop.clamp(0.0, maxScroll);
       // solve (p - t) / s = target for the translation, matching the
       // unprojection in _captureViewport / _visibleFractionOf; the page is
@@ -2104,7 +2123,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     final fit = 0.4 *
         math.min(_viewWidth / math.max(target.width, 8),
             _viewHeight / math.max(target.height, 8));
-    final scale = fit.clamp(1.0, widget.maxZoom);
+    final scale = fit.clamp(1.0, _effectiveMaxZoom);
     final scroll = (center.dy - _viewHeight / 2)
         .clamp(0.0, _scroll.position.maxScrollExtent);
     final Matrix4 end;
@@ -4097,7 +4116,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
               child: Stack(children: [
                 InteractiveViewer(
                   transformationController: _transform,
-                  maxScale: widget.maxZoom,
+                  maxScale: _effectiveMaxZoom,
                   // wheel zoom is handled in _onPointerSignal; e^(-dy/∞) = 1
                   // disables InteractiveViewer's own (modifier-blind) version
                   scaleFactor: double.maxFinite,

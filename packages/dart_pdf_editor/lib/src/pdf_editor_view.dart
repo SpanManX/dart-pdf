@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_graphics/pdf_graphics.dart';
 
+import 'editing/editing_color_processing.dart';
 import 'editing/editing_controller.dart';
 import 'editing/editing_menu.dart';
 import 'editing/editing_pencil.dart';
@@ -24,6 +25,7 @@ import 'render_worker.dart';
 import 'search_panel.dart';
 import 'shell_chrome.dart';
 import 'theme.dart';
+import 'toast.dart';
 
 /// Builds the editing toolbar for [PdfEditorView].
 ///
@@ -61,6 +63,7 @@ class PdfEditorFeatures {
     this.colorControls = true,
     this.styleControls = true,
     this.flatten = true,
+    this.colorProcessing = true,
     this.pencilEraserToggle = true,
     this.tools,
     this.toolGroups,
@@ -140,6 +143,10 @@ class PdfEditorFeatures {
 
   /// The toolbar's flatten-annotations button.
   final bool flatten;
+
+  /// The header "Color processing" action: find and replace page-content
+  /// drawing colors across selected pages or the whole document.
+  final bool colorProcessing;
 
   /// Whether the Apple Pencil's hardware double-tap toggles the eraser
   /// (iOS only; a no-op elsewhere, where the gesture doesn't exist). The
@@ -562,6 +569,25 @@ class _PdfEditorViewState extends State<PdfEditorView> {
     session.author = name.trim().isEmpty ? null : name.trim();
   }
 
+  Future<void> _showColorProcessing() async {
+    final count = await showPdfColorProcessingDialog(
+      context,
+      controller: _session,
+      preferences: _prefs,
+    );
+    if (count == null || !mounted) return;
+    final message = switch (count) {
+      0 => 'No matching colors found',
+      1 => 'Replaced 1 color',
+      _ => 'Replaced $count colors',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      behavior: SnackBarBehavior.floating,
+      margin: pdfFloatingToastMargin(context),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final features = widget.features;
@@ -855,6 +881,14 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                     ),
                 ],
                 trailing: [
+                  if (features.colorProcessing)
+                    IconButton(
+                      key: const ValueKey('pdf-shell-color-processing'),
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.palette_outlined),
+                      tooltip: 'Color processing',
+                      onPressed: _showColorProcessing,
+                    ),
                   if (features.viewOptions)
                     PdfShellViewOptionsButton(
                         preferences: prefs,
@@ -890,6 +924,13 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                   if (!altView) PdfShellZoomControl(controller: _viewer),
                 ],
                 compactControls: [
+                  if (features.colorProcessing)
+                    PdfShellControlItem(
+                      key: const ValueKey('pdf-shell-color-processing'),
+                      icon: Icons.palette_outlined,
+                      label: 'Color',
+                      onPressed: _showColorProcessing,
+                    ),
                   if (features.viewOptions) viewOptionsControl,
                   for (final item in panelItems)
                     PdfShellControlItem(

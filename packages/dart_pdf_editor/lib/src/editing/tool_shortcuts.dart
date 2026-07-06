@@ -33,11 +33,12 @@ const Map<PdfEditTool, LogicalKeyboardKey> pdfEditToolShortcuts = {
   PdfEditTool.note: LogicalKeyboardKey.keyN,
   PdfEditTool.stamp: LogicalKeyboardKey.keyS,
   PdfEditTool.image: LogicalKeyboardKey.keyI,
-  PdfEditTool.signature: LogicalKeyboardKey.keyG,
+  PdfEditTool.signature: LogicalKeyboardKey.keyH,
   PdfEditTool.measureDistance: LogicalKeyboardKey.keyM,
   PdfEditTool.form: LogicalKeyboardKey.keyF,
   PdfEditTool.content: LogicalKeyboardKey.keyC,
   PdfEditTool.redact: LogicalKeyboardKey.keyK,
+  PdfEditTool.snapshot: LogicalKeyboardKey.keyG,
 };
 
 /// The display label for [tool]'s shortcut key (e.g. `'V'`), or null when

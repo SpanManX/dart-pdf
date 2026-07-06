@@ -75,7 +75,7 @@ class EditorScreen extends StatefulWidget {
 
   /// Override for writing a captured snapshot to the system clipboard. Tests
   /// inject a fake to assert the Snapshot tool's clipboard wiring without the
-  /// real `super_clipboard` plugin (its platform channel is unavailable under
+  /// real host clipboard channel (unavailable under
   /// flutter_test). Production leaves this null and the screen falls back to
   /// [copyPngToClipboard].
   final ImageClipboardWriter? imageClipboardWriter;

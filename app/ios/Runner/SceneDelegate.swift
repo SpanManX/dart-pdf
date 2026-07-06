@@ -14,6 +14,7 @@ class SceneDelegate: FlutterSceneDelegate {
 
   private var pencilChannel: FlutterMethodChannel?
   private var pencilInteraction: AnyObject?
+  private var imageClipboardChannel: FlutterMethodChannel?
 
   override func scene(
     _ scene: UIScene,
@@ -22,6 +23,7 @@ class SceneDelegate: FlutterSceneDelegate {
   ) {
     super.scene(scene, willConnectTo: session, options: connectionOptions)
     setupChannel()
+    setupImageClipboardChannel()
     setupPencilInteraction()
     handle(connectionOptions.urlContexts)
   }
@@ -50,6 +52,31 @@ class SceneDelegate: FlutterSceneDelegate {
       }
     }
     channel = ch
+  }
+
+  private func setupImageClipboardChannel() {
+    guard imageClipboardChannel == nil,
+      let controller = window?.rootViewController as? FlutterViewController
+    else { return }
+    let ch = FlutterMethodChannel(
+      name: "dev.milanko.dartpdf/image_clipboard",
+      binaryMessenger: controller.binaryMessenger)
+    ch.setMethodCallHandler { (call, result) in
+      guard call.method == "copyPng" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let typed = call.arguments as? FlutterStandardTypedData else {
+        result(FlutterError(
+          code: "bad_args",
+          message: "copyPng expects PNG bytes",
+          details: nil))
+        return
+      }
+      UIPasteboard.general.setData(typed.data, forPasteboardType: "public.png")
+      result(true)
+    }
+    imageClipboardChannel = ch
   }
 
   /// Wires the Apple Pencil's hardware double-tap to the Dart side. Flutter

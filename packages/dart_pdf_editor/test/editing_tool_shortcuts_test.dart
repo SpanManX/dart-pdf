@@ -24,6 +24,10 @@ void main() {
       expect(pdfEditToolShortcuts.keys, contains(PdfEditTool.ink));
       expect(pdfEditToolShortcuts.keys, contains(PdfEditTool.rectangle));
       expect(pdfEditToolShortcuts.keys, contains(PdfEditTool.freeText));
+      expect(
+          pdfEditToolShortcuts[PdfEditTool.snapshot], LogicalKeyboardKey.keyG);
+      expect(
+          pdfEditToolShortcuts[PdfEditTool.signature], LogicalKeyboardKey.keyH);
       // the multi-segment / extra measure variants live one tap away
       expect(pdfEditToolShortcuts.keys, isNot(contains(PdfEditTool.polyline)));
       expect(pdfEditToolShortcuts.keys, isNot(contains(PdfEditTool.polygon)));
@@ -106,6 +110,10 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.keyP);
       await tester.pump();
       expect(editing.tool, PdfEditTool.ink);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyG);
+      await tester.pump();
+      expect(editing.tool, PdfEditTool.snapshot);
     });
 
     testWidgets('pressing a tool key again drops back to Select',

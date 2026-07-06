@@ -866,6 +866,25 @@ void main() {
     expect(controller.zoom, greaterThan(6));
   });
 
+  testWidgets('default max zoom keeps 2400% available on phone-width views',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final controller = await pumpViewer(tester, pages: 1);
+    const phoneFitWidth = 360 / 612;
+    expect(controller.zoom, closeTo(phoneFitWidth, 0.001));
+
+    final interactiveViewer =
+        tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
+    expect(interactiveViewer.maxScale, closeTo(24 / phoneFitWidth, 0.001));
+
+    controller.setZoom(24);
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(controller.zoom, closeTo(24, 0.01));
+  });
+
   testWidgets('tapping a URI link surfaces the action', (tester) async {
     // The default launcher only opens well-known external schemes, so the
     // fixture's app:// link falls through to onAction unchanged.

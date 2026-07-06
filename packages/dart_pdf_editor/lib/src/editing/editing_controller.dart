@@ -2491,6 +2491,63 @@ class PdfEditingController extends ChangeNotifier {
   bool rotateSelectedPages([int degrees = 90]) =>
       rotatePages(selectedPages, degrees);
 
+  /// Replaces matching page-content colors across [pages], or the whole
+  /// document when [pages] is null. Returns the number of color-setting
+  /// operators rewritten.
+  ///
+  /// [find] and [replace] are opaque Flutter colors; alpha is ignored.
+  /// [tolerance] is an 8-bit per-channel tolerance. This is an undoable edit
+  /// over page content streams (text/vector colors), not annotation styling
+  /// or raster image pixel editing.
+  int replaceDocumentColors({
+    required Color find,
+    required Color replace,
+    Iterable<int>? pages,
+    int tolerance = 0,
+    bool fill = true,
+    bool stroke = true,
+  }) {
+    final targets = (pages ??
+            Iterable<int>.generate(_document.pageCount, (index) => index))
+        .where((index) => index >= 0 && index < _document.pageCount)
+        .toSet()
+        .toList()
+      ..sort();
+    if (targets.isEmpty || (!fill && !stroke)) return 0;
+    var count = 0;
+    final changed = apply((editor) {
+      count = editor.replaceColorsOnPages(
+        targets,
+        find: find.toARGB32() & 0xFFFFFF,
+        replace: replace.toARGB32() & 0xFFFFFF,
+        tolerance: tolerance,
+        fill: fill,
+        stroke: stroke,
+      );
+    }, pages: targets);
+    return changed ? count : 0;
+  }
+
+  /// Replaces colors on the thumbnail-strip page selection. Returns zero
+  /// when no pages are selected.
+  int replaceSelectedPageColors({
+    required Color find,
+    required Color replace,
+    int tolerance = 0,
+    bool fill = true,
+    bool stroke = true,
+  }) =>
+      _selectedPages.isEmpty
+          ? 0
+          : replaceDocumentColors(
+              pages: selectedPages,
+              find: find,
+              replace: replace,
+              tolerance: tolerance,
+              fill: fill,
+              stroke: stroke,
+            );
+
   // ---------------------------------------------------------------------
   // selection
 

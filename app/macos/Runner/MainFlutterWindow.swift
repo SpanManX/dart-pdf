@@ -28,6 +28,26 @@ class MainFlutterWindow: NSWindow {
       }
     }
 
+    let imageClipboardChannel = FlutterMethodChannel(
+      name: "dev.milanko.dartpdf/image_clipboard",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+    imageClipboardChannel.setMethodCallHandler { (call, result) in
+      guard call.method == "copyPng" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let typed = call.arguments as? FlutterStandardTypedData else {
+        result(FlutterError(
+          code: "bad_args",
+          message: "copyPng expects PNG bytes",
+          details: nil))
+        return
+      }
+      let pasteboard = NSPasteboard.general
+      pasteboard.clearContents()
+      result(pasteboard.setData(typed.data, forType: .png))
+    }
+
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
