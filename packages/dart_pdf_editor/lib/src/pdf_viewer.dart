@@ -496,6 +496,7 @@ class PdfViewer extends StatefulWidget {
     this.formImagePicker,
     this.fontPicker,
     this.imagePicker,
+    this.systemImagePasteProvider,
     this.onSnapshot,
     this.pageSpacing = 12,
     this.initialFit = PdfViewerFit.page,
@@ -651,6 +652,13 @@ class PdfViewer extends StatefulWidget {
   /// insert — typically a file picker returning PNG or JPEG bytes. With
   /// none, the image tool does nothing.
   final PdfImagePicker? imagePicker;
+
+  /// Supplies image bytes for ⌘V/Ctrl+V when the in-app annotation/vector
+  /// clipboard is empty. When this returns PNG or JPEG bytes, the image is
+  /// placed as a stamp under the cursor, or at the current page center when
+  /// no pointer location is known. When null or when it returns null, paste
+  /// falls back to plain text from Flutter's system clipboard.
+  final PdfSystemImagePasteProvider? systemImagePasteProvider;
 
   /// Receives a region captured by the snapshot tool
   /// ([PdfEditTool.snapshot]) — typically to copy it to the clipboard,
@@ -2775,7 +2783,8 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
   void _onCut() => widget.editing?.cutSelectedAnnotations();
 
   /// ⌘V/Ctrl+V: paste the in-app annotation/snapshot clipboard at the
-  /// cursor. When that clipboard is empty, read plain text from the
+  /// cursor. When that clipboard is empty, ask the host for a system
+  /// clipboard image first, then fall back to plain text from Flutter's
   /// system clipboard and create a FreeText annotation at the same point.
   /// With no pointer seen yet (touch / keyboard-only) annotation paste
   /// falls back to the current page's cascade; text paste lands in the
@@ -2788,7 +2797,7 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     // controller's clipboards)
     final snapshot = editing.hasSnapshotClipboard;
     if (!snapshot && !editing.hasAnnotationClipboard) {
-      unawaited(_pasteSystemClipboardText(editing));
+      unawaited(_pasteSystemClipboard(editing));
       return;
     }
     final local = _lastPointerLocal;
@@ -2804,6 +2813,39 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     } else {
       editing.pasteAnnotations(_controller.currentPage);
     }
+  }
+
+  Future<void> _pasteSystemClipboard(PdfEditingController editing) async {
+    if (await _pasteSystemClipboardImage(editing)) return;
+    await _pasteSystemClipboardText(editing);
+  }
+
+  Future<bool> _pasteSystemClipboardImage(PdfEditingController editing) async {
+    final provider = widget.systemImagePasteProvider;
+    if (provider == null) return false;
+    Uint8List? bytes;
+    try {
+      bytes = await provider(context);
+    } catch (_) {
+      return false;
+    }
+    if (bytes == null || bytes.isEmpty) return false;
+    if (!mounted || widget.editing != editing) return false;
+    final local = _lastPointerLocal;
+    final point = local == null ? null : _pagePointAt(local);
+    if (point != null) {
+      return editing.placeImageAsync(point.$1, point.$2, point.$3, bytes);
+    }
+    if (_pages.isEmpty) return false;
+    final page = _controller.currentPage.clamp(0, _pages.length - 1).toInt();
+    if (page < 0 || page >= _pages.length) return false;
+    final box = _pages[page].cropBox;
+    return editing.placeImageAsync(
+      page,
+      (box.left + box.right) / 2,
+      (box.bottom + box.top) / 2,
+      bytes,
+    );
   }
 
   Future<void> _pasteSystemClipboardText(PdfEditingController editing) async {

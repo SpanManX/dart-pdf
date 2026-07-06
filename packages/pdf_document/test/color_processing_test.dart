@@ -41,6 +41,20 @@ String _content(Uint8List bytes, int page) =>
     latin1.decode(PdfDocument.open(bytes).page(page).contentBytes());
 
 void main() {
+  test('lists explicit page-content colors by frequency', () {
+    final editor = PdfEditor(PdfDocument.open(_pdf([
+      '1 0 0 rg 0 0 10 10 re f\n'
+          '1 0 0 RG 0 0 m 20 20 l S\n'
+          '0 1 0 rg 20 20 10 10 re f\n',
+    ])));
+
+    final colors = editor.contentColors(0);
+
+    expect(colors.map((color) => color.rgb), [0xFF0000, 0x00FF00]);
+    expect(colors.first.fillUses, 1);
+    expect(colors.first.strokeUses, 1);
+  });
+
   test('replaces matching fill and stroke colors in page content', () {
     final editor = PdfEditor(PdfDocument.open(_pdf([
       '1 0 0 rg 0 0 10 10 re f\n'
@@ -99,6 +113,22 @@ void main() {
         editor.replaceColors(0,
             find: 0xFF0000, replace: 0x0000FF, tolerance: 6),
         1);
+  });
+
+  test('can replace matching paths and text with transparent output', () {
+    final editor = PdfEditor(PdfDocument.open(_pdf([
+      '1 0 0 rg 0 0 10 10 re f\n'
+          'BT 12 Tf (Hidden) Tj ET\n'
+          '0 1 0 rg 20 20 10 10 re f\n',
+    ])));
+
+    final count = editor.replaceColors(0, find: 0xFF0000, transparent: true);
+    expect(count, 2);
+
+    final content = _content(editor.save(), 0);
+    expect(content, contains('n\n'));
+    expect(content, contains('3 Tr\n(Hidden) Tj\n0 Tr'));
+    expect(content, contains('0 1 0 rg'));
   });
 
   test('replaceColorsOnPages touches only requested pages', () {

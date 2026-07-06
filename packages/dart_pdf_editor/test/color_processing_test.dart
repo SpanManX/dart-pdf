@@ -114,6 +114,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.byKey(const ValueKey('pdf-color-process-apply')), findsOneWidget);
+    expect(find.byKey(const ValueKey('pdf-color-process-document-colors')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pdf-color-process-color-0')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pdf-color-process-find-picker')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pdf-color-process-replace-picker')),
+        findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('pdf-color-process-apply')),
         kind: PointerDeviceKind.mouse);
@@ -122,6 +130,50 @@ void main() {
     expect(_content(controller, 0), contains('0 0 1 rg'));
 
     // Drain the result SnackBar's timer.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+      'color processing dialog can replace a document swatch with '
+      'transparent output', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = PdfEditingController(_pdf([
+      '1 0 0 rg 0 0 10 10 re f',
+    ]));
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: PdfEditorView(
+          controller: controller,
+          showSaveButton: false,
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('pdf-group-edit')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('pdf-toolbar-color-processing')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pdf-color-process-color-16711680')),
+        findsOneWidget);
+    await tester.tap(
+        find.byKey(const ValueKey('pdf-color-process-transparent')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('pdf-color-process-apply')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+
+    expect(_content(controller, 0), contains('n\n'));
+
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
   });

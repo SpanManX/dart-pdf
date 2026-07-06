@@ -10,7 +10,7 @@ import 'image_clipboard_io.dart'
 
 export 'image_clipboard_io.dart'
     if (dart.library.js_interop) 'image_clipboard_web.dart'
-    show copyPngToClipboard;
+    show copyPngToClipboard, readImageFromClipboard;
 
 /// Writes PNG-encoded image [bytes] to the system clipboard. Returns true on
 /// success, false (or throws) when the running platform can't.
@@ -20,6 +20,10 @@ export 'image_clipboard_io.dart'
 /// screen injects a fake through in tests (the real writers' channels are
 /// unavailable under `flutter test`).
 typedef ImageClipboardWriter = Future<bool> Function(Uint8List bytes);
+
+/// Reads PNG/JPEG-compatible image bytes from the system clipboard. Returns
+/// null when the clipboard has no image or the platform denies access.
+typedef ImageClipboardReader = Future<Uint8List?> Function();
 
 /// Builds the [PdfSnapshotHandler] the editor passes to the viewer's Snapshot
 /// tool. The tool already keeps a *vector* copy on the in-app clipboard for

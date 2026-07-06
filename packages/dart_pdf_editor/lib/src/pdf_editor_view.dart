@@ -215,6 +215,7 @@ class PdfEditorView extends StatefulWidget {
     this.annotationMenuBuilder,
     this.formImagePicker,
     this.imagePicker,
+    this.systemImagePasteProvider,
     this.customStamps = const [],
     this.fontPicker,
     this.onSnapshot,
@@ -321,6 +322,9 @@ class PdfEditorView extends StatefulWidget {
 
   /// See [PdfViewer.imagePicker].
   final PdfImagePicker? imagePicker;
+
+  /// See [PdfViewer.systemImagePasteProvider].
+  final PdfSystemImagePasteProvider? systemImagePasteProvider;
 
   /// Stamps supplied by the host app. These appear in the stock stamp picker
   /// alongside user-saved stamps but are not persisted or deletable there.
@@ -938,6 +942,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                         annotationMenuBuilder: widget.annotationMenuBuilder,
                         formImagePicker: widget.formImagePicker,
                         imagePicker: widget.imagePicker,
+                        systemImagePasteProvider:
+                            widget.systemImagePasteProvider,
                         onSnapshot: widget.onSnapshot,
                         editingTextPrompt: widget.textPrompt,
                         initialFit: widget.initialFit,

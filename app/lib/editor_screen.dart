@@ -45,6 +45,7 @@ class EditorScreen extends StatefulWidget {
     this.autoCheckUpdates = false,
     this.printDocument,
     this.imageClipboardWriter,
+    this.imageClipboardReader,
   });
 
   final PdfEditingPreferences prefs;
@@ -79,6 +80,10 @@ class EditorScreen extends StatefulWidget {
   /// flutter_test). Production leaves this null and the screen falls back to
   /// [copyPngToClipboard].
   final ImageClipboardWriter? imageClipboardWriter;
+
+  /// Override for reading an image from the system clipboard. Tests inject a
+  /// fake; production falls back to [readImageFromClipboard].
+  final ImageClipboardReader? imageClipboardReader;
 
   @override
   State<EditorScreen> createState() => _EditorScreenState();
@@ -1046,6 +1051,8 @@ class _EditorScreenState extends State<EditorScreen>
       annotationMenuBuilder: _annotationMenuActions,
       formImagePicker: (context, field) => pickImageBytes(),
       imagePicker: (context) => pickImageBytes(),
+      systemImagePasteProvider: (context) =>
+          (widget.imageClipboardReader ?? readImageFromClipboard)(),
       // The Snapshot tool keeps a vector copy on the in-app clipboard for
       // paste-back; this also drops the captured PNG on the system clipboard.
       onSnapshot: clipboardSnapshotHandler(

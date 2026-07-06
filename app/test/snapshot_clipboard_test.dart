@@ -132,6 +132,30 @@ void main() {
     expect(reported, isTrue);
   });
 
+  testWidgets('the default reader asks the native channel for image bytes',
+      (tester) async {
+    const channel = MethodChannel('dev.milanko.dartpdf/image_clipboard');
+    final image = Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 1, 2]);
+    var calls = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      channel,
+      (call) async {
+        expect(call.method, 'readImage');
+        calls++;
+        return image;
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final read = await readImageFromClipboard();
+
+    expect(calls, 1);
+    expect(read, image);
+  });
+
   group('Snapshot tool through the viewer', () {
     const scale = 800 / 612;
     Offset view(double x, double y) => Offset(x * scale, (792 - y) * scale);

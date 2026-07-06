@@ -1894,13 +1894,21 @@ class PdfEditingController extends ChangeNotifier {
   }
 
   bool _addImageStamp(int pageIndex, PdfRect rect, PdfEmbeddableImage image) {
-    return apply(
+    final added = apply(
         (e) => e.addImageStamp(pageIndex, rect, image,
             opacity: preferences.opacity,
             pageRotation: _page(pageIndex).rotation,
             author: author),
         pages: [pageIndex],
         contentPages: const <int>[]);
+    if (!added) return false;
+    tool = PdfEditTool.select;
+    final total = _page(pageIndex).annotations.length;
+    _selected
+      ..clear()
+      ..add((pageIndex, total - 1));
+    notifyListeners();
+    return true;
   }
 
   /// Adds a sticky note with its top-left corner at ([x], [y]).
@@ -2491,19 +2499,14 @@ class PdfEditingController extends ChangeNotifier {
   bool rotateSelectedPages([int degrees = 90]) =>
       rotatePages(selectedPages, degrees);
 
-  /// Replaces matching page-content colors across [pages], or the whole
-  /// document when [pages] is null. Returns the number of color-setting
-  /// operators rewritten.
+  /// Returns explicit page-content colors across [pages], or the whole
+  /// document when [pages] is null.
   ///
-  /// [find] and [replace] are opaque Flutter colors; alpha is ignored.
-  /// [tolerance] is an 8-bit per-channel tolerance. This is an undoable edit
-  /// over page content streams (text/vector colors), not annotation styling
-  /// or raster image pixel editing.
-  int replaceDocumentColors({
-    required Color find,
-    required Color replace,
+  /// The list is sorted by frequency descending. It scans content-stream
+  /// color operators, not raster image pixels, annotations, shadings,
+  /// patterns, form XObjects, or implicit default black.
+  List<Color> documentContentColors({
     Iterable<int>? pages,
-    int tolerance = 0,
     bool fill = true,
     bool stroke = true,
   }) {
@@ -2513,16 +2516,54 @@ class PdfEditingController extends ChangeNotifier {
         .toSet()
         .toList()
       ..sort();
+    if (targets.isEmpty || (!fill && !stroke)) return const [];
+    final editor = PdfEditor(_document);
+    return [
+      for (final color
+          in editor.contentColorsOnPages(targets, fill: fill, stroke: stroke))
+        Color(0xFF000000 | color.rgb)
+    ];
+  }
+
+  /// Replaces matching page-content colors across [pages], or the whole
+  /// document when [pages] is null. Returns the number of color-setting
+  /// operators rewritten, or the number of paint sides suppressed when
+  /// [transparent] is true.
+  ///
+  /// [find] and [replace] are opaque Flutter colors; alpha is ignored.
+  /// [replace] may be omitted only when [transparent] is true. [tolerance] is
+  /// an 8-bit per-channel tolerance. This is an undoable edit over page
+  /// content streams (text/vector colors), not annotation styling or raster
+  /// image pixel editing.
+  int replaceDocumentColors({
+    required Color find,
+    Color? replace,
+    Iterable<int>? pages,
+    int tolerance = 0,
+    bool fill = true,
+    bool stroke = true,
+    bool transparent = false,
+  }) {
+    final targets = (pages ??
+            Iterable<int>.generate(_document.pageCount, (index) => index))
+        .where((index) => index >= 0 && index < _document.pageCount)
+        .toSet()
+        .toList()
+      ..sort();
     if (targets.isEmpty || (!fill && !stroke)) return 0;
+    if (!transparent && replace == null) {
+      throw ArgumentError.notNull('replace');
+    }
     var count = 0;
     final changed = apply((editor) {
       count = editor.replaceColorsOnPages(
         targets,
         find: find.toARGB32() & 0xFFFFFF,
-        replace: replace.toARGB32() & 0xFFFFFF,
+        replace: replace?.toARGB32() ?? 0,
         tolerance: tolerance,
         fill: fill,
         stroke: stroke,
+        transparent: transparent,
       );
     }, pages: targets);
     return changed ? count : 0;
@@ -2532,10 +2573,11 @@ class PdfEditingController extends ChangeNotifier {
   /// when no pages are selected.
   int replaceSelectedPageColors({
     required Color find,
-    required Color replace,
+    Color? replace,
     int tolerance = 0,
     bool fill = true,
     bool stroke = true,
+    bool transparent = false,
   }) =>
       _selectedPages.isEmpty
           ? 0
@@ -2546,6 +2588,7 @@ class PdfEditingController extends ChangeNotifier {
               tolerance: tolerance,
               fill: fill,
               stroke: stroke,
+              transparent: transparent,
             );
 
   // ---------------------------------------------------------------------

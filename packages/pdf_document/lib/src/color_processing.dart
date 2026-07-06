@@ -1,14 +1,101 @@
 part of 'editor.dart';
 
+/// A device color found in page-content color operators.
+class PdfContentColor {
+  const PdfContentColor({
+    required this.rgb,
+    required this.fillUses,
+    required this.strokeUses,
+  });
+
+  /// The color as `0xRRGGBB`.
+  final int rgb;
+
+  /// Number of non-stroking color operators using this color.
+  final int fillUses;
+
+  /// Number of stroking color operators using this color.
+  final int strokeUses;
+
+  /// Total number of color operators using this color.
+  int get uses => fillUses + strokeUses;
+}
+
+class _ContentColorAccumulator {
+  var fillUses = 0;
+  var strokeUses = 0;
+}
+
 /// Page-content color processing: find a device color and replace it with
 /// another across content streams.
 extension PdfColorProcessing on PdfEditor {
+  /// Returns the device colors explicitly set on page [index], sorted by
+  /// frequency descending and then by RGB value.
+  ///
+  /// This scans page-content color operators in DeviceGray, DeviceRGB and
+  /// DeviceCMYK, plus `sc`/`SC` variants while the current color space is one
+  /// of those device spaces. Image pixels, shadings, patterns, form XObjects,
+  /// annotation appearances, and implicit default black are outside this pass.
+  List<PdfContentColor> contentColors(
+    int index, {
+    bool fill = true,
+    bool stroke = true,
+  }) {
+    if (!fill && !stroke) return const [];
+    if (index < 0 || index >= document.pageCount) {
+      throw RangeError.range(index, 0, document.pageCount - 1, 'index');
+    }
+    final page = document.page(index);
+    final operations = ContentStreamParser.parse(page.contentBytes());
+    final collector = _ColorCollector(
+      editor: this,
+      page: page,
+      fill: fill,
+      stroke: stroke,
+    )..scan(operations);
+    return collector.colors();
+  }
+
+  /// Returns the explicit device colors set on [indices] as one merged list.
+  List<PdfContentColor> contentColorsOnPages(
+    Iterable<int> indices, {
+    bool fill = true,
+    bool stroke = true,
+  }) {
+    if (!fill && !stroke) return const [];
+    final uses = <int, _ContentColorAccumulator>{};
+    final seen = <int>{};
+    for (final index in indices) {
+      if (!seen.add(index)) continue;
+      for (final color in contentColors(index, fill: fill, stroke: stroke)) {
+        final acc = uses.putIfAbsent(color.rgb, _ContentColorAccumulator.new);
+        acc.fillUses += color.fillUses;
+        acc.strokeUses += color.strokeUses;
+      }
+    }
+    final colors = [
+      for (final entry in uses.entries)
+        PdfContentColor(
+          rgb: entry.key,
+          fillUses: entry.value.fillUses,
+          strokeUses: entry.value.strokeUses,
+        )
+    ];
+    colors.sort((a, b) {
+      final byUses = b.uses.compareTo(a.uses);
+      return byUses != 0 ? byUses : a.rgb.compareTo(b.rgb);
+    });
+    return colors;
+  }
+
   /// Replaces matching vector/text drawing colors on page [index].
   ///
-  /// [find] and [replace] are `0xRRGGBB`. [tolerance] is an 8-bit channel
-  /// tolerance (`0` means exact; `255` matches every channel). Set [fill] or
-  /// [stroke] false to leave that paint side untouched. Returns the number
-  /// of color-setting operators rewritten.
+  /// [find] and [replace] are `0xRRGGBB`; [replace] is ignored when
+  /// [transparent] is true. [tolerance] is an 8-bit channel tolerance (`0`
+  /// means exact; `255` matches every channel). Set [fill] or [stroke] false
+  /// to leave that paint side untouched. Returns the number of color-setting
+  /// operators rewritten, or the number of paint sides suppressed in
+  /// transparent mode.
   ///
   /// This edits page content streams: text fill, path fill/stroke, and other
   /// operators that set the current non-stroking/stroking color. It handles
@@ -19,10 +106,11 @@ extension PdfColorProcessing on PdfEditor {
   int replaceColors(
     int index, {
     required int find,
-    required int replace,
+    int replace = 0x000000,
     int tolerance = 0,
     bool fill = true,
     bool stroke = true,
+    bool transparent = false,
   }) {
     if (!fill && !stroke) return 0;
     if (index < 0 || index >= document.pageCount) {
@@ -38,6 +126,7 @@ extension PdfColorProcessing on PdfEditor {
       tolerance: tolerance.clamp(0, 255).toInt(),
       fill: fill,
       stroke: stroke,
+      transparent: transparent,
     );
     final rewritten = processor.rewrite(operations);
     if (processor.count == 0) return 0;
@@ -50,10 +139,11 @@ extension PdfColorProcessing on PdfEditor {
   int replaceColorsOnPages(
     Iterable<int> indices, {
     required int find,
-    required int replace,
+    int replace = 0x000000,
     int tolerance = 0,
     bool fill = true,
     bool stroke = true,
+    bool transparent = false,
   }) {
     var count = 0;
     final seen = <int>{};
@@ -66,6 +156,7 @@ extension PdfColorProcessing on PdfEditor {
         tolerance: tolerance,
         fill: fill,
         stroke: stroke,
+        transparent: transparent,
       );
     }
     return count;
@@ -80,132 +171,123 @@ class _ColorGraphicsState {
   const _ColorGraphicsState({
     this.fillSpace = _DeviceColorSpace.gray,
     this.strokeSpace = _DeviceColorSpace.gray,
+    this.transparentFill = false,
+    this.transparentStroke = false,
+    this.textRenderingMode = 0,
   });
 
   final _DeviceColorSpace fillSpace;
   final _DeviceColorSpace strokeSpace;
+  final bool transparentFill;
+  final bool transparentStroke;
+  final int textRenderingMode;
 
   _ColorGraphicsState copyWith({
     _DeviceColorSpace? fillSpace,
     _DeviceColorSpace? strokeSpace,
+    bool? transparentFill,
+    bool? transparentStroke,
+    int? textRenderingMode,
   }) =>
       _ColorGraphicsState(
         fillSpace: fillSpace ?? this.fillSpace,
         strokeSpace: strokeSpace ?? this.strokeSpace,
+        transparentFill: transparentFill ?? this.transparentFill,
+        transparentStroke: transparentStroke ?? this.transparentStroke,
+        textRenderingMode: textRenderingMode ?? this.textRenderingMode,
       );
 }
 
-class _ColorProcessor {
-  _ColorProcessor({
+abstract class _ColorScannerBase {
+  _ColorScannerBase({
     required this.editor,
     required this.page,
-    required this.find,
-    required this.replace,
-    required this.tolerance,
     required this.fill,
     required this.stroke,
   });
 
   final PdfEditor editor;
   final PdfPage page;
-  final int find;
-  final int replace;
-  final int tolerance;
   final bool fill;
   final bool stroke;
 
-  int count = 0;
   _ColorGraphicsState _state = const _ColorGraphicsState();
   final List<_ColorGraphicsState> _stack = [];
 
-  List<ContentOperation> rewrite(List<ContentOperation> operations) {
-    final out = <ContentOperation>[];
-    for (final op in operations) {
-      out.add(_rewriteOperation(op));
-    }
-    return out;
-  }
-
-  ContentOperation _rewriteOperation(ContentOperation op) {
+  void _trackOperation(ContentOperation op) {
     switch (op.operator) {
       case 'q':
         _stack.add(_state);
-        return op;
+        return;
       case 'Q':
         if (_stack.isNotEmpty) _state = _stack.removeLast();
-        return op;
+        return;
       case 'cs':
-        _state = _state.copyWith(fillSpace: _spaceFromOperands(op.operands));
-        return op;
+        _state = _state.copyWith(
+          fillSpace: _spaceFromOperands(op.operands),
+          transparentFill: false,
+        );
+        return;
       case 'CS':
-        _state = _state.copyWith(strokeSpace: _spaceFromOperands(op.operands));
-        return op;
+        _state = _state.copyWith(
+          strokeSpace: _spaceFromOperands(op.operands),
+          transparentStroke: false,
+        );
+        return;
       case 'g':
-        return _deviceColor(op, _PaintSide.fill, _DeviceColorSpace.gray);
+        _setColor(op, _PaintSide.fill, _DeviceColorSpace.gray);
+        return;
       case 'G':
-        return _deviceColor(op, _PaintSide.stroke, _DeviceColorSpace.gray);
+        _setColor(op, _PaintSide.stroke, _DeviceColorSpace.gray);
+        return;
       case 'rg':
-        return _deviceColor(op, _PaintSide.fill, _DeviceColorSpace.rgb);
+        _setColor(op, _PaintSide.fill, _DeviceColorSpace.rgb);
+        return;
       case 'RG':
-        return _deviceColor(op, _PaintSide.stroke, _DeviceColorSpace.rgb);
+        _setColor(op, _PaintSide.stroke, _DeviceColorSpace.rgb);
+        return;
       case 'k':
-        return _deviceColor(op, _PaintSide.fill, _DeviceColorSpace.cmyk);
+        _setColor(op, _PaintSide.fill, _DeviceColorSpace.cmyk);
+        return;
       case 'K':
-        return _deviceColor(op, _PaintSide.stroke, _DeviceColorSpace.cmyk);
+        _setColor(op, _PaintSide.stroke, _DeviceColorSpace.cmyk);
+        return;
       case 'sc' || 'scn':
-        return _currentSpaceColor(op, _PaintSide.fill);
+        _currentSpaceColor(op, _PaintSide.fill);
+        return;
       case 'SC' || 'SCN':
-        return _currentSpaceColor(op, _PaintSide.stroke);
-      default:
-        return op;
+        _currentSpaceColor(op, _PaintSide.stroke);
+        return;
+      case 'Tr':
+        final value = _intOperand(op.operands.firstOrNull);
+        if (value != null) {
+          _state = _state.copyWith(textRenderingMode: value.clamp(0, 7));
+        }
+        return;
     }
   }
 
-  ContentOperation _deviceColor(
+  void _setColor(
       ContentOperation op, _PaintSide side, _DeviceColorSpace space) {
     _setSpace(side, space);
-    return _maybeReplace(op, side, space);
+    _onColor(op, side, space);
   }
 
-  ContentOperation _currentSpaceColor(ContentOperation op, _PaintSide side) {
+  void _currentSpaceColor(ContentOperation op, _PaintSide side) {
     if (op.operands.any((operand) => operand is CosName)) {
-      return op; // pattern names and separations are outside this pass
+      return; // pattern names and separations are outside this pass
     }
     final space =
         side == _PaintSide.fill ? _state.fillSpace : _state.strokeSpace;
-    return _maybeReplace(op, side, space);
+    _onColor(op, side, space);
   }
 
-  ContentOperation _maybeReplace(
-      ContentOperation op, _PaintSide side, _DeviceColorSpace space) {
-    if (side == _PaintSide.fill && !fill) return op;
-    if (side == _PaintSide.stroke && !stroke) return op;
-    final rgb = _rgbFrom(op.operands, space);
-    if (rgb == null || !_matches(rgb)) return op;
-    count++;
-    _setSpace(side, _DeviceColorSpace.rgb);
-    return ContentOperation(
-      side == _PaintSide.fill ? 'rg' : 'RG',
-      _rgbOperands(replace),
-    );
-  }
+  void _onColor(ContentOperation op, _PaintSide side, _DeviceColorSpace space);
 
   void _setSpace(_PaintSide side, _DeviceColorSpace space) {
     _state = side == _PaintSide.fill
         ? _state.copyWith(fillSpace: space)
         : _state.copyWith(strokeSpace: space);
-  }
-
-  bool _matches(int rgb) {
-    final ar = (rgb >> 16) & 0xFF;
-    final ag = (rgb >> 8) & 0xFF;
-    final ab = rgb & 0xFF;
-    final br = (find >> 16) & 0xFF;
-    final bg = (find >> 8) & 0xFF;
-    final bb = find & 0xFF;
-    return (ar - br).abs() <= tolerance &&
-        (ag - bg).abs() <= tolerance &&
-        (ab - bb).abs() <= tolerance;
   }
 
   _DeviceColorSpace _spaceFromOperands(List<CosObject> operands) {
@@ -287,6 +369,276 @@ class _ColorProcessor {
       case _DeviceColorSpace.other:
         return null;
     }
+  }
+
+  int? _intOperand(CosObject? object) => switch (object) {
+        CosInteger(:final value) => value,
+        CosReal(:final value) => value.round(),
+        _ => null,
+      };
+}
+
+class _ColorCollector extends _ColorScannerBase {
+  _ColorCollector({
+    required super.editor,
+    required super.page,
+    required super.fill,
+    required super.stroke,
+  });
+
+  final _uses = <int, _ContentColorAccumulator>{};
+
+  void scan(List<ContentOperation> operations) {
+    for (final op in operations) {
+      _trackOperation(op);
+    }
+  }
+
+  @override
+  void _onColor(ContentOperation op, _PaintSide side, _DeviceColorSpace space) {
+    if (side == _PaintSide.fill && !fill) return;
+    if (side == _PaintSide.stroke && !stroke) return;
+    final rgb = _rgbFrom(op.operands, space);
+    if (rgb == null) return;
+    final acc = _uses.putIfAbsent(rgb, _ContentColorAccumulator.new);
+    if (side == _PaintSide.fill) {
+      acc.fillUses++;
+    } else {
+      acc.strokeUses++;
+    }
+  }
+
+  List<PdfContentColor> colors() {
+    final colors = [
+      for (final entry in _uses.entries)
+        PdfContentColor(
+          rgb: entry.key,
+          fillUses: entry.value.fillUses,
+          strokeUses: entry.value.strokeUses,
+        )
+    ];
+    colors.sort((a, b) {
+      final byUses = b.uses.compareTo(a.uses);
+      return byUses != 0 ? byUses : a.rgb.compareTo(b.rgb);
+    });
+    return colors;
+  }
+}
+
+class _ColorProcessor extends _ColorScannerBase {
+  _ColorProcessor({
+    required super.editor,
+    required super.page,
+    required this.find,
+    required this.replace,
+    required this.tolerance,
+    required super.fill,
+    required super.stroke,
+    required this.transparent,
+  });
+
+  final int find;
+  final int replace;
+  final int tolerance;
+  final bool transparent;
+
+  int count = 0;
+
+  List<ContentOperation> rewrite(List<ContentOperation> operations) {
+    final out = <ContentOperation>[];
+    for (final op in operations) {
+      out.addAll(_rewriteOperation(op));
+    }
+    return out;
+  }
+
+  List<ContentOperation> _rewriteOperation(ContentOperation op) {
+    switch (op.operator) {
+      case 'q':
+        _trackOperation(op);
+        return [op];
+      case 'Q':
+        _trackOperation(op);
+        return [op];
+      case 'cs':
+        _trackOperation(op);
+        return [op];
+      case 'CS':
+        _trackOperation(op);
+        return [op];
+      case 'g':
+        return [_deviceColor(op, _PaintSide.fill, _DeviceColorSpace.gray)];
+      case 'G':
+        return [_deviceColor(op, _PaintSide.stroke, _DeviceColorSpace.gray)];
+      case 'rg':
+        return [_deviceColor(op, _PaintSide.fill, _DeviceColorSpace.rgb)];
+      case 'RG':
+        return [_deviceColor(op, _PaintSide.stroke, _DeviceColorSpace.rgb)];
+      case 'k':
+        return [_deviceColor(op, _PaintSide.fill, _DeviceColorSpace.cmyk)];
+      case 'K':
+        return [_deviceColor(op, _PaintSide.stroke, _DeviceColorSpace.cmyk)];
+      case 'sc' || 'scn':
+        return [_currentColor(op, _PaintSide.fill)];
+      case 'SC' || 'SCN':
+        return [_currentColor(op, _PaintSide.stroke)];
+      case 'Tr':
+        _trackOperation(op);
+        return [op];
+      case 'S' || 's' || 'f' || 'F' || 'f*' || 'B' || 'B*' || 'b' || 'b*':
+        return _rewritePathPaint(op);
+      case 'Tj' || 'TJ' || "'" || '"':
+        return _rewriteTextShow(op);
+      default:
+        return [op];
+    }
+  }
+
+  ContentOperation _deviceColor(
+      ContentOperation op, _PaintSide side, _DeviceColorSpace space) {
+    _setSpace(side, space);
+    return _maybeReplace(op, side, space);
+  }
+
+  ContentOperation _currentColor(ContentOperation op, _PaintSide side) {
+    if (op.operands.any((operand) => operand is CosName)) {
+      return op; // pattern names and separations are outside this pass
+    }
+    final space =
+        side == _PaintSide.fill ? _state.fillSpace : _state.strokeSpace;
+    return _maybeReplace(op, side, space);
+  }
+
+  ContentOperation _maybeReplace(
+      ContentOperation op, _PaintSide side, _DeviceColorSpace space) {
+    if (side == _PaintSide.fill && !fill) return op;
+    if (side == _PaintSide.stroke && !stroke) return op;
+    final rgb = _rgbFrom(op.operands, space);
+    final matched = rgb != null && _matches(rgb);
+    if (transparent) {
+      if (side == _PaintSide.fill) {
+        _state = _state.copyWith(transparentFill: matched);
+      } else {
+        _state = _state.copyWith(transparentStroke: matched);
+      }
+      return op;
+    }
+    if (rgb == null || !matched) return op;
+    count++;
+    _setSpace(side, _DeviceColorSpace.rgb);
+    return ContentOperation(
+      side == _PaintSide.fill ? 'rg' : 'RG',
+      _rgbOperands(replace),
+    );
+  }
+
+  bool _matches(int rgb) {
+    final ar = (rgb >> 16) & 0xFF;
+    final ag = (rgb >> 8) & 0xFF;
+    final ab = rgb & 0xFF;
+    final br = (find >> 16) & 0xFF;
+    final bg = (find >> 8) & 0xFF;
+    final bb = find & 0xFF;
+    return (ar - br).abs() <= tolerance &&
+        (ag - bg).abs() <= tolerance &&
+        (ab - bb).abs() <= tolerance;
+  }
+
+  @override
+  void _onColor(ContentOperation op, _PaintSide side, _DeviceColorSpace space) {
+    _maybeReplace(op, side, space);
+  }
+
+  List<ContentOperation> _rewritePathPaint(ContentOperation op) {
+    if (!transparent) return [op];
+    final usesFill = switch (op.operator) {
+      'f' || 'F' || 'f*' || 'B' || 'B*' || 'b' || 'b*' => true,
+      _ => false,
+    };
+    final usesStroke = switch (op.operator) {
+      'S' || 's' || 'B' || 'B*' || 'b' || 'b*' => true,
+      _ => false,
+    };
+    final dropFill = usesFill && _state.transparentFill;
+    final dropStroke = usesStroke && _state.transparentStroke;
+    if (!dropFill && !dropStroke) return [op];
+    count += (dropFill ? 1 : 0) + (dropStroke ? 1 : 0);
+
+    final close =
+        op.operator == 's' || op.operator == 'b' || op.operator == 'b*';
+    if (dropFill && dropStroke) {
+      return [
+        if (close) ContentOperation('h', const []),
+        ContentOperation('n', const []),
+      ];
+    }
+    if (dropFill) {
+      if (!usesStroke) {
+        return [ContentOperation('n', const [])];
+      }
+      return [ContentOperation(close ? 's' : 'S', const [])];
+    }
+    if (dropStroke) {
+      if (!usesFill) {
+        return [
+          if (close) ContentOperation('h', const []),
+          ContentOperation('n', const []),
+        ];
+      }
+      final fillOp = (op.operator == 'B*' || op.operator == 'b*') ? 'f*' : 'f';
+      return [
+        if (close) ContentOperation('h', const []),
+        ContentOperation(fillOp, const []),
+      ];
+    }
+    return [op];
+  }
+
+  List<ContentOperation> _rewriteTextShow(ContentOperation op) {
+    if (!transparent) return [op];
+    final mode = _state.textRenderingMode;
+    final paintsFill = _textModePaintsFill(mode);
+    final paintsStroke = _textModePaintsStroke(mode);
+    final dropFill = paintsFill && _state.transparentFill;
+    final dropStroke = paintsStroke && _state.transparentStroke;
+    if (!dropFill && !dropStroke) return [op];
+    final nextMode = _textModeWithout(
+      mode,
+      fill: dropFill,
+      stroke: dropStroke,
+    );
+    if (nextMode == mode) return [op];
+    count += (dropFill ? 1 : 0) + (dropStroke ? 1 : 0);
+    return [
+      ContentOperation('Tr', [CosInteger(nextMode)]),
+      op,
+      ContentOperation('Tr', [CosInteger(mode)]),
+    ];
+  }
+
+  bool _textModePaintsFill(int mode) {
+    final base = mode & 3;
+    return base == 0 || base == 2;
+  }
+
+  bool _textModePaintsStroke(int mode) {
+    final base = mode & 3;
+    return base == 1 || base == 2;
+  }
+
+  int _textModeWithout(int mode, {required bool fill, required bool stroke}) {
+    final clip = mode >= 4;
+    var paintsFill = _textModePaintsFill(mode);
+    var paintsStroke = _textModePaintsStroke(mode);
+    if (fill) paintsFill = false;
+    if (stroke) paintsStroke = false;
+    final base = switch ((paintsFill, paintsStroke)) {
+      (true, true) => 2,
+      (true, false) => 0,
+      (false, true) => 1,
+      (false, false) => 3,
+    };
+    return base + (clip ? 4 : 0);
   }
 
   List<CosObject> _rgbOperands(int rgb) => [

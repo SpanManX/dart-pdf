@@ -34,17 +34,19 @@ class MainActivity : FlutterActivity() {
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, imageClipboardChannelName)
             .setMethodCallHandler { call, result ->
-                if (call.method != "copyPng") {
-                    result.notImplemented()
-                    return@setMethodCallHandler
-                }
-                val bytes = call.arguments as? ByteArray
-                if (bytes == null) {
-                    result.error("bad_args", "copyPng expects PNG bytes", null)
-                    return@setMethodCallHandler
-                }
                 try {
-                    result.success(copyPngToClipboard(bytes))
+                    when (call.method) {
+                        "copyPng" -> {
+                            val bytes = call.arguments as? ByteArray
+                            if (bytes == null) {
+                                result.error("bad_args", "copyPng expects PNG bytes", null)
+                                return@setMethodCallHandler
+                            }
+                            result.success(copyPngToClipboard(bytes))
+                        }
+                        "readImage" -> result.success(readImageFromClipboard())
+                        else -> result.notImplemented()
+                    }
                 } catch (e: Exception) {
                     result.error("clipboard_error", e.message, null)
                 }
@@ -107,5 +109,20 @@ class MainActivity : FlutterActivity() {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newUri(contentResolver, "Snapshot", uri))
         return true
+    }
+
+    private fun readImageFromClipboard(): ByteArray? {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip ?: return null
+        val description = clip.description
+        for (i in 0 until clip.itemCount) {
+            val uri = clip.getItemAt(i).uri ?: continue
+            val type = contentResolver.getType(uri)
+            val looksLikeImage =
+                type?.startsWith("image/") == true || description.hasMimeType("image/*")
+            if (!looksLikeImage) continue
+            return contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        }
+        return null
     }
 }

@@ -37,15 +37,18 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
   Color _find = const Color(0xFF000000);
   late Color _replace;
   late bool _selectedPages;
+  late List<Color> _documentColors;
   var _tolerance = 0;
   var _fill = true;
   var _stroke = true;
+  var _replaceTransparent = false;
 
   @override
   void initState() {
     super.initState();
     _replace = widget.controller.color;
     _selectedPages = widget.controller.selectedPageCount > 0;
+    _refreshDocumentColors(preferFirst: true);
   }
 
   Future<void> _pickFind() => _pickColor(_find, (value) => _find = value);
@@ -64,15 +67,51 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
     setState(() => setColor(color));
   }
 
+  Iterable<int>? get _targetPages =>
+      _selectedPages ? widget.controller.selectedPages : null;
+
+  void _refreshDocumentColors({bool preferFirst = false}) {
+    _documentColors = widget.controller.documentContentColors(
+      pages: _targetPages,
+      fill: _fill,
+      stroke: _stroke,
+    );
+    if (preferFirst && _documentColors.isNotEmpty) {
+      _find = _documentColors.first;
+    }
+  }
+
+  void _setSelectedPages(bool value) {
+    if (value && widget.controller.selectedPageCount == 0) return;
+    setState(() {
+      _selectedPages = value;
+      _refreshDocumentColors();
+    });
+  }
+
+  void _setFill(bool value) {
+    setState(() {
+      _fill = value;
+      _refreshDocumentColors();
+    });
+  }
+
+  void _setStroke(bool value) {
+    setState(() {
+      _stroke = value;
+      _refreshDocumentColors();
+    });
+  }
+
   void _apply() {
-    final pages = _selectedPages ? widget.controller.selectedPages : null;
     final count = widget.controller.replaceDocumentColors(
-      pages: pages,
+      pages: _targetPages,
       find: _find,
-      replace: _replace,
+      replace: _replaceTransparent ? null : _replace,
       tolerance: _tolerance,
       fill: _fill,
       stroke: _stroke,
+      transparent: _replaceTransparent,
     );
     Navigator.of(context).pop(count);
   }
@@ -94,14 +133,33 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
                 key: const ValueKey('pdf-color-process-find'),
                 label: 'Find',
                 color: _find,
+                pickerKey: const ValueKey('pdf-color-process-find-picker'),
                 onTap: _pickFind,
+              ),
+              const SizedBox(height: 10),
+              _DocumentColors(
+                colors: _documentColors,
+                selected: _find,
+                onSelected: (color) => setState(() => _find = color),
               ),
               const SizedBox(height: 8),
               _ColorRow(
                 key: const ValueKey('pdf-color-process-replace'),
                 label: 'Replace',
                 color: _replace,
+                transparent: _replaceTransparent,
+                enabled: !_replaceTransparent,
+                pickerKey: const ValueKey('pdf-color-process-replace-picker'),
                 onTap: _pickReplace,
+              ),
+              CheckboxListTile(
+                key: const ValueKey('pdf-color-process-transparent'),
+                value: _replaceTransparent,
+                onChanged: (value) =>
+                    setState(() => _replaceTransparent = value ?? false),
+                title: const Text('Replace with transparent'),
+                dense: true,
+                contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 18),
               Row(
@@ -125,8 +183,7 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
                 groupValue: _selectedPages,
                 onChanged: (value) {
                   if (value == null) return;
-                  if (value && selectedCount == 0) return;
-                  setState(() => _selectedPages = value);
+                  _setSelectedPages(value);
                 },
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -153,7 +210,7 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
               CheckboxListTile(
                 key: const ValueKey('pdf-color-process-fill'),
                 value: _fill,
-                onChanged: (value) => setState(() => _fill = value ?? false),
+                onChanged: (value) => _setFill(value ?? false),
                 title: const Text('Fill colors'),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -161,7 +218,7 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
               CheckboxListTile(
                 key: const ValueKey('pdf-color-process-stroke'),
                 value: _stroke,
-                onChanged: (value) => setState(() => _stroke = value ?? false),
+                onChanged: (value) => _setStroke(value ?? false),
                 title: const Text('Stroke colors'),
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -191,11 +248,17 @@ class _ColorRow extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
+    this.pickerKey,
+    this.transparent = false,
+    this.enabled = true,
   });
 
   final String label;
   final Color color;
   final VoidCallback onTap;
+  final Key? pickerKey;
+  final bool transparent;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -203,29 +266,179 @@ class _ColorRow extends StatelessWidget {
     final hex = '#${rgb.toRadixString(16).toUpperCase().padLeft(6, '0')}';
     return InkWell(
       borderRadius: BorderRadius.circular(6),
-      onTap: onTap,
+      onTap: enabled ? onTap : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           children: [
             SizedBox(width: 68, child: Text(label)),
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: Color(0xFF000000 | rgb),
-                border:
-                    Border.all(color: Theme.of(context).colorScheme.outline),
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
+            _SwatchBox(color: color, transparent: transparent),
             const SizedBox(width: 10),
-            Text(hex),
+            Text(transparent ? 'Transparent' : hex),
             const Spacer(),
-            const Icon(Icons.arrow_drop_down),
+            IconButton(
+              key: pickerKey,
+              onPressed: enabled ? onTap : null,
+              tooltip: 'Pick color',
+              icon: const Icon(Icons.colorize),
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+class _DocumentColors extends StatelessWidget {
+  const _DocumentColors({
+    required this.colors,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<Color> colors;
+  final Color selected;
+  final ValueChanged<Color> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (colors.isEmpty) {
+      return Text(
+        'No page-content colors found',
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Document colors', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        Wrap(
+          key: const ValueKey('pdf-color-process-document-colors'),
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final color in colors)
+              _ColorOption(
+                color: color,
+                selected: (color.toARGB32() & 0xFFFFFF) ==
+                    (selected.toARGB32() & 0xFFFFFF),
+                onTap: () => onSelected(color),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ColorOption extends StatelessWidget {
+  const _ColorOption({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final rgb = color.toARGB32() & 0xFFFFFF;
+    final hex = '#${rgb.toRadixString(16).toUpperCase().padLeft(6, '0')}';
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: hex,
+      child: InkResponse(
+        key: ValueKey('pdf-color-process-color-$rgb'),
+        onTap: onTap,
+        radius: 20,
+        child: Container(
+          width: 34,
+          height: 34,
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: selected ? scheme.primary : scheme.outlineVariant,
+              width: selected ? 2 : 1,
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: _SwatchBox(color: color),
+        ),
+      ),
+    );
+  }
+}
+
+class _SwatchBox extends StatelessWidget {
+  const _SwatchBox({
+    required this.color,
+    this.transparent = false,
+  });
+
+  final Color color;
+  final bool transparent;
+
+  @override
+  Widget build(BuildContext context) {
+    final outline = Theme.of(context).colorScheme.outline;
+    return CustomPaint(
+      size: const Size.square(28),
+      painter: _SwatchPainter(
+        color: color,
+        transparent: transparent,
+        outline: outline,
+      ),
+    );
+  }
+}
+
+class _SwatchPainter extends CustomPainter {
+  const _SwatchPainter({
+    required this.color,
+    required this.transparent,
+    required this.outline,
+  });
+
+  final Color color;
+  final bool transparent;
+  final Color outline;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(4));
+    canvas.save();
+    canvas.clipRRect(rrect);
+    if (transparent) {
+      final light = Paint()..color = const Color(0xFFFFFFFF);
+      final dark = Paint()..color = const Color(0xFFE0E0E0);
+      const cell = 7.0;
+      for (var y = 0.0; y < size.height; y += cell) {
+        for (var x = 0.0; x < size.width; x += cell) {
+          final even = ((x / cell).floor() + (y / cell).floor()).isEven;
+          canvas.drawRect(Rect.fromLTWH(x, y, cell, cell), even ? light : dark);
+        }
+      }
+    } else {
+      canvas.drawRect(rect,
+          Paint()..color = Color(0xFF000000 | (color.toARGB32() & 0xFFFFFF)));
+    }
+    canvas.restore();
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = outline,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _SwatchPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.transparent != transparent ||
+      oldDelegate.outline != outline;
 }

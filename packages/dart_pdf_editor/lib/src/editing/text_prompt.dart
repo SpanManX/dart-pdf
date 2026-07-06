@@ -15,6 +15,12 @@ typedef PdfFormImagePicker = Future<Uint8List?> Function(
 /// are accepted ([PdfEditingController.placeImage]).
 typedef PdfImagePicker = Future<Uint8List?> Function(BuildContext context);
 
+/// Supplies image bytes for a system clipboard paste. Return null when the
+/// clipboard does not currently carry a pasteable image. PNG and JPEG bytes
+/// are accepted ([PdfEditingController.placeImage]).
+typedef PdfSystemImagePasteProvider = Future<Uint8List?> Function(
+    BuildContext context);
+
 /// Supplies a TrueType (`.ttf`) or OpenType (`.otf`) font file the font
 /// menu's "Load font…" entry embeds for new text — typically a file
 /// picker. Return null to cancel ([PdfEditingController.setCustomFont]).

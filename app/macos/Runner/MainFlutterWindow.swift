@@ -32,6 +32,10 @@ class MainFlutterWindow: NSWindow {
       name: "dev.milanko.dartpdf/image_clipboard",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
     imageClipboardChannel.setMethodCallHandler { (call, result) in
+      if call.method == "readImage" {
+        result(self.readImageFromClipboard())
+        return
+      }
       guard call.method == "copyPng" else {
         result(FlutterMethodNotImplemented)
         return
@@ -51,5 +55,32 @@ class MainFlutterWindow: NSWindow {
     RegisterGeneratedPlugins(registry: flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  private func readImageFromClipboard() -> FlutterStandardTypedData? {
+    let pasteboard = NSPasteboard.general
+    if let data = pasteboard.data(forType: .png) {
+      return FlutterStandardTypedData(bytes: data)
+    }
+    if let data = pasteboard.data(forType: NSPasteboard.PasteboardType("public.jpeg")) {
+      return FlutterStandardTypedData(bytes: data)
+    }
+    if let data = pasteboard.data(forType: .tiff),
+       let converted = pngData(fromTiff: data) {
+      return FlutterStandardTypedData(bytes: converted)
+    }
+    if let image = NSImage(pasteboard: pasteboard),
+       let tiff = image.tiffRepresentation,
+       let converted = pngData(fromTiff: tiff) {
+      return FlutterStandardTypedData(bytes: converted)
+    }
+    return nil
+  }
+
+  private func pngData(fromTiff data: Data) -> Data? {
+    guard let bitmap = NSBitmapImageRep(data: data) else {
+      return nil
+    }
+    return bitmap.representation(using: .png, properties: [:])
   }
 }
