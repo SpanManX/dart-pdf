@@ -131,7 +131,7 @@ class PdfEditingToolbar extends StatefulWidget {
 
   /// The tools to expose, null meaning all of them. A group disappears
   /// from the dock when none of its tools are in the set. Sub-controls
-  /// tied to an armed tool (the stamp picker, the form field-type menu)
+  /// tied to an armed tool (the form field-type menu, signature redraw)
   /// follow their tool. Hiding a tool doesn't disable it — it can still
   /// be armed through the controller.
   final Set<PdfEditTool>? tools;
@@ -521,6 +521,18 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     return true;
   }
 
+  void _armStampToolForMenu() {
+    if (controller.tool == PdfEditTool.stamp) return;
+    controller.tool = PdfEditTool.stamp;
+    viewerController.clearSelection();
+  }
+
+  Future<void> _manageStamps(BuildContext context) => showPdfStampPicker(
+        context,
+        controller: controller,
+        imagePicker: widget.imagePicker,
+      );
+
   Future<void> _editElementText(BuildContext context) async {
     final element = controller.selectedElement;
     if (element == null) return;
@@ -874,12 +886,22 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         ));
       } else {
         final tool = entry.tool!;
-        toolButtons.add(IconButton(
-          icon: Icon(entry.icon),
-          tooltip: _entryTip(entry),
-          isSelected: controller.tool == tool,
-          onPressed: () => _armGroupTool(context, tool),
-        ));
+        if (tool == PdfEditTool.stamp) {
+          toolButtons.add(_StampToolPopupButton(
+            controller: controller,
+            tooltip: _entryTip(entry),
+            active: controller.tool == tool,
+            onArm: _armStampToolForMenu,
+            onManage: _manageStamps,
+          ));
+        } else {
+          toolButtons.add(IconButton(
+            icon: Icon(entry.icon),
+            tooltip: _entryTip(entry),
+            isSelected: controller.tool == tool,
+            onPressed: () => _armGroupTool(context, tool),
+          ));
+        }
       }
     }
     if (group.id == 'measure') {
@@ -1016,18 +1038,9 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     ];
   }
 
-  /// Insert-tool sub-controls: the custom-stamp picker and the redraw
-  /// button for the signature tool.
+  /// Insert-tool sub-controls: the redraw button for the signature tool.
   List<Widget> _insertToolExtras(BuildContext context) {
     return [
-      if (controller.tool == PdfEditTool.stamp)
-        IconButton(
-          icon: const Icon(Icons.style),
-          tooltip: 'Custom stamps…',
-          isSelected: controller.activeStamp != null,
-          onPressed: () => showPdfStampPicker(context,
-              controller: controller, imagePicker: widget.imagePicker),
-        ),
       if (controller.tool == PdfEditTool.signature)
         IconButton(
           icon: const Icon(Icons.restart_alt),
@@ -1867,22 +1880,31 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
       crossAxisSpacing: 6,
       children: [
         for (final entry in entries)
-          _SheetToolTile(
-            icon: entry.icon,
-            label: entry.markup != null
-                ? entry.tip.replaceAll(' selection', '')
-                : _entryLabel(entry),
-            active: entry.tool != null && controller.tool == entry.tool,
-            enabled: entry.markup == null || hasTextSelection,
-            onTap: () async {
-              if (entry.markup != null) {
-                _applyMarkup(entry.markup!, restoreTool: group.id != 'markup');
-                if (context.mounted) Navigator.of(context).pop();
-              } else {
-                await _armGroupTool(context, entry.tool!);
-              }
-            },
-          ),
+          if (entry.tool == PdfEditTool.stamp)
+            _StampSheetToolTile(
+              controller: controller,
+              active: controller.tool == PdfEditTool.stamp,
+              onArm: _armStampToolForMenu,
+              onManage: _manageStamps,
+            )
+          else
+            _SheetToolTile(
+              icon: entry.icon,
+              label: entry.markup != null
+                  ? entry.tip.replaceAll(' selection', '')
+                  : _entryLabel(entry),
+              active: entry.tool != null && controller.tool == entry.tool,
+              enabled: entry.markup == null || hasTextSelection,
+              onTap: () async {
+                if (entry.markup != null) {
+                  _applyMarkup(entry.markup!,
+                      restoreTool: group.id != 'markup');
+                  if (context.mounted) Navigator.of(context).pop();
+                } else {
+                  await _armGroupTool(context, entry.tool!);
+                }
+              },
+            ),
         if (group.id == 'measure')
           _SheetToolTile(
             key: const ValueKey('pdf-takeoff-totals'),
@@ -2183,6 +2205,300 @@ class _LabeledToolButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _StampToolPopupButton extends StatelessWidget {
+  const _StampToolPopupButton({
+    required this.controller,
+    required this.tooltip,
+    required this.active,
+    required this.onArm,
+    required this.onManage,
+  });
+
+  final PdfEditingController controller;
+  final String tooltip;
+  final bool active;
+  final VoidCallback onArm;
+  final Future<void> Function(BuildContext context) onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        _StampMenuPanel(
+          controller: controller,
+          dialogContext: context,
+          onArm: onArm,
+          onManage: onManage,
+        ),
+      ],
+      builder: (context, menuController, child) => IconButton(
+        key: const ValueKey('pdf-stamp-tool-popup'),
+        icon: const Icon(Icons.approval),
+        tooltip: tooltip,
+        isSelected: active,
+        onPressed: () {
+          onArm();
+          menuController.isOpen
+              ? menuController.close()
+              : menuController.open();
+        },
+      ),
+    );
+  }
+}
+
+class _StampSheetToolTile extends StatelessWidget {
+  const _StampSheetToolTile({
+    required this.controller,
+    required this.active,
+    required this.onArm,
+    required this.onManage,
+  });
+
+  final PdfEditingController controller;
+  final bool active;
+  final VoidCallback onArm;
+  final Future<void> Function(BuildContext context) onManage;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        _StampMenuPanel(
+          controller: controller,
+          dialogContext: context,
+          onArm: onArm,
+          onManage: onManage,
+        ),
+      ],
+      builder: (context, menuController, child) => _SheetToolTile(
+        key: const ValueKey('pdf-stamp-sheet-tool-popup'),
+        icon: Icons.approval,
+        label: 'Stamp',
+        active: active,
+        enabled: true,
+        onTap: () {
+          onArm();
+          menuController.isOpen
+              ? menuController.close()
+              : menuController.open();
+        },
+      ),
+    );
+  }
+}
+
+class _StampMenuPanel extends StatelessWidget {
+  const _StampMenuPanel({
+    required this.controller,
+    required this.dialogContext,
+    required this.onArm,
+    required this.onManage,
+  });
+
+  final PdfEditingController controller;
+  final BuildContext dialogContext;
+  final VoidCallback onArm;
+  final Future<void> Function(BuildContext context) onManage;
+
+  int get _currentColor => controller.color.toARGB32() & 0xFFFFFF;
+
+  void _select(MenuController menuController, PdfCustomStamp? stamp) {
+    onArm();
+    controller.activeStamp = stamp;
+    menuController.close();
+  }
+
+  String? _detail(PdfCustomStamp stamp) {
+    final parts = [
+      if (stamp.type != null && stamp.type!.trim().isNotEmpty)
+        stamp.type!.trim(),
+      if (stamp.tags.isNotEmpty) stamp.tags.join(', '),
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final menuController = MenuController.maybeOf(context)!;
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final active = controller.activeStamp;
+        final preview =
+            active ?? PdfCustomStamp(text: 'TEXT', color: _currentColor);
+        final stamps = controller.customStamps;
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 320, maxHeight: 440),
+          child: SizedBox(
+            width: 300,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Stamp',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        key: const ValueKey('pdf-stamp-menu-preview'),
+                        height: 58,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                        ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: PdfStampPreview(
+                            stamp: preview,
+                            templateValues:
+                                controller.resolvedStampTemplateValues,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    primary: false,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        MenuItemButton(
+                          key: const ValueKey('pdf-stamp-menu-classic'),
+                          leadingIcon: active == null
+                              ? const Icon(Icons.check)
+                              : const SizedBox(width: 24),
+                          onPressed: () => _select(menuController, null),
+                          child: const Text('Type text each time'),
+                        ),
+                        for (var i = 0; i < stamps.length; i++)
+                          _StampMenuItem(
+                            key: ValueKey('pdf-stamp-menu-custom-$i'),
+                            stamp: stamps[i],
+                            detail: _detail(stamps[i]),
+                            selected: stamps[i] == active,
+                            templateValues:
+                                controller.resolvedStampTemplateValues,
+                            onPressed: () => _select(menuController, stamps[i]),
+                          ),
+                        if (stamps.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'No custom stamps',
+                                style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                MenuItemButton(
+                  key: const ValueKey('pdf-stamp-menu-manage'),
+                  leadingIcon: const Icon(Icons.tune),
+                  onPressed: () {
+                    onArm();
+                    menuController.close();
+                    if (dialogContext.mounted) onManage(dialogContext);
+                  },
+                  child: const Text('Manage stamps…'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StampMenuItem extends StatelessWidget {
+  const _StampMenuItem({
+    super.key,
+    required this.stamp,
+    required this.detail,
+    required this.selected,
+    required this.templateValues,
+    required this.onPressed,
+  });
+
+  final PdfCustomStamp stamp;
+  final String? detail;
+  final bool selected;
+  final Map<String, String> templateValues;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return MenuItemButton(
+      onPressed: onPressed,
+      leadingIcon:
+          selected ? const Icon(Icons.check) : const SizedBox(width: 24),
+      child: SizedBox(
+        width: 230,
+        child: Row(children: [
+          SizedBox(
+            width: 112,
+            height: 38,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: PdfStampPreview(
+                stamp: stamp,
+                templateValues: templateValues,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  stamp.text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (detail != null)
+                  Text(
+                    detail!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ]),
       ),
     );
   }

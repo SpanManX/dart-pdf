@@ -74,6 +74,15 @@ void main() {
             color: 0xC03030,
             font: PdfStandardFont.timesBold,
           ),
+          PdfStampTemplateComponent.ellipse(
+            x: 74,
+            y: 48,
+            width: 30,
+            height: 30,
+            color: 0x2E7D32,
+            fillColor: 0xE8F5E9,
+            strokeWidth: 1.5,
+          ),
           PdfStampTemplateComponent.image(
             x: 190,
             y: 16,
@@ -110,9 +119,13 @@ void main() {
       expect(decodedStamp.type, 'Approval');
       expect(decodedStamp.hasTag('AUDIT'), isTrue);
       expect(decodedStamp.template, template);
-      expect(decodedStamp.template!.components.length, 3);
+      expect(decodedStamp.template!.components.length, 4);
       expect(decodedStamp.template!.components.first.font,
           PdfStandardFont.timesBold);
+      final circle = decodedStamp.template!.components
+          .firstWhere((c) => c.type == PdfStampTemplateComponentType.ellipse);
+      expect(circle.width, circle.height);
+      expect(circle.fillColor, 0xE8F5E9);
       final image = decodedStamp.template!.components
           .firstWhere((c) => c.type == PdfStampTemplateComponentType.image);
       expect(image.imageBytes, _png);
@@ -319,6 +332,39 @@ void main() {
       expect(stamp.rect.width, moreOrLessEquals(100));
       final content = appearanceText(editing);
       expect(content, contains('(REVIEWED) Tj'));
+    });
+
+    test('placeStamp compiles circle components into the appearance', () {
+      final template = PdfStampTemplate(
+        width: 100,
+        height: 100,
+        components: [
+          PdfStampTemplateComponent.ellipse(
+            x: 20,
+            y: 20,
+            width: 60,
+            height: 60,
+            color: 0x2E7D32,
+            strokeWidth: 3,
+          ),
+        ],
+      );
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp = PdfCustomStamp(
+          text: 'Circle',
+          color: 0x2E7D32,
+          template: template,
+        );
+
+      expect(editing.placeStamp(0, 300, 400), isTrue);
+
+      final stamp = editing.document.page(0).annotations.single;
+      expect(stamp.subtype, 'Stamp');
+      expect(stamp.contents, 'Circle');
+      expect(stamp.rect.width, moreOrLessEquals(stamp.rect.height));
+      final content = appearanceText(editing);
+      expect(content, contains(' c'));
+      expect(content, contains('S'));
     });
 
     test('placeStamp resolves built-in and custom template fields', () {
@@ -609,11 +655,11 @@ void main() {
       await tester.tap(find.byTooltip('Stamp (S)'));
       await tester.pumpAndSettle();
       expect(editing.tool, PdfEditTool.stamp);
+      expect(
+          find.byKey(const ValueKey('pdf-stamp-menu-preview')), findsOneWidget);
+      expect(find.byTooltip('Custom stamps…'), findsNothing);
 
-      // the picker button only shows while the stamp tool is armed
-      await tester.scrollUntilVisible(find.byTooltip('Custom stamps…'), 100,
-          scrollable: stripScrollable);
-      await tester.tap(find.byTooltip('Custom stamps…'));
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-menu-manage')));
       await tester.pumpAndSettle();
       expect(find.byType(PdfStampPickerDialog), findsOneWidget);
 
@@ -639,6 +685,80 @@ void main() {
       expect(stamp.subtype, 'Stamp');
       expect(stamp.contents, 'PAID');
       expect(appearanceText(editing), contains('(PAID) Tj'));
+    });
+
+    testWidgets('stamp tool popup selects custom stamps', (tester) async {
+      const audit = PdfCustomStamp(
+        text: 'AUDIT',
+        color: 0x1A3E8C,
+        type: 'Audit',
+        tags: ['external'],
+      );
+      const paid = PdfCustomStamp(text: 'PAID', color: 0x2E7D32);
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..providedCustomStamps = const [audit]
+        ..saveCustomStamp(paid);
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: editing,
+            builder: (context, _) => PdfViewer(
+              initialFit: PdfViewerFit.width,
+              document: editing.document,
+              controller: viewer,
+              editing: editing,
+            ),
+          ),
+          bottomNavigationBar: PdfEditingToolbar(
+            controller: editing,
+            viewerController: viewer,
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final dockScrollable = find
+          .descendant(
+              of: find.byType(PdfEditingToolbar),
+              matching: find.byType(Scrollable))
+          .last;
+      final stripScrollable = find
+          .descendant(
+              of: find.byType(PdfEditingToolbar),
+              matching: find.byType(Scrollable))
+          .first;
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('pdf-group-insert')), 80,
+          scrollable: dockScrollable);
+      await tester.tap(find.byKey(const ValueKey('pdf-group-insert')));
+      await tester.pump();
+      await tester.scrollUntilVisible(find.byTooltip('Stamp (S)'), 100,
+          scrollable: stripScrollable);
+      await tester.tap(find.byTooltip('Stamp (S)'));
+      await tester.pumpAndSettle();
+
+      expect(editing.tool, PdfEditTool.stamp);
+      expect(
+          find.byKey(const ValueKey('pdf-stamp-menu-preview')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('pdf-stamp-menu-classic')), findsOneWidget);
+      expect(find.byKey(const ValueKey('pdf-stamp-menu-custom-0')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('pdf-stamp-menu-custom-1')),
+          findsOneWidget);
+      expect(find.text('AUDIT'), findsOneWidget);
+      expect(find.text('PAID'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-menu-custom-1')));
+      await tester.pumpAndSettle();
+
+      expect(editing.activeStamp, paid);
+      expect(
+          find.byKey(const ValueKey('pdf-stamp-menu-preview')), findsNothing);
+      expect(find.byTooltip('Custom stamps…'), findsNothing);
     });
 
     testWidgets('stamp taps paint a preview before the PDF edit commits',
@@ -942,6 +1062,40 @@ void main() {
                   c.imageBytes != null)
               .length,
           1);
+    });
+
+    testWidgets('stamp editor adds circle components', (tester) async {
+      PdfCustomStamp? saved;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () async {
+                saved = await showPdfStampEditor(context);
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('pdf-stamp-add-circle')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-add-circle')));
+      await tester.pump();
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      final circle = saved!.template!.components
+          .firstWhere((c) => c.type == PdfStampTemplateComponentType.ellipse);
+      expect(circle.width, circle.height);
+      expect(circle.width, greaterThan(16));
+      expect(circle.color, 0xC03030);
     });
 
     testWidgets('stamp editor adds hand signature components', (tester) async {

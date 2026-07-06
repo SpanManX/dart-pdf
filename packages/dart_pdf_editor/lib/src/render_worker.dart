@@ -36,6 +36,16 @@ String? pdfRenderWorkerScriptUrl;
 /// mean 1.
 int pdfRenderWorkerPoolSize = 3;
 
+/// How long the caching worker waits for one backend record before giving up on
+/// that worker snapshot.
+///
+/// The page view falls back to local rendering when a worker returns null. A
+/// wedged native isolate used to leave the worker future pending forever, which
+/// also pinned the cache's in-flight entry and kept progressive vector-first
+/// rasters on screen indefinitely. Web has its own backend watchdog; this common
+/// guard covers native and pooled workers.
+Duration pdfRenderWorkerRecordTimeout = const Duration(seconds: 90);
+
 /// Documents with at least this many pages use a [PdfPooledRenderWorker] via
 /// [startPdfRenderWorker]; shorter ones use a single worker because extra
 /// startup and memory usually cost more than the parallelism saves.
@@ -500,13 +510,20 @@ class PdfCachingRenderWorker implements PdfRenderWorker {
       required bool decodeImages,
       required PdfRect? imageDecodeRegion}) async {
     try {
-      final commands = await _inner.record(pageIndex,
-          annotations: annotations,
-          priority: priority,
-          imagePixelRatio: imagePixelRatio,
-          decodeImages: decodeImages,
-          commandLimit: key.$5,
-          imageDecodeRegion: imageDecodeRegion);
+      final timeout = pdfRenderWorkerRecordTimeout;
+      final commands = await _inner
+          .record(pageIndex,
+              annotations: annotations,
+              priority: priority,
+              imagePixelRatio: imagePixelRatio,
+              decodeImages: decodeImages,
+              commandLimit: key.$5,
+              imageDecodeRegion: imageDecodeRegion)
+          .timeout(timeout, onTimeout: () {
+        _inner.cancel(pageIndex, priority: priority);
+        _inner.dispose();
+        return null;
+      });
       if (commands != null) {
         final weight = _weigh(commands);
         final storeKey =

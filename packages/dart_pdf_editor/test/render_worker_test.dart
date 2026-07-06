@@ -351,6 +351,29 @@ void main() {
     expect(rasters, 1);
   });
 
+  test('PdfCachingRenderWorker times out wedged records and retries', () async {
+    final previousTimeout = pdfRenderWorkerRecordTimeout;
+    pdfRenderWorkerRecordTimeout = const Duration(milliseconds: 1);
+    addTearDown(() => pdfRenderWorkerRecordTimeout = previousTimeout);
+
+    final inner = _HangingWorker();
+    final worker = PdfCachingRenderWorker(inner);
+    addTearDown(worker.dispose);
+
+    final result = await worker.record(0);
+    expect(result, isNull);
+    expect(inner.calls, 1);
+    expect(inner.cancels, [(0, 0)]);
+    expect(inner.active, isFalse,
+        reason: 'a timed-out worker snapshot must be retired');
+
+    inner.hang = false;
+    final retry = await worker.record(0);
+    expect(retry, isNull,
+        reason: 'future requests should fail fast into the local-render path');
+    expect(inner.calls, 1);
+  });
+
   testWidgets('PdfPageView cancels recycled worker requests by renderPriority',
       (tester) async {
     final document = PdfDocument.open(buildMultiPagePdf(2));
@@ -951,6 +974,52 @@ class _ManualWorker implements PdfRenderWorker {
   void dispose() {
     active = false;
     disposed = true;
+    for (final completer in _pending.toList()) {
+      if (!completer.isCompleted) completer.complete(null);
+    }
+    _pending.clear();
+  }
+}
+
+class _HangingWorker implements PdfRenderWorker {
+  final callsByKey = <(int, int), int>{};
+  final cancels = <(int, int)>[];
+  final _pending = <Completer<List<PdfRenderCommand>?>>[];
+  bool active = true;
+  bool hang = true;
+
+  int get calls => callsByKey.values.fold(0, (sum, value) => sum + value);
+
+  @override
+  bool get isActive => active;
+
+  @override
+  Future<List<PdfRenderCommand>?> record(int pageIndex,
+      {bool annotations = true,
+      int priority = 0,
+      double? imagePixelRatio,
+      bool decodeImages = true,
+      int? commandLimit,
+      PdfRect? imageDecodeRegion}) {
+    if (!active) return Future.value(null);
+    callsByKey[(pageIndex, priority)] =
+        (callsByKey[(pageIndex, priority)] ?? 0) + 1;
+    if (!hang) {
+      return Future.value(const [PdfSaveCommand(), PdfRestoreCommand()]);
+    }
+    final completer = Completer<List<PdfRenderCommand>?>();
+    _pending.add(completer);
+    return completer.future;
+  }
+
+  @override
+  void cancel(int pageIndex, {int priority = 0}) {
+    cancels.add((pageIndex, priority));
+  }
+
+  @override
+  void dispose() {
+    active = false;
     for (final completer in _pending.toList()) {
       if (!completer.isCompleted) completer.complete(null);
     }

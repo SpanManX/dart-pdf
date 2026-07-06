@@ -604,6 +604,23 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
     });
   }
 
+  void _addCircle() {
+    final diameter =
+        math.min(64.0, math.min(_templateWidth, _templateHeight) * 0.65);
+    final component = PdfStampTemplateComponent.ellipse(
+      x: (_templateWidth - diameter) / 2,
+      y: (_templateHeight - diameter) / 2,
+      width: diameter,
+      height: diameter,
+      color: _color,
+      strokeWidth: 2,
+    );
+    setState(() {
+      _components = [..._components, component];
+      _selected = _components.length - 1;
+    });
+  }
+
   Future<void> _addImage() async {
     final picker = widget.imagePicker;
     if (picker == null) return;
@@ -834,6 +851,12 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
                     onPressed: _addBox,
                     icon: const Icon(Icons.crop_square),
                     label: const Text('Box'),
+                  ),
+                  OutlinedButton.icon(
+                    key: const ValueKey('pdf-stamp-add-circle'),
+                    onPressed: _addCircle,
+                    icon: const Icon(Icons.radio_button_unchecked),
+                    label: const Text('Circle'),
                   ),
                   OutlinedButton.icon(
                     key: const ValueKey('pdf-stamp-add-image'),
