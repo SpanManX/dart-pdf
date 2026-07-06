@@ -9,6 +9,7 @@ import 'package:pdf_document/pdf_document.dart'
 import '../pdf_viewer.dart';
 import '../toast.dart';
 import 'editing_color_picker.dart';
+import 'editing_color_processing.dart';
 import 'editing_controller.dart';
 import 'editing_font_controls.dart';
 import 'editing_fonts.dart';
@@ -96,6 +97,7 @@ class PdfEditingToolbar extends StatefulWidget {
     this.showColor = true,
     this.showStyle = true,
     this.showFlatten = true,
+    this.showColorProcessing = true,
     this.leading = const [],
     this.trailing = const [],
   });
@@ -173,6 +175,9 @@ class PdfEditingToolbar extends StatefulWidget {
   /// Whether the flatten-annotations button is shown.
   final bool showFlatten;
 
+  /// Whether the Edit group includes the colour-processing action.
+  final bool showColorProcessing;
+
   /// Custom widgets shown before the stock dock controls. Builders run
   /// inside the toolbar's listenable rebuild, so they can reflect
   /// [controller] or [viewerController] state directly.
@@ -247,6 +252,18 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   double? _dragOpacity;
 
   bool _replacingElementImage = false;
+
+  bool get _showColorProcessingAction =>
+      widget.showColorProcessing &&
+      (widget.tools == null ||
+          widget.tools!.any((tool) => switch (tool) {
+                PdfEditTool.content ||
+                PdfEditTool.form ||
+                PdfEditTool.redact ||
+                PdfEditTool.snapshot =>
+                  true,
+                _ => false,
+              }));
 
   /// The seven dock groups, in order. Filtered by [PdfEditingToolbar.tools]
   /// and [PdfEditingToolbar.showMarkup] before display.
@@ -356,6 +373,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     final kind = PdfEditToolGroup.values.byName(group.id);
     if (widget.groups != null && !widget.groups!.contains(kind)) return false;
     if (group.id == 'markup') return widget.showMarkup;
+    if (group.id == 'edit' && _showColorProcessingAction) return true;
     return group.tools.any(_entryVisible);
   }
 
@@ -634,6 +652,27 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
       ));
   }
 
+  Future<void> _showColorProcessing(BuildContext context) async {
+    final count = await showPdfColorProcessingDialog(
+      context,
+      controller: controller,
+      preferences: controller.preferences,
+    );
+    if (count == null || !context.mounted) return;
+    final message = switch (count) {
+      0 => 'No matching colors found',
+      1 => 'Replaced 1 color',
+      _ => 'Replaced $count colors',
+    };
+    ScaffoldMessenger.maybeOf(context)
+      ?..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        margin: pdfFloatingToastMargin(context),
+      ));
+  }
+
   Future<void> _applyRedactions(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -903,6 +942,16 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
           ));
         }
       }
+    }
+    if (group.id == 'edit' && _showColorProcessingAction) {
+      toolButtons.add(_LabeledToolButton(
+        key: const ValueKey('pdf-toolbar-color-processing'),
+        icon: Icons.palette_outlined,
+        label: 'Color',
+        tooltip: 'Color processing — find and replace page-content colors',
+        active: false,
+        onTap: () => _showColorProcessing(context),
+      ));
     }
     if (group.id == 'measure') {
       toolButtons.add(_takeoffButton(context));
@@ -1915,6 +1964,18 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
             onTap: () {
               Navigator.of(context).pop();
               if (mounted) _showTakeoffPanel(this.context);
+            },
+          ),
+        if (group.id == 'edit' && _showColorProcessingAction)
+          _SheetToolTile(
+            key: const ValueKey('pdf-toolbar-color-processing'),
+            icon: Icons.palette_outlined,
+            label: 'Color',
+            active: false,
+            enabled: true,
+            onTap: () {
+              Navigator.of(context).pop();
+              _showColorProcessing(this.context);
             },
           ),
       ],

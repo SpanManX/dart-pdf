@@ -87,6 +87,9 @@ void main() {
 
   testWidgets('PdfEditorView exposes the color processing dialog',
       (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final controller = PdfEditingController(_pdf([
       '0 g 0 0 10 10 re f',
     ]))
@@ -103,7 +106,10 @@ void main() {
     ));
     await tester.pump();
 
-    await tester.tap(find.byKey(const ValueKey('pdf-shell-color-processing')),
+    await tester.tap(find.byKey(const ValueKey('pdf-group-edit')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('pdf-toolbar-color-processing')),
         kind: PointerDeviceKind.mouse);
     await tester.pumpAndSettle();
     expect(
