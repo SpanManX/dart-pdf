@@ -7,6 +7,14 @@ import 'editing_controller.dart';
 import 'editing_form_style.dart';
 import 'text_prompt.dart';
 
+const _densePopupMenuHeight = 34.0;
+
+TextStyle? _densePopupTextStyle(BuildContext context, {Color? color}) =>
+    Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: color,
+          height: 1.1,
+        );
+
 /// What an annotation context menu acts on: the controller and the
 /// selection at the moment the menu opened. The right-clicked annotation
 /// is always part of the selection (the viewer selects it before the
@@ -235,7 +243,8 @@ Future<void> showPdfFormFieldMenu({
                   PopupMenuItem(
                     key: ValueKey('pdf-form-edit-option-$export'),
                     value: export,
-                    child: Text(display),
+                    height: _densePopupMenuHeight,
+                    child: Text(display, style: _densePopupTextStyle(context)),
                   ),
               ],
             );
@@ -352,20 +361,29 @@ PopupMenuItem<PdfAnnotationMenuItem> _menuRow(PdfAnnotationMenuItem item) =>
       key: item.key,
       value: item,
       enabled: item.enabled,
-      child: Row(
-        children: [
-          if (item.icon != null) ...[
-            // PopupMenuItem dims only text when disabled; match it
-            Builder(
-              builder: (context) => Icon(item.icon,
-                  size: 18,
-                  color: item.enabled ? null : Theme.of(context).disabledColor),
-            ),
-            const SizedBox(width: 10),
-          ],
-          // flexible: long labels ellipsize at the popup's width cap
-          // instead of overflowing
-          Flexible(child: Text(item.label, overflow: TextOverflow.ellipsis)),
-        ],
+      height: _densePopupMenuHeight,
+      child: Builder(
+        builder: (context) {
+          final disabledColor = Theme.of(context).disabledColor;
+          final color = item.enabled ? null : disabledColor;
+          return Row(
+            children: [
+              if (item.icon != null) ...[
+                // PopupMenuItem dims only text when disabled; match it
+                Icon(item.icon, size: 16, color: color),
+                const SizedBox(width: 8),
+              ],
+              // flexible: long labels ellipsize at the popup's width cap
+              // instead of overflowing
+              Flexible(
+                child: Text(
+                  item.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: _densePopupTextStyle(context, color: color),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );

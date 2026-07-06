@@ -972,6 +972,42 @@ void main() {
           1);
     });
 
+    testWidgets('stamp editor can pick a custom color', (tester) async {
+      PdfCustomStamp? saved;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () async {
+                saved = await showPdfStampEditor(context);
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-color-custom')));
+      await tester.pumpAndSettle();
+      final hexField = find.byKey(const ValueKey('pdf-color-hex'));
+      await tester.enterText(hexField, '7B1FA2');
+      await tester.pump();
+      expect(tester.widget<TextField>(hexField).controller!.text, '7B1FA2');
+      await tester.tap(find.widgetWithText(FilledButton, 'OK').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      final text = saved!.template!.components
+          .firstWhere((c) => c.type == PdfStampTemplateComponentType.text);
+      expect(text.color, 0x7B1FA2);
+    });
+
     testWidgets('stamp editor inserts template fields into text components',
         (tester) async {
       PdfCustomStamp? saved;

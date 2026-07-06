@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:pdf_document/pdf_document.dart';
 
+import 'editing_color_picker.dart';
 import 'editing_controller.dart';
 import 'editing_signature.dart';
 import 'text_prompt.dart';
@@ -581,6 +582,15 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
     });
   }
 
+  Future<void> _pickCustomColor() async {
+    final picked = await showPdfColorPicker(
+      context,
+      initial: Color(0xFF000000 | _color),
+    );
+    if (!mounted || picked == null) return;
+    _setSelectedColor(picked.toARGB32() & 0xFFFFFF);
+  }
+
   void _addText() {
     const text = 'TEXT';
     final component = PdfStampTemplateComponent.text(
@@ -787,6 +797,7 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
                           PopupMenuItem<String>(
                             key: ValueKey('pdf-stamp-field-$field'),
                             value: field,
+                            height: 34,
                             child: Text(_fieldLabel(field)),
                           ),
                       ],
@@ -803,6 +814,7 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
                           PopupMenuItem<PdfStandardFont>(
                             key: ValueKey('pdf-stamp-font-${font.name}'),
                             value: font,
+                            height: 34,
                             child: Text(
                               _fontLabel(font),
                               style: TextStyle(
@@ -845,6 +857,17 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
                       ),
                     ),
                   ),
+                IconButton(
+                  key: const ValueKey('pdf-stamp-color-custom'),
+                  tooltip: 'More colors…',
+                  icon: const Icon(Icons.color_lens_outlined),
+                  style: IconButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(32, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: _pickCustomColor,
+                ),
               ]),
               const SizedBox(height: 12),
               Wrap(

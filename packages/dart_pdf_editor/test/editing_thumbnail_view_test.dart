@@ -1,4 +1,5 @@
-import 'package:flutter/gestures.dart' show kLongPressTimeout;
+import 'package:flutter/gestures.dart'
+    show PointerDeviceKind, kLongPressTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -83,7 +84,7 @@ void main() {
       await drain(tester);
     });
 
-    testWidgets('a plain tap opens the page: selects, jumps, and notifies',
+    testWidgets('a click selects and a double-click opens the page',
         (tester) async {
       wideScreen(tester);
       int? opened;
@@ -95,7 +96,31 @@ void main() {
       await tester.tap(find.text('Page 3'));
       await tester.pump();
       expect(refs.editing.selectedPages, [2]);
+      expect(opened, isNull);
+
+      await tester.tap(find.text('Page 3'));
+      await tester.pump();
       expect(opened, 2);
+      await drain(tester);
+    });
+
+    testWidgets('arrow keys move the grid page selection', (tester) async {
+      wideScreen(tester);
+      final refs = await pumpGrid(tester, pages: 5);
+
+      await tester.tap(find.text('Page 2'));
+      await tester.pump();
+      expect(refs.editing.selectedPages, [1]);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(refs.editing.selectedPages, [2]);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pump();
+      expect(refs.editing.selectedPages, [2, 3]);
       await drain(tester);
     });
 
@@ -151,6 +176,43 @@ void main() {
       await tester.pump();
       expect(labelsOf(refs.editing.document), ['Page 1', 'Page 5']);
       expect(refs.editing.hasPageSelection, isFalse);
+      await drain(tester);
+    });
+
+    testWidgets('holding shift previews the hovered grid range',
+        (tester) async {
+      wideScreen(tester);
+      final refs = await pumpGrid(tester, pages: 5);
+
+      BoxDecoration chip(int i) => tester
+          .widget<Container>(find.byKey(ValueKey('pdf-thumbnail-tile-chip-$i')))
+          .decoration as BoxDecoration;
+
+      await tester.tap(find.text('Page 2'));
+      await tester.pump();
+      expect(refs.editing.selectedPages, [1]);
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.text('Page 4')));
+      await tester.pump();
+      expect(chip(3).color, isNull);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.pump();
+      expect(chip(1).color, isNotNull);
+      expect(chip(2).color, isNotNull);
+      expect(chip(3).color, isNotNull);
+      expect(chip(0).color, isNull);
+      expect(chip(4).color, isNull);
+      expect(refs.editing.selectedPages, [1]);
+
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pump();
+      expect(chip(2).color, isNull);
+      expect(chip(3).color, isNull);
+      expect(chip(1).color, isNotNull);
       await drain(tester);
     });
 

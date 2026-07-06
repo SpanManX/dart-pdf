@@ -190,6 +190,7 @@ class _PdfColorPickerState extends State<PdfColorPicker> {
   Widget _valueFields(BuildContext context) {
     if (_format == PdfColorFormat.hex) {
       return TextField(
+        key: const ValueKey('pdf-color-hex'),
         controller: _hex,
         onChanged: _setHex,
         maxLength: 6,

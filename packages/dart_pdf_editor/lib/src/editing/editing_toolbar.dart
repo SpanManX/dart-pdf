@@ -1143,16 +1143,19 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
             PopupMenuItem(
               key: ValueKey('pdf-form-type-text'),
               value: PdfFormFieldKind.text,
+              height: 34,
               child: Text('Text field'),
             ),
             PopupMenuItem(
               key: ValueKey('pdf-form-type-checkbox'),
               value: PdfFormFieldKind.checkBox,
+              height: 34,
               child: Text('Check box'),
             ),
             PopupMenuItem(
               key: ValueKey('pdf-form-type-button'),
               value: PdfFormFieldKind.pushButton,
+              height: 34,
               child: Text('Image button'),
             ),
           ],

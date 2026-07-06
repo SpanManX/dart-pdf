@@ -304,7 +304,12 @@ class _FormInteractionLayerState extends State<FormInteractionLayer> {
           PopupMenuItem(
             key: ValueKey('pdf-form-option-$export'),
             value: export,
-            child: Text(display),
+            height: 34,
+            child: Text(display,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelMedium
+                    ?.copyWith(height: 1.1)),
           ),
       ],
     );

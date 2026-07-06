@@ -79,8 +79,8 @@ void main() {
       final editing = PdfEditingController(buildMultiPagePdf(3));
       addTearDown(editing.dispose);
       expect(editing.duplicatePages([1]), isTrue);
-      expect(labelsOf(editing.document),
-          ['Page 1', 'Page 2', 'Page 2', 'Page 3']);
+      expect(
+          labelsOf(editing.document), ['Page 1', 'Page 2', 'Page 2', 'Page 3']);
     });
 
     test('copies several pages as one contiguous block after the last', () {
@@ -170,8 +170,7 @@ void main() {
       expect(editing.selectedPages, [0, 1, 2]);
     });
 
-    test('pageRangePreviewTo mirrors the range a shift-click would select',
-        () {
+    test('pageRangePreviewTo mirrors the range a shift-click would select', () {
       final editing = PdfEditingController(buildMultiPagePdf(6));
       addTearDown(editing.dispose);
       editing.selectPage(1); // anchor at 1
@@ -218,8 +217,8 @@ void main() {
       expect(labelsOf(editing.document), ['Page 3', 'Page 4']);
       expect(editing.hasPageSelection, isFalse);
       editing.undo();
-      expect(labelsOf(editing.document),
-          ['Page 1', 'Page 2', 'Page 3', 'Page 4']);
+      expect(
+          labelsOf(editing.document), ['Page 1', 'Page 2', 'Page 3', 'Page 4']);
     });
 
     test('removeSelectedPages refuses to empty the document', () {
@@ -348,7 +347,8 @@ void main() {
       // still open, nothing returned
       expect(returned, isFalse);
       expect(result, isNull);
-      expect(find.byKey(const ValueKey('pdf-page-range-dialog')), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('pdf-page-range-dialog')), findsOneWidget);
     });
   });
 
@@ -396,8 +396,7 @@ void main() {
       await tester.pump();
 
       BoxDecoration chip(int i) => tester
-          .widget<Container>(
-              find.byKey(ValueKey('pdf-thumbnail-tile-chip-$i')))
+          .widget<Container>(find.byKey(ValueKey('pdf-thumbnail-tile-chip-$i')))
           .decoration as BoxDecoration;
 
       // anchor at Page 2 (index 1)
@@ -468,6 +467,42 @@ void main() {
 
       // the header slot is a fixed height, so the first tile hasn't moved
       expect(tester.getTopLeft(firstTile).dy, before);
+      await tester.pump(const Duration(seconds: 2)); // drain tile renders
+    });
+
+    testWidgets('arrow keys navigate the thumbnail strip selection',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final editing = PdfEditingController(buildMultiPagePdf(5));
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Row(children: [
+            PdfThumbnailSidebar(controller: editing, viewerController: viewer),
+            const Expanded(child: SizedBox()),
+          ]),
+        ),
+      ));
+      await tester.pump();
+
+      await tester.tap(find.text('Page 2'));
+      await tester.pump();
+      expect(editing.selectedPages, [1]);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(editing.selectedPages, [2]);
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+      await tester.pump();
+      expect(editing.selectedPages, [2, 3]);
       await tester.pump(const Duration(seconds: 2)); // drain tile renders
     });
 
@@ -806,8 +841,7 @@ void main() {
       final editing = await pumpStrip(tester);
 
       await rightClickTile(tester, 'Page 2');
-      await tester
-          .tap(find.byKey(const ValueKey('pdf-thumbnail-menu-delete')));
+      await tester.tap(find.byKey(const ValueKey('pdf-thumbnail-menu-delete')));
       await tester.pumpAndSettle();
       expect(labelsOf(editing.document), ['Page 1', 'Page 3', 'Page 4']);
       await tester.pump(const Duration(seconds: 2));
@@ -850,8 +884,7 @@ void main() {
           await pumpStrip(tester, onExportPages: (bytes) => exported = bytes);
 
       await rightClickTile(tester, 'Page 3');
-      await tester
-          .tap(find.byKey(const ValueKey('pdf-thumbnail-menu-export')));
+      await tester.tap(find.byKey(const ValueKey('pdf-thumbnail-menu-export')));
       await tester.pumpAndSettle();
       expect(exported, isNotNull);
       expect(labelsOf(PdfDocument.open(exported!)), ['Page 3']);
@@ -879,8 +912,7 @@ void main() {
       expect(editing.selectedPages, [0, 1, 2]);
       expect(find.text('Delete 3 pages'), findsOneWidget);
 
-      await tester
-          .tap(find.byKey(const ValueKey('pdf-thumbnail-menu-delete')));
+      await tester.tap(find.byKey(const ValueKey('pdf-thumbnail-menu-delete')));
       await tester.pumpAndSettle();
       expect(labelsOf(editing.document), ['Page 4', 'Page 5']);
       await tester.pump(const Duration(seconds: 2));
@@ -954,8 +986,7 @@ void main() {
       expect(find.byKey(const ValueKey('pdf-thumbnail-menu-delete')),
           findsNothing);
 
-      await tester
-          .tap(find.byKey(const ValueKey('pdf-thumbnail-menu-export')));
+      await tester.tap(find.byKey(const ValueKey('pdf-thumbnail-menu-export')));
       await tester.pumpAndSettle();
       expect(exported, isNotNull);
       expect(labelsOf(PdfDocument.open(exported!)), ['Page 2']);
