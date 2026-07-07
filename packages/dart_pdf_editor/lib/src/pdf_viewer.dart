@@ -3027,12 +3027,13 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
   }
 
   /// Whether a pointer of [kind] is drawing through the editing
-  /// overlay's raw event stream right now (ink or eraser armed, pen or
-  /// drawing finger) — the viewer's own gestures must stand aside.
+  /// overlay's raw event stream right now (ink/highlighter or eraser armed,
+  /// pen or drawing finger) — the viewer's own gestures must stand aside.
   bool _kindDrawsInk(PointerDeviceKind? kind) {
     final editing = widget.editing;
     if (editing == null ||
         (editing.tool != PdfEditTool.ink &&
+            editing.tool != PdfEditTool.highlight &&
             editing.tool != PdfEditTool.eraser)) {
       return false;
     }
@@ -3043,9 +3044,9 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
     };
   }
 
-  /// Whether a freehand drawing tool (ink or eraser) is armed. In this
-  /// "drawing mode" the viewer's trackpad/wheel zoom paths stand down so
-  /// a stray pinch can't zoom the page out from under a stroke: on the
+  /// Whether a freehand drawing tool (ink, highlighter, or eraser) is armed.
+  /// In this "drawing mode" the viewer's trackpad/wheel zoom paths stand down
+  /// so a stray pinch can't zoom the page out from under a stroke: on the
   /// web a two-finger trackpad gesture arrives as a pinch
   /// (`PointerScaleEvent`) that [InteractiveViewer] would otherwise apply
   /// directly (its `scaleFactor` neutralization only covers wheel
@@ -3055,7 +3056,9 @@ class _PdfViewerState extends State<PdfViewer> with TickerProviderStateMixin {
   /// tool to zoom.
   bool get _drawToolArmed {
     final tool = widget.editing?.tool;
-    return tool == PdfEditTool.ink || tool == PdfEditTool.eraser;
+    return tool == PdfEditTool.ink ||
+        tool == PdfEditTool.highlight ||
+        tool == PdfEditTool.eraser;
   }
 
   void _onSelectionStart(DragStartDetails details) {

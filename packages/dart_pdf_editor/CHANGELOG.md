@@ -8,8 +8,8 @@
 - Viewer interaction: motion-based render hold defers expensive UI work during
   active gestures, chrome stays visually constant while zoomed, and annotation
   hit handling exposes a new `PdfAnnotationTapHandler` callback.
-- Editing UI: the draw toolbar includes a highlight selection action, active
-  text selections can be styled as markup, count-tool cursor previews are more
+- Editing UI: the draw toolbar includes a freehand highlight tool, active text
+  selections can be styled as markup, count-tool cursor previews are more
   accurate, and the takeoff panel has improved accessibility labels.
 - Forms: right-click form-field editing and form-style controls are available
   from the viewer, including font and visual style updates.

@@ -45,6 +45,7 @@ void main() {
 
     for (final tool in [
       PdfEditTool.ink,
+      PdfEditTool.highlight,
       PdfEditTool.rectangle,
       PdfEditTool.line,
       PdfEditTool.freeText,

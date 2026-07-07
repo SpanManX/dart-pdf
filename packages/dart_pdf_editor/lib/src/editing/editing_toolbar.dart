@@ -44,7 +44,7 @@ enum PdfEditToolGroup {
   /// Text-markup actions (highlight, underline, strike out, squiggly).
   markup,
 
-  /// Freehand drawing, text highlight, and the ink eraser.
+  /// Freehand drawing, freehand highlight, and the ink eraser.
   draw,
 
   /// Rectangle, ellipse, line, arrow, polyline, polygon.
@@ -152,8 +152,8 @@ class PdfEditingToolbar extends StatefulWidget {
   /// Whether text markup actions (highlight, underline, strike out,
   /// squiggly — they act on the viewer's text selection) are shown. A
   /// convenience for the common case; equivalent to dropping
-  /// [PdfEditToolGroup.markup] from [groups]. This also hides the Draw
-  /// group's Highlight shortcut.
+  /// [PdfEditToolGroup.markup] from [groups]. The Draw group's freehand
+  /// Highlight tool is controlled by [PdfEditTool.highlight].
   final bool showMarkup;
 
   /// Whether the undo/redo buttons are shown. The viewer's ⌘Z/⇧⌘Z
@@ -292,8 +292,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         Icons.draw,
         [
           _GroupTool.tool(PdfEditTool.ink, Icons.draw, 'Draw'),
-          _GroupTool.markup(PdfMarkupKind.highlight, Icons.border_color,
-              'Highlight selection'),
+          _GroupTool.tool(PdfEditTool.highlight, Icons.border_color,
+              'Highlight — draw freehand'),
           _GroupTool.tool(
               PdfEditTool.eraser, Icons.auto_fix_normal, 'Erase ink strokes'),
         ],
@@ -460,12 +460,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     }
     setState(() => _openGroupId = group.id);
     if (_groupForTool(controller.tool)?.id == group.id) return;
-    final keepTextSelection =
-        group.id == 'draw' && viewerController.hasSelection;
-    controller.tool = keepTextSelection ? null : group.defaultTool;
-    if (keepTextSelection) {
-      controller.useMarkupStyleScope();
-    } else if (controller.tool != null) {
+    controller.tool = group.defaultTool;
+    if (controller.tool != null) {
       viewerController.clearSelection();
     }
     // markup arms no tool, so its style scope is set explicitly (after the
@@ -1063,7 +1059,9 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   List<Widget> _drawToolExtras(BuildContext context) {
     final tool = controller.tool;
     return [
-      if ((tool == PdfEditTool.ink || tool == PdfEditTool.eraser) &&
+      if ((tool == PdfEditTool.ink ||
+              tool == PdfEditTool.highlight ||
+              tool == PdfEditTool.eraser) &&
           controller.hasTouchInput)
         IconButton(
           icon: const Icon(Icons.touch_app),

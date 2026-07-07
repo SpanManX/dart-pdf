@@ -364,8 +364,26 @@ class PdfEditingPreferences extends ChangeNotifier {
   /// scope — so each annotation tool keeps its own colour, stroke and so on
   /// across sessions. A null [scope] (select mode, or restyling a
   /// selection) writes only the shared defaults.
-  void beginStyleScope(String? scope, Set<String> fields) {
-    if (scope == _styleScope && setEquals(fields, _styleScopeFields)) return;
+  void beginStyleScope(String? scope, Set<String> fields,
+      {Map<String, Object?> defaults = const {}}) {
+    var seeded = false;
+    if (scope != null &&
+        defaults.isNotEmpty &&
+        !_toolStyles.containsKey(scope)) {
+      final slot = {
+        for (final entry in defaults.entries)
+          if (fields.contains(entry.key)) entry.key: entry.value,
+      };
+      if (slot.isNotEmpty) {
+        _toolStyles[scope] = slot;
+        _writeToolStyles();
+        seeded = true;
+      }
+    }
+    if (scope == _styleScope && setEquals(fields, _styleScopeFields)) {
+      if (seeded && scope != null) _restoreScope(scope);
+      return;
+    }
     _styleScope = scope;
     _styleScopeFields = fields;
     if (scope != null) _restoreScope(scope);

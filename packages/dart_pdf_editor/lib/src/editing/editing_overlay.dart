@@ -952,7 +952,9 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
               .clamp(0.0, 1.0)
           : null;
 
-  bool get _drawTool => _tool == PdfEditTool.ink || _tool == PdfEditTool.eraser;
+  bool get _inkTool =>
+      _tool == PdfEditTool.ink || _tool == PdfEditTool.highlight;
+  bool get _drawTool => _inkTool || _tool == PdfEditTool.eraser;
 
   /// A finger should pan the viewer (not draw): the draw tool is armed
   /// but finger-drawing is off, so touch is reserved for scrolling.
@@ -2517,7 +2519,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         // mouse/trackpad erase through the arena like any drag
         _panErasing = true;
         _eraseAt(position);
-      case PdfEditTool.ink:
+      case PdfEditTool.ink || PdfEditTool.highlight:
         // hold the auto-commit while this stroke is on the page
         _controller.beginInkStroke();
         final pressure = _pointerPressure;
@@ -3687,7 +3689,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       }
     } else if (_tool == PdfEditTool.note) {
       cursor = SystemMouseCursors.click;
-    } else if (_tool == PdfEditTool.ink) {
+    } else if (_inkTool) {
       // the painted dot (pen colour at pen width) is the cursor, so the
       // chosen colour and stroke width are visible before drawing
       if (_penCursor != event.localPosition) {
@@ -3751,7 +3753,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (!overKnob && _rotateCursor != null) {
       setState(() => _rotateCursor = null);
     }
-    if (_tool != PdfEditTool.ink && _penCursor != null) {
+    if (!_inkTool && _penCursor != null) {
       setState(() => _penCursor = null);
     }
     if (_tool != PdfEditTool.count && _countCursor != null) {
@@ -4540,9 +4542,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                     eraserRadius: _controller.eraserRadius * _geometry.scale,
                     // the pen-preview dot (ink tool) and the rotation glyph
                     // (rotate knob): painted in place of the system cursor
-                    penCursor: _tool == PdfEditTool.ink && _activeStroke == null
-                        ? _penCursor
-                        : null,
+                    penCursor:
+                        _inkTool && _activeStroke == null ? _penCursor : null,
                     penOpacity: _controller.opacity,
                     countPreview:
                         _tool == PdfEditTool.count && _countCursor != null
@@ -4961,7 +4962,7 @@ class _ActiveStrokePainter extends CustomPainter {
       _state._controller.strokeWidth * geometry.scale,
     );
     final cursor = _state._penCursor;
-    if (cursor != null && _state._tool == PdfEditTool.ink) {
+    if (cursor != null && _state._inkTool) {
       _paintPenCursor(
         canvas,
         cursor,

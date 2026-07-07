@@ -31,7 +31,8 @@ Map<String, String> _normalizeStampTemplateValues(Map<String, String> values) {
 ///
 /// Text markups (highlight, underline, strike-out, squiggly) are not
 /// tools — they act on the viewer's current text selection through
-/// [PdfEditingController.addMarkup].
+/// [PdfEditingController.addMarkup]. [highlight] is the Draw group's
+/// freehand highlighter.
 enum PdfEditTool {
   /// Tap to select an annotation; drag it to move, drag its handles to
   /// resize.
@@ -40,6 +41,11 @@ enum PdfEditTool {
   /// Freehand drawing. Strokes accumulate in the controller until
   /// [PdfEditingController.finishInk] commits them as one Ink annotation.
   ink,
+
+  /// Freehand highlight. Like [ink], but with a separate highlighter style
+  /// scope so it defaults to a broad translucent yellow stroke and remembers
+  /// later user changes independently of the pen.
+  highlight,
 
   /// Drag (or tap) over ink strokes to delete them. Whole-annotation:
   /// every Ink annotation the pointer crosses is removed; one swipe is
@@ -611,20 +617,18 @@ class PdfEditingController extends ChangeNotifier {
 
   set tool(PdfEditTool? value) {
     if (value == _tool) return;
-    // leaving the ink tool commits the drawing, like lifting the pen.
+    // leaving an ink-like tool commits the drawing, like lifting the pen.
     //
     // Switching directly from ink to the eraser is the latency-sensitive
     // path used by Apple Pencil double-tap.  A pending ink commit can rewrite
     // the PDF and trigger a raster refresh, which made the eraser button feel
     // sticky.  Arm the eraser and repaint the toolbar/cursor first, then let
-    // the commit run in the next event-loop turn; the ink is still committed
+    // the commit run in the next event-loop turn; the stroke is still committed
     // before any subsequent pointer event can erase it.
-    final deferInkCommit = _tool == PdfEditTool.ink &&
-        value == PdfEditTool.eraser &&
-        hasPendingInk;
-    if (_tool == PdfEditTool.ink &&
-        value != PdfEditTool.ink &&
-        !deferInkCommit) {
+    final leavingInkTool = _buffersInk(_tool) && value != _tool;
+    final deferInkCommit =
+        leavingInkTool && value == PdfEditTool.eraser && hasPendingInk;
+    if (leavingInkTool && !deferInkCommit) {
       finishInk();
     }
     // arming anything but the eraser by other means breaks the pencil
@@ -637,8 +641,8 @@ class PdfEditingController extends ChangeNotifier {
     // each annotation tool remembers its own colour, stroke, opacity, … —
     // arming one restores its saved style and routes further style changes
     // back into its slot (see [PdfEditingPreferences.beginStyleScope])
-    preferences.beginStyleScope(
-        _styleScopeKey(value), _styleScopeFields(value));
+    preferences.beginStyleScope(_styleScopeKey(value), _styleScopeFields(value),
+        defaults: _styleScopeDefaults(value));
     notifyListeners();
     if (deferInkCommit) Timer.run(finishInk);
   }
@@ -672,12 +676,16 @@ class PdfEditingController extends ChangeNotifier {
     }
   }
 
+  static bool _buffersInk(PdfEditTool? tool) =>
+      tool == PdfEditTool.ink || tool == PdfEditTool.highlight;
+
   /// The persisted-style scope key for [tool] — its [PdfEditTool] name for
   /// the tools that create styled annotations, null for the others (select,
   /// content, form, redact, signature, eraser-when-radius-only handled by
   /// its own slot). See [preferences].
   static String? _styleScopeKey(PdfEditTool? tool) => switch (tool) {
         PdfEditTool.ink => 'ink',
+        PdfEditTool.highlight => 'freehandHighlight',
         PdfEditTool.eraser => 'eraser',
         PdfEditTool.rectangle => 'rectangle',
         PdfEditTool.ellipse => 'ellipse',
@@ -704,7 +712,11 @@ class PdfEditingController extends ChangeNotifier {
   /// strip exposes, so a rectangle keeps its fill but not a font, ink keeps
   /// its stroke but not line endings, and so on.
   static Set<String> _styleScopeFields(PdfEditTool? tool) => switch (tool) {
-        PdfEditTool.ink => const {'color', 'strokeWidth', 'opacity'},
+        PdfEditTool.ink || PdfEditTool.highlight => const {
+            'color',
+            'strokeWidth',
+            'opacity',
+          },
         PdfEditTool.eraser => const {'eraserRadius'},
         PdfEditTool.rectangle ||
         PdfEditTool.ellipse ||
@@ -752,6 +764,16 @@ class PdfEditingController extends ChangeNotifier {
         PdfEditTool.note => const {'color'},
         PdfEditTool.stamp => const {'color', 'opacity'},
         PdfEditTool.count => const {'color', 'opacity'},
+        _ => const {},
+      };
+
+  static Map<String, Object?> _styleScopeDefaults(PdfEditTool? tool) =>
+      switch (tool) {
+        PdfEditTool.highlight => const {
+            'color': 0xFFFFD100,
+            'strokeWidth': 12.0,
+            'opacity': 0.45,
+          },
         _ => const {},
       };
 

@@ -10,6 +10,7 @@ import 'package:pdf_cos/pdf_cos.dart';
 import 'package:pdf_document/pdf_document.dart';
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // 2x2 RGBA PNG fixture used by image-content replacement tests.
 final _tinyPng = base64.decode('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0k'
@@ -957,8 +958,10 @@ void main() {
       await settle(tester);
     });
 
-    testWidgets('the Draw group exposes a text highlight action',
+    testWidgets('the Draw group exposes a freehand highlight tool',
         (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      addTearDown(() => SharedPreferences.setMockInitialValues({}));
       final editing = PdfEditingController(buildMultiPagePdf(1));
       final viewer = PdfViewerController();
       addTearDown(editing.dispose);
@@ -982,29 +985,34 @@ void main() {
       ));
       await tester.pump();
 
-      final gesture = await tester.startGesture(view(158, 720),
-          kind: PointerDeviceKind.mouse);
-      await gesture.moveBy(const Offset(-20, 0));
-      await tester.pump();
-      await gesture.moveTo(view(50, 720));
-      await tester.pump();
-      await gesture.up();
-      await tester.pump();
-      expect(viewer.selectedText, 'Page 1');
-
       await tester.tap(find.byKey(const ValueKey('pdf-group-draw')),
           kind: PointerDeviceKind.mouse);
       await tester.pump();
-      expect(viewer.hasSelection, isTrue,
-          reason: 'opening Draw must not clear text before Highlight runs');
 
       final highlightButton = tester.widget<IconButton>(
           find.widgetWithIcon(IconButton, Icons.border_color));
       expect(highlightButton.onPressed, isNotNull);
-      await tester.tap(find.byTooltip('Highlight selection'));
+      await tester.tap(find.byTooltip('Highlight — draw freehand'));
+      await tester.pump();
+      expect(editing.tool, PdfEditTool.highlight);
+      expect(viewer.hasSelection, isFalse);
+      expect(editing.color, const Color(0xFFFFD100));
+      expect(editing.strokeWidth, 12);
+      expect(editing.opacity, 0.45);
+
+      final gesture = await tester.startGesture(view(80, 720),
+          kind: PointerDeviceKind.mouse);
+      await gesture.moveTo(view(200, 720));
+      await gesture.up();
+      await tester.pump();
+      editing.finishInk();
       await tester.pump();
 
-      expect(editing.document.page(0).annotations.single.subtype, 'Highlight');
+      final annotation = editing.document.page(0).annotations.single;
+      expect(annotation.subtype, 'Ink');
+      expect(annotation.color, 0xFFD100);
+      expect(annotation.borderWidth, 12);
+      expect(annotation.appearanceOpacity, closeTo(0.45, 1e-6));
       await settle(tester);
     });
 
