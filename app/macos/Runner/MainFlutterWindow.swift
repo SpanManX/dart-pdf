@@ -26,6 +26,47 @@ class MainFlutterWindow: NSWindow {
       }
     }
 
+    let fileAccessChannel = FlutterMethodChannel(
+      name: "dev.milanko.dartpdf/file_access",
+      binaryMessenger: flutterViewController.engine.binaryMessenger)
+    fileAccessChannel.setMethodCallHandler { (call, result) in
+      switch call.method {
+      case "bookmarkForPath":
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String else {
+          result(FlutterError(
+            code: "bad_args",
+            message: "bookmarkForPath expects a path",
+            details: nil))
+          return
+        }
+        self.createBookmark(path: path, result: result)
+      case "readFile":
+        guard let args = call.arguments as? [String: Any],
+              let bookmark = args["bookmark"] as? String else {
+          result(FlutterError(
+            code: "bad_args",
+            message: "readFile expects a bookmark",
+            details: nil))
+          return
+        }
+        self.readFile(bookmark: bookmark, result: result)
+      case "writeFile":
+        guard let args = call.arguments as? [String: Any],
+              let bookmark = args["bookmark"] as? String,
+              let typed = args["bytes"] as? FlutterStandardTypedData else {
+          result(FlutterError(
+            code: "bad_args",
+            message: "writeFile expects a bookmark and bytes",
+            details: nil))
+          return
+        }
+        self.writeFile(bookmark: bookmark, bytes: typed.data, result: result)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
     let imageClipboardChannel = FlutterMethodChannel(
       name: "dev.milanko.dartpdf/image_clipboard",
       binaryMessenger: flutterViewController.engine.binaryMessenger)
@@ -73,6 +114,69 @@ class MainFlutterWindow: NSWindow {
       return FlutterStandardTypedData(bytes: converted)
     }
     return nil
+  }
+
+  private func createBookmark(path: String, result: FlutterResult) {
+    let url = URL(fileURLWithPath: path)
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    do {
+      let data = try url.bookmarkData(
+        options: [.withSecurityScope],
+        includingResourceValuesForKeys: nil,
+        relativeTo: nil)
+      result(FlutterStandardTypedData(bytes: data))
+    } catch {
+      result(FlutterError(
+        code: "bookmark_failed",
+        message: error.localizedDescription,
+        details: nil))
+    }
+  }
+
+  private func resolveBookmarkedURL(_ bookmark: String) throws -> URL {
+    guard let data = Data(base64Encoded: bookmark) else {
+      throw NSError(
+        domain: "DartPdfFileAccess",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Invalid bookmark data"])
+    }
+    var stale = false
+    return try URL(
+      resolvingBookmarkData: data,
+      options: [.withSecurityScope],
+      relativeTo: nil,
+      bookmarkDataIsStale: &stale)
+  }
+
+  private func readFile(bookmark: String, result: FlutterResult) {
+    do {
+      let url = try resolveBookmarkedURL(bookmark)
+      let scoped = url.startAccessingSecurityScopedResource()
+      defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+      let data = try Data(contentsOf: url)
+      result(FlutterStandardTypedData(bytes: data))
+    } catch {
+      result(FlutterError(
+        code: "read_failed",
+        message: error.localizedDescription,
+        details: nil))
+    }
+  }
+
+  private func writeFile(bookmark: String, bytes: Data, result: FlutterResult) {
+    do {
+      let url = try resolveBookmarkedURL(bookmark)
+      let scoped = url.startAccessingSecurityScopedResource()
+      defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+      try bytes.write(to: url, options: .atomic)
+      result(true)
+    } catch {
+      result(FlutterError(
+        code: "write_failed",
+        message: error.localizedDescription,
+        details: nil))
+    }
   }
 
   private func pngData(fromTiff data: Data) -> Data? {

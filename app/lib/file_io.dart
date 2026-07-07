@@ -1,8 +1,14 @@
+import 'dart:convert';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+const _macosFileAccessChannel =
+    MethodChannel('dev.milanko.dartpdf/file_access');
 
 /// One filter, every platform: desktop and web match on the extension,
 /// Android on the MIME type, iOS/macOS on the uniform type identifier —
@@ -24,7 +30,7 @@ const imageTypeGroup = XTypeGroup(
 
 /// A PDF the user picked to open, or null when the dialog was cancelled.
 class PickedPdf {
-  const PickedPdf(this.name, this.bytes, {this.path});
+  const PickedPdf(this.name, this.bytes, {this.path, this.bookmark});
 
   final String name;
   final Uint8List bytes;
@@ -32,6 +38,10 @@ class PickedPdf {
   /// The on-disk path on desktop platforms (null on web/mobile, where the
   /// picker hands back a sandboxed copy). The origin for in-place save.
   final String? path;
+
+  /// macOS security-scoped bookmark for [path], when available. Stored with
+  /// recents/session entries so sandboxed folders can be reopened later.
+  final String? bookmark;
 }
 
 /// Opens the system file picker for a PDF. Returns null when the user cancels.
@@ -43,8 +53,10 @@ Future<XFile?> pickPdfFile() =>
 Future<PickedPdf?> pickPdf() async {
   final file = await pickPdfFile();
   if (file == null) return null;
+  final path = originPathForPickedFile(file);
   final bytes = await file.readAsBytes();
-  return PickedPdf(file.name, bytes, path: originPathForPickedFile(file));
+  final bookmark = await securityBookmarkForPath(path);
+  return PickedPdf(file.name, bytes, path: path, bookmark: bookmark);
 }
 
 /// The picked file's writable origin on desktop, or null on web/mobile where
@@ -55,6 +67,29 @@ String? originPathForPickedFile(XFile file) => (!kIsWeb &&
             defaultTargetPlatform == TargetPlatform.linux))
     ? file.path
     : null;
+
+bool get _isMacOSDesktop =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+
+/// Creates a security-scoped bookmark for [path] on macOS.
+///
+/// Returns null on other platforms, when [path] is absent, or when the native
+/// side cannot create a bookmark. Callers still keep the path and fall back to
+/// normal `XFile` I/O, preserving the old behavior.
+Future<String?> securityBookmarkForPath(String? path) async {
+  if (!_isMacOSDesktop || path == null || path.isEmpty) return null;
+  try {
+    final data = await _macosFileAccessChannel.invokeMethod<Uint8List>(
+      'bookmarkForPath',
+      {'path': path},
+    );
+    return data == null || data.isEmpty ? null : base64Encode(data);
+  } on MissingPluginException {
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Picks a PDF and returns just its bytes (null when cancelled) — the source
 /// for "Insert PDF…" and document comparison.
@@ -112,7 +147,24 @@ class SaveResult {
 
 /// Reads a PDF straight from a known on-disk [path] — used to reopen a recent
 /// file. Throws if it can't be read (caller drops the stale recent entry).
-Future<Uint8List> readPdfAtPath(String path) => XFile(path).readAsBytes();
+///
+/// On macOS, [bookmark] reactivates the user's original security-scoped access
+/// before reading. This is required for sandboxed locations such as OneDrive's
+/// CloudStorage folder after an app restart.
+Future<Uint8List> readPdfAtPath(String path, {String? bookmark}) async {
+  if (_isMacOSDesktop && bookmark != null && bookmark.isNotEmpty) {
+    try {
+      final bytes = await _macosFileAccessChannel.invokeMethod<Uint8List>(
+        'readFile',
+        {'path': path, 'bookmark': bookmark},
+      );
+      if (bytes != null) return bytes;
+    } catch (_) {
+      // Fall through to the generic path read below.
+    }
+  }
+  return XFile(path).readAsBytes();
+}
 
 /// Whether the current platform can open a local file's containing folder in
 /// the system file manager. Desktop only: mobile/web origins are either absent
@@ -170,11 +222,29 @@ bool get supportsInPlaceSave =>
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.linux);
 
-/// Overwrites the file at [path] with [bytes] (in-place save). Uses
-/// [XFile.saveTo] rather than dart:io so this file still compiles for web,
-/// where [supportsInPlaceSave] is false and this is never called.
-Future<SaveResult> saveBytesToPath(Uint8List bytes, String path) async {
+/// Overwrites the file at [path] with [bytes] (in-place save).
+///
+/// On macOS, [bookmark] reactivates the security-scoped origin before writing.
+/// Other platforms use [XFile.saveTo] rather than dart:io so this file still
+/// compiles for web, where [supportsInPlaceSave] is false and this is never
+/// called.
+Future<SaveResult> saveBytesToPath(
+  Uint8List bytes,
+  String path, {
+  String? bookmark,
+}) async {
   try {
+    if (_isMacOSDesktop && bookmark != null && bookmark.isNotEmpty) {
+      try {
+        final ok = await _macosFileAccessChannel.invokeMethod<bool>(
+          'writeFile',
+          {'path': path, 'bookmark': bookmark, 'bytes': bytes},
+        );
+        if (ok == true) return SaveResult.saved(path);
+      } catch (_) {
+        // Fall through to the generic path write below.
+      }
+    }
     await XFile.fromData(bytes, mimeType: 'application/pdf').saveTo(path);
     return SaveResult.saved(path);
   } catch (e) {
@@ -184,8 +254,7 @@ Future<SaveResult> saveBytesToPath(Uint8List bytes, String path) async {
 
 /// Save-as with whatever the platform offers: a save dialog on desktop, a
 /// browser download on the web, the share sheet on phones and tablets (where
-/// apps can't write outside their sandbox directly). The origin-aware
-/// "Save in place" path is added in a later phase.
+/// apps can't write outside their sandbox directly).
 Future<SaveResult> saveBytesAs(
   BuildContext context,
   Uint8List bytes,

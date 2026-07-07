@@ -7,7 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// the editor can re-open it on the next launch.
 @immutable
 class SessionDocument {
-  const SessionDocument({required this.title, required this.path});
+  const SessionDocument({
+    required this.title,
+    required this.path,
+    this.bookmark,
+  });
 
   /// The tab title (usually the file name) — shown while the file is read back.
   final String title;
@@ -16,11 +20,19 @@ class SessionDocument {
   /// every restored document can be read directly without a fresh pick.
   final String path;
 
-  Map<String, dynamic> toJson() => {'t': title, 'p': path};
+  /// macOS security-scoped bookmark for [path], when available.
+  final String? bookmark;
+
+  Map<String, dynamic> toJson() => {
+        't': title,
+        'p': path,
+        if (bookmark != null) 'b': bookmark,
+      };
 
   factory SessionDocument.fromJson(Map<String, dynamic> j) => SessionDocument(
         title: (j['t'] as String?) ?? 'Untitled',
         path: (j['p'] as String?) ?? '',
+        bookmark: j['b'] as String?,
       );
 }
 

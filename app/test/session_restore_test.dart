@@ -37,8 +37,9 @@ void main() {
 
   void seedSession(List<({String title, String path})> docs) {
     SharedPreferences.setMockInitialValues({
-      'dart_pdf_editor_app.session': jsonEncode(
-          [for (final d in docs) {'t': d.title, 'p': d.path}]),
+      'dart_pdf_editor_app.session': jsonEncode([
+        for (final d in docs) {'t': d.title, 'p': d.path}
+      ]),
     });
   }
 
@@ -122,6 +123,7 @@ void main() {
       'name': 'opened.pdf',
       'bytes': buildClassicPdf(),
       'path': path,
+      'bookmark': 'bookmark-data',
     }));
     await tester.runAsync(() async {
       await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
@@ -139,5 +141,6 @@ void main() {
     expect(tabTitle('opened.pdf'), findsOneWidget);
     final persisted = await SessionStore().load();
     expect(persisted.map((d) => d.path), [path]);
+    expect(persisted.map((d) => d.bookmark), ['bookmark-data']);
   });
 }

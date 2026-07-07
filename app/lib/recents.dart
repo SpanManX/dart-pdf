@@ -6,7 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// One entry in the "recent documents" list shown on the welcome screen.
 @immutable
 class RecentFile {
-  const RecentFile({required this.title, this.path, required this.openedAt});
+  const RecentFile({
+    required this.title,
+    this.path,
+    this.bookmark,
+    required this.openedAt,
+  });
 
   final String title;
 
@@ -14,6 +19,9 @@ class RecentFile {
   /// Null on web/mobile, where re-opening needs a fresh pick (until Phase 2/3
   /// persists reusable origin handles).
   final String? path;
+
+  /// macOS security-scoped bookmark for [path], when available.
+  final String? bookmark;
 
   /// Epoch milliseconds of the most recent open — drives ordering.
   final int openedAt;
@@ -28,12 +36,14 @@ class RecentFile {
   Map<String, dynamic> toJson() => {
         't': title,
         if (path != null) 'p': path,
+        if (bookmark != null) 'b': bookmark,
         'o': openedAt,
       };
 
   factory RecentFile.fromJson(Map<String, dynamic> j) => RecentFile(
         title: (j['t'] as String?) ?? 'Untitled',
         path: j['p'] as String?,
+        bookmark: j['b'] as String?,
         openedAt: (j['o'] as num?)?.toInt() ?? 0,
       );
 }
@@ -76,10 +86,12 @@ class RecentsStore extends ChangeNotifier {
   }
 
   /// Records (or refreshes) a recently opened document at the front.
-  Future<void> add({required String title, String? path}) async {
+  Future<void> add(
+      {required String title, String? path, String? bookmark}) async {
     final entry = RecentFile(
       title: title,
       path: path,
+      bookmark: bookmark,
       openedAt: DateTime.now().millisecondsSinceEpoch,
     );
     _items.removeWhere((e) => e.id == entry.id);

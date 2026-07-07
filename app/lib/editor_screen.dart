@@ -269,9 +269,13 @@ class _EditorScreenState extends State<EditorScreen>
   }
 
   Future<void> _reopenSessionDocument(SessionDocument doc) async {
-    final loading = _openLoading(doc.title, originPath: doc.path);
+    final loading = _openLoading(
+      doc.title,
+      originPath: doc.path,
+      originBookmark: doc.bookmark,
+    );
     try {
-      final bytes = await readPdfAtPath(doc.path);
+      final bytes = await readPdfAtPath(doc.path, bookmark: doc.bookmark);
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
       final opened = _replaceLoadingTab(
@@ -281,9 +285,12 @@ class _EditorScreenState extends State<EditorScreen>
           bytes: bytes,
           preferences: _prefs,
           originPath: doc.path,
+          originBookmark: doc.bookmark,
         ),
       );
-      if (opened) _recents.add(title: doc.title, path: doc.path);
+      if (opened) {
+        _recents.add(title: doc.title, path: doc.path, bookmark: doc.bookmark);
+      }
     } catch (_) {
       // The file is gone (moved/deleted): drop the placeholder quietly.
       if (mounted) await _closeTabs([loading]);
@@ -300,7 +307,8 @@ class _EditorScreenState extends State<EditorScreen>
     for (final tab in _tabs) {
       final path = tab.originPath;
       if (path == null || path.isEmpty || !seen.add(path)) continue;
-      documents.add(SessionDocument(title: tab.title, path: path));
+      documents.add(SessionDocument(
+          title: tab.title, path: path, bookmark: tab.originBookmark));
     }
     await _session.save(documents);
   }
@@ -308,14 +316,16 @@ class _EditorScreenState extends State<EditorScreen>
   // --- opening -------------------------------------------------------------
 
   /// Opens [bytes] in a brand-new tab and makes it active, recording a recent.
-  void _openBytes(Uint8List bytes, String title, {String? originPath}) {
+  void _openBytes(Uint8List bytes, String title,
+      {String? originPath, String? originBookmark}) {
     _addTab(DocumentTab.document(
       title: title,
       bytes: bytes,
       preferences: _prefs,
       originPath: originPath,
+      originBookmark: originBookmark,
     ));
-    _recents.add(title: title, path: originPath);
+    _recents.add(title: title, path: originPath, bookmark: originBookmark);
   }
 
   void _openError(String title, String error) {
@@ -330,8 +340,10 @@ class _EditorScreenState extends State<EditorScreen>
     unawaited(_persistSession());
   }
 
-  DocumentTab _openLoading(String title, {String? originPath}) {
-    final tab = DocumentTab.loading(title: title, originPath: originPath);
+  DocumentTab _openLoading(String title,
+      {String? originPath, String? originBookmark}) {
+    final tab = DocumentTab.loading(
+        title: title, originPath: originPath, originBookmark: originBookmark);
     _addTab(tab);
     return tab;
   }
@@ -355,9 +367,14 @@ class _EditorScreenState extends State<EditorScreen>
     Future<Uint8List> bytesFuture, {
     required String title,
     String? originPath,
+    String? originBookmark,
     String? errorTitle,
   }) async {
-    final loading = _openLoading(title, originPath: originPath);
+    final loading = _openLoading(
+      title,
+      originPath: originPath,
+      originBookmark: originBookmark,
+    );
     try {
       final bytes = await bytesFuture;
       // Let the loading tab paint before constructing the edit session, which
@@ -371,9 +388,12 @@ class _EditorScreenState extends State<EditorScreen>
           bytes: bytes,
           preferences: _prefs,
           originPath: originPath,
+          originBookmark: originBookmark,
         ),
       );
-      if (opened) _recents.add(title: title, path: originPath);
+      if (opened) {
+        _recents.add(title: title, path: originPath, bookmark: originBookmark);
+      }
     } catch (e) {
       if (!mounted) return;
       _replaceLoadingTab(
@@ -390,10 +410,13 @@ class _EditorScreenState extends State<EditorScreen>
     try {
       final file = await pickPdfFile();
       if (file == null) return;
+      final path = originPathForPickedFile(file);
+      final bookmark = await securityBookmarkForPath(path);
       await _openLoadedBytes(
         file.readAsBytes(),
         title: file.name,
-        originPath: originPathForPickedFile(file),
+        originPath: path,
+        originBookmark: bookmark,
       );
     } catch (e) {
       _openError('Open failed', 'Could not open the selected file\n$e');
@@ -418,10 +441,11 @@ class _EditorScreenState extends State<EditorScreen>
     }
     await _openLoadedBytes(
       file.bytes == null
-          ? readPdfAtPath(file.path!)
+          ? readPdfAtPath(file.path!, bookmark: file.bookmark)
           : Future<Uint8List>.value(file.bytes!),
       title: file.name,
       originPath: file.path,
+      originBookmark: file.bookmark,
     );
   }
 
@@ -456,10 +480,12 @@ class _EditorScreenState extends State<EditorScreen>
       // desktop_drop exposes a real path on desktop; on web it's a blob ref
       // we don't treat as a writable origin.
       final path = (!kIsWeb && item.path.isNotEmpty) ? item.path : null;
+      final bookmark = await securityBookmarkForPath(path);
       await _openLoadedBytes(
         item.readAsBytes(),
         title: item.name,
         originPath: path,
+        originBookmark: bookmark,
       );
     }
   }
@@ -532,9 +558,13 @@ class _EditorScreenState extends State<EditorScreen>
       await _pickAndOpen();
       return;
     }
-    final loading = _openLoading(entry.title, originPath: path);
+    final loading = _openLoading(
+      entry.title,
+      originPath: path,
+      originBookmark: entry.bookmark,
+    );
     try {
-      final bytes = await readPdfAtPath(path);
+      final bytes = await readPdfAtPath(path, bookmark: entry.bookmark);
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
       final opened = _replaceLoadingTab(
@@ -544,9 +574,12 @@ class _EditorScreenState extends State<EditorScreen>
           bytes: bytes,
           preferences: _prefs,
           originPath: path,
+          originBookmark: entry.bookmark,
         ),
       );
-      if (opened) _recents.add(title: entry.title, path: path);
+      if (opened) {
+        _recents.add(title: entry.title, path: path, bookmark: entry.bookmark);
+      }
     } catch (e) {
       await _recents.remove(entry.id);
       if (!mounted) return;
@@ -748,7 +781,11 @@ class _EditorScreenState extends State<EditorScreen>
     if (bytes == null) return;
     final inPlace = !saveAs && tab.originPath != null && supportsInPlaceSave;
     var result = inPlace
-        ? await saveBytesToPath(bytes, tab.originPath!)
+        ? await saveBytesToPath(
+            bytes,
+            tab.originPath!,
+            bookmark: tab.originBookmark,
+          )
         : await saveBytesAs(context, bytes, tab.title);
     if (!mounted) return;
     if (inPlace && !result.succeeded) {
@@ -757,12 +794,23 @@ class _EditorScreenState extends State<EditorScreen>
       if (!mounted) return;
     }
     if (result.succeeded) {
+      final path = result.path;
+      final existingBookmark =
+          path != null && path == tab.originPath ? tab.originBookmark : null;
+      final bookmark = path == null
+          ? null
+          : (await securityBookmarkForPath(path)) ?? existingBookmark;
+      if (!mounted) return;
       setState(() {
         tab.markSaved();
-        if (result.path != null) tab.originPath = result.path;
+        if (path != null) {
+          tab.originPath = path;
+          tab.originBookmark = bookmark;
+        }
       });
-      if (result.path != null) {
-        _recents.add(title: tab.title, path: result.path);
+      if (path != null) {
+        _recents.add(
+            title: tab.title, path: path, bookmark: tab.originBookmark);
         // A Save As gave the tab a reusable origin — remember it for next time.
         unawaited(_persistSession());
       }

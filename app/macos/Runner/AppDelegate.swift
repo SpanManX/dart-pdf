@@ -76,6 +76,16 @@ class AppDelegate: FlutterAppDelegate {
     if let data = try? Data(contentsOf: url) {
       payload["bytes"] = FlutterStandardTypedData(bytes: data)
     }
+    if let bookmark = securityBookmark(for: url) {
+      payload["bookmark"] = bookmark.base64EncodedString()
+    }
     return payload
+  }
+
+  func securityBookmark(for url: URL) -> Data? {
+    try? url.bookmarkData(
+      options: [.withSecurityScope],
+      includingResourceValuesForKeys: nil,
+      relativeTo: nil)
   }
 }
