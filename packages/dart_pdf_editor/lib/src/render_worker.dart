@@ -18,6 +18,10 @@ import 'render_worker_stub.dart'
 /// unaffected. Ignored on native, where the isolate backend needs no script.
 String? pdfRenderWorkerScriptUrl;
 
+/// Default number of platform workers [PdfRenderWorker.start] fans page
+/// records across.
+const int defaultPdfRenderWorkerPoolSize = 3;
+
 /// How many platform workers [PdfRenderWorker.start] fans page records across.
 ///
 /// One worker decodes pages strictly serially: a raster-heavy CAD document
@@ -34,7 +38,18 @@ String? pdfRenderWorkerScriptUrl;
 /// flooding the machine. The host can set this once before opening a viewer,
 /// sized to the platform - fewer on a memory-constrained device. Values below 1
 /// mean 1.
-int pdfRenderWorkerPoolSize = 3;
+int pdfRenderWorkerPoolSize = defaultPdfRenderWorkerPoolSize;
+
+/// Default decoded-image command-buffer cache budget for one render worker.
+const int defaultPdfRenderWorkerCacheBudgetBytes = 96 << 20;
+
+/// Decoded-image command-buffer cache budget for each render worker.
+///
+/// Completed worker records keep decoded image pixels so recycled page widgets
+/// and thumbnails can revisit recently-rendered pages without paying another
+/// decode. The bytes are bounded by this LRU budget. Hosts running on memory-
+/// constrained devices can lower it once at startup before opening viewers.
+int pdfRenderWorkerCacheBudgetBytes = defaultPdfRenderWorkerCacheBudgetBytes;
 
 /// How long the caching worker waits for one backend record before giving up on
 /// that worker snapshot.
@@ -423,8 +438,8 @@ typedef _RecordCacheKey = (int, bool, bool, int, int?, _RegionBucket?);
 /// those repeats into one decode per page. A scrolled-away page is cancelled
 /// for every sharer at once, which is correct - none of them want it any more.
 class PdfCachingRenderWorker implements PdfRenderWorker {
-  PdfCachingRenderWorker(this._inner, {int budgetBytes = 96 << 20})
-      : _budgetBytes = budgetBytes;
+  PdfCachingRenderWorker(this._inner, {int? budgetBytes})
+      : _budgetBytes = budgetBytes ?? pdfRenderWorkerCacheBudgetBytes;
 
   final PdfRenderWorker _inner;
   final int _budgetBytes;

@@ -1178,17 +1178,25 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       if (!canceled) widget.onPanViewportEnd?.call(velocity);
       return;
     }
-    if (event.pointer != _pointers.rawPointer) return;
+    if (event.pointer != _pointers.rawPointer) {
+      if (_panErasing && !canceled) _eraseAt(event.localPosition);
+      return;
+    }
     final erasing = _pointers.rawErasing;
-    _pointers.clearRaw();
     if (erasing) {
       if (canceled) {
+        _pointers.clearRaw();
         setState(_resetErase);
       } else {
+        // Fast pen swipes can land their final contact only on pointer-up.
+        // Stamp it into the path before committing so the tail erases too.
+        _eraseAt(event.localPosition);
+        _pointers.clearRaw();
         _commitErase();
       }
       return;
     }
+    _pointers.clearRaw();
     final stroke = _activeStroke;
     final pressures = _activeStrokePressures;
     setState(() {

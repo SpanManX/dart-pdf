@@ -709,6 +709,29 @@ void main() {
       expect(worker.cachePressure, 1);
     });
 
+    test('uses the runtime default cache budget when not overridden', () {
+      final previous = pdfRenderWorkerCacheBudgetBytes;
+      addTearDown(() => pdfRenderWorkerCacheBudgetBytes = previous);
+
+      pdfRenderWorkerCacheBudgetBytes = 384;
+      final worker = PdfCachingRenderWorker(_CountingWorker());
+      addTearDown(worker.dispose);
+
+      expect(worker.cacheBudgetBytes, 384);
+    });
+
+    test('explicit cache budget overrides the runtime default', () {
+      final previous = pdfRenderWorkerCacheBudgetBytes;
+      addTearDown(() => pdfRenderWorkerCacheBudgetBytes = previous);
+
+      pdfRenderWorkerCacheBudgetBytes = 384;
+      final worker =
+          PdfCachingRenderWorker(_CountingWorker(), budgetBytes: 512);
+      addTearDown(worker.dispose);
+
+      expect(worker.cacheBudgetBytes, 512);
+    });
+
     test('commandLimit is part of the vector-only cache key', () async {
       final inner = _CountingWorker();
       final worker = PdfCachingRenderWorker(inner);
