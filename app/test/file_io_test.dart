@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -41,6 +43,38 @@ void main() {
     expect(ensurePdfExtension('/home/ben/pages.PDF'), '/home/ben/pages.PDF');
     expect(ensurePdfExtension('/home/ben/pages.pdf'), '/home/ben/pages.pdf');
     expect(ensurePdfExtension(r'C:\Docs\export'), r'C:\Docs\export.pdf');
+  });
+
+  test('ensureJsonExtension forces .json on a chosen save path', () {
+    expect(ensureJsonExtension('/home/ben/stamps'), '/home/ben/stamps.json');
+    expect(
+        ensureJsonExtension('/home/ben/stamps.JSON'), '/home/ben/stamps.JSON');
+  });
+
+  test('custom stamp bundles round-trip and accept plain lists', () {
+    final stamp = PdfCustomStamp(
+      text: 'PAID',
+      color: 0xC03030,
+      template: PdfStampTemplate.text('PAID', 0xC03030),
+      type: 'Approval',
+      tags: const ['audit'],
+    );
+
+    final bundle = encodeCustomStampBundle([stamp]);
+    final decoded = jsonDecode(bundle) as Map<String, dynamic>;
+    expect(decoded['version'], 1);
+    expect(decoded['stamps'], isA<List>());
+    expect(decodeCustomStampBundle(bundle), [stamp]);
+
+    final plainList = jsonEncode([stamp.encode()]);
+    expect(decodeCustomStampBundle(plainList), [stamp]);
+  });
+
+  test('custom stamp bundle rejects malformed entries', () {
+    expect(
+      () => decodeCustomStampBundle('{"stamps":[{"text":"BROKEN"}]}'),
+      throwsFormatException,
+    );
   });
 
   testWidgets('pickPdfFiles enables multi-select in the file picker',

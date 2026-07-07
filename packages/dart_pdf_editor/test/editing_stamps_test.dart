@@ -1409,6 +1409,83 @@ void main() {
       expect(find.byType(PdfStampPreview), findsOneWidget);
     });
 
+    testWidgets('the picker imports and exports saved stamps', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+      const paid = PdfCustomStamp(text: 'PAID', color: 0xC03030);
+      const audit = PdfCustomStamp(
+        text: 'AUDIT',
+        color: 0x1A3E8C,
+        type: 'Audit',
+        tags: ['external'],
+      );
+      editing.saveCustomStamp(paid);
+
+      List<PdfCustomStamp>? exported;
+      var importCalls = 0;
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () => showPdfStampPicker(
+                context,
+                controller: editing,
+                onExportStamps: (context, stamps) async {
+                  exported = stamps;
+                },
+                onImportStamps: (context) async {
+                  importCalls++;
+                  return const [audit, paid];
+                },
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-export')));
+      await tester.pump();
+      expect(exported, [paid]);
+
+      await tester.tap(find.byKey(const ValueKey('pdf-stamp-import')));
+      await tester.pump();
+      expect(importCalls, 1);
+      expect(editing.savedCustomStamps, [paid, audit]);
+      expect(editing.activeStamp, audit);
+    });
+
+    testWidgets('the picker disables export with no saved stamps',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () => showPdfStampPicker(
+                context,
+                controller: editing,
+                onExportStamps: (context, stamps) async {},
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      final export = tester
+          .widget<TextButton>(find.byKey(const ValueKey('pdf-stamp-export')));
+      expect(export.onPressed, isNull);
+    });
+
     testWidgets('the picker changes date and time formats', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final editing = PdfEditingController(buildMultiPagePdf(1))

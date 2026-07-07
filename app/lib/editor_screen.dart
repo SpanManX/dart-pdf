@@ -879,6 +879,23 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
+  Future<void> _exportCustomStamps(
+    BuildContext exportContext,
+    List<PdfCustomStamp> stamps,
+  ) async {
+    final result = await exportCustomStampsAs(exportContext, stamps);
+    if (mounted && result.message != null) _toast(result.message!);
+  }
+
+  Future<List<PdfCustomStamp>?> _importCustomStamps(BuildContext _) async {
+    try {
+      return await importCustomStamps();
+    } catch (e) {
+      if (mounted) _toast('Could not import stamps: $e');
+      return null;
+    }
+  }
+
   // --- link actions --------------------------------------------------------
 
   /// GoTo and named page actions never reach here (the viewer follows them).
@@ -1104,6 +1121,8 @@ class _EditorScreenState extends State<EditorScreen>
       imagePicker: (context) => pickImageBytes(),
       systemImagePasteProvider: (context) =>
           (widget.imageClipboardReader ?? readImageFromClipboard)(),
+      onExportCustomStamps: _exportCustomStamps,
+      onImportCustomStamps: _importCustomStamps,
       // The Snapshot tool keeps a vector copy on the in-app clipboard for
       // paste-back; this also drops the captured PNG on the system clipboard.
       onSnapshot: clipboardSnapshotHandler(

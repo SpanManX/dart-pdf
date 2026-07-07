@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -27,6 +28,16 @@ const imageTypeGroup = XTypeGroup(
   mimeTypes: ['image/png', 'image/jpeg'],
   uniformTypeIdentifiers: ['public.png', 'public.jpeg'],
 );
+
+/// Custom stamp bundles exported from the Manage Stamps dialog.
+const stampBundleTypeGroup = XTypeGroup(
+  label: 'DartPDF stamps',
+  extensions: ['json'],
+  mimeTypes: ['application/json'],
+  uniformTypeIdentifiers: ['public.json'],
+);
+
+const _stampBundleFormat = 'dev.milanko.dartpdf.custom-stamps';
 
 /// A PDF the user picked to open, or null when the dialog was cancelled.
 class PickedPdf {
@@ -110,6 +121,52 @@ Future<Uint8List?> pickImageBytes() async {
   return file?.readAsBytes();
 }
 
+/// Encodes custom stamps as a portable JSON bundle.
+String encodeCustomStampBundle(List<PdfCustomStamp> stamps) {
+  const encoder = JsonEncoder.withIndent('  ');
+  return encoder.convert({
+    'format': _stampBundleFormat,
+    'version': 1,
+    'stamps': [
+      for (final stamp in stamps) jsonDecode(stamp.encode()),
+    ],
+  });
+}
+
+/// Decodes a custom stamp JSON bundle.
+///
+/// Accepts the current `{stamps: [...]}` bundle shape and a plain JSON list
+/// for easier recovery from manually-edited exports.
+List<PdfCustomStamp> decodeCustomStampBundle(String source) {
+  final decoded = jsonDecode(source);
+  final rawStamps = switch (decoded) {
+    {'stamps': final List stamps} => stamps,
+    final List stamps => stamps,
+    _ => throw const FormatException('Stamp bundle has no stamps list'),
+  };
+  return List.unmodifiable([
+    for (final raw in rawStamps) _decodeCustomStampEntry(raw),
+  ]);
+}
+
+PdfCustomStamp _decodeCustomStampEntry(Object? raw) {
+  final stamp = switch (raw) {
+    String json => PdfCustomStamp.decode(json),
+    Map<String, dynamic> map => PdfCustomStamp.decode(jsonEncode(map)),
+    Map map => PdfCustomStamp.decode(jsonEncode(map)),
+    _ => null,
+  };
+  if (stamp == null) throw const FormatException('Invalid stamp entry');
+  return stamp;
+}
+
+/// Opens a JSON stamp bundle and returns the stamps inside it.
+Future<List<PdfCustomStamp>?> importCustomStamps() async {
+  final file = await openFile(acceptedTypeGroups: const [stampBundleTypeGroup]);
+  if (file == null) return null;
+  return decodeCustomStampBundle(utf8.decode(await file.readAsBytes()));
+}
+
 /// Ensures [name] ends in `.pdf`, falling back to a default stem.
 String ensurePdfName(String name) {
   var trimmed = name.trim();
@@ -123,6 +180,11 @@ String ensurePdfName(String name) {
 /// as PDFs.
 String ensurePdfExtension(String path) =>
     path.toLowerCase().endsWith('.pdf') ? path : '$path.pdf';
+
+/// Appends `.json` to [path] unless it already ends with it
+/// (case-insensitive).
+String ensureJsonExtension(String path) =>
+    path.toLowerCase().endsWith('.json') ? path : '$path.json';
 
 /// The outcome of a save, with a message suitable for a toast (null = the
 /// user cancelled, so say nothing).
@@ -294,6 +356,52 @@ Future<SaveResult> saveBytesAs(
       // The dialog returns the path verbatim — if the user cleared or changed
       // the extension, force `.pdf` so the file still opens as a PDF.
       final path = ensurePdfExtension(location.path);
+      try {
+        await file.saveTo(path);
+        return SaveResult.saved(path);
+      } catch (e) {
+        return SaveResult.failed(e);
+      }
+  }
+}
+
+/// Exports user-managed custom stamps as a portable JSON bundle.
+Future<SaveResult> exportCustomStampsAs(
+  BuildContext context,
+  List<PdfCustomStamp> stamps,
+) async {
+  final name = 'dartpdf-stamps.json';
+  final bytes =
+      Uint8List.fromList(utf8.encode(encodeCustomStampBundle(stamps)));
+  final file = XFile.fromData(
+    bytes,
+    mimeType: 'application/json',
+    name: name,
+  );
+
+  if (kIsWeb) {
+    await file.saveTo(name);
+    return SaveResult.downloaded(name);
+  }
+
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.android || TargetPlatform.iOS:
+      final box = context.findRenderObject() as RenderBox?;
+      final origin =
+          box == null ? null : box.localToGlobal(Offset.zero) & box.size;
+      await SharePlus.instance.share(ShareParams(
+        files: [file],
+        fileNameOverrides: [name],
+        sharePositionOrigin: origin ?? const Rect.fromLTWH(0, 0, 1, 1),
+      ));
+      return SaveResult.shared();
+    default:
+      final location = await getSaveLocation(
+        suggestedName: name,
+        acceptedTypeGroups: const [stampBundleTypeGroup],
+      );
+      if (location == null) return SaveResult.cancelled;
+      final path = ensureJsonExtension(location.path);
       try {
         await file.saveTo(path);
         return SaveResult.saved(path);

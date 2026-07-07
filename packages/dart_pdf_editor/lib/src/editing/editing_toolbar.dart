@@ -88,6 +88,8 @@ class PdfEditingToolbar extends StatefulWidget {
     this.textPrompt = showPdfTextPrompt,
     this.imagePicker,
     this.fontPicker,
+    this.onExportCustomStamps,
+    this.onImportCustomStamps,
     this.palette = defaultPalette,
     this.tools,
     this.groups,
@@ -122,6 +124,12 @@ class PdfEditingToolbar extends StatefulWidget {
   /// file. When null, only the standard families and bundled fonts are
   /// offered (no custom loading).
   final PdfFontPicker? fontPicker;
+
+  /// Host-provided export for the Manage Stamps dialog.
+  final PdfStampExportCallback? onExportCustomStamps;
+
+  /// Host-provided import for the Manage Stamps dialog.
+  final PdfStampImportCallback? onImportCustomStamps;
 
   /// The colors offered for new annotations.
   final List<Color> palette;
@@ -547,6 +555,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         context,
         controller: controller,
         imagePicker: widget.imagePicker,
+        onExportStamps: widget.onExportCustomStamps,
+        onImportStamps: widget.onImportCustomStamps,
       );
 
   Future<void> _editElementText(BuildContext context) async {

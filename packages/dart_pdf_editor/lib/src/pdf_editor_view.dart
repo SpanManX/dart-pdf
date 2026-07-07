@@ -216,6 +216,8 @@ class PdfEditorView extends StatefulWidget {
     this.formImagePicker,
     this.imagePicker,
     this.systemImagePasteProvider,
+    this.onExportCustomStamps,
+    this.onImportCustomStamps,
     this.customStamps = const [],
     this.fontPicker,
     this.onSnapshot,
@@ -325,6 +327,14 @@ class PdfEditorView extends StatefulWidget {
 
   /// See [PdfViewer.systemImagePasteProvider].
   final PdfSystemImagePasteProvider? systemImagePasteProvider;
+
+  /// Host-provided export for user-saved custom stamps in the stock Manage
+  /// Stamps dialog. When null, the Export button is hidden.
+  final PdfStampExportCallback? onExportCustomStamps;
+
+  /// Host-provided import for user-saved custom stamps in the stock Manage
+  /// Stamps dialog. When null, the Import button is hidden.
+  final PdfStampImportCallback? onImportCustomStamps;
 
   /// Stamps supplied by the host app. These appear in the stock stamp picker
   /// alongside user-saved stamps but are not persisted or deletable there.
@@ -756,6 +766,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                     textPrompt: widget.textPrompt ?? showPdfTextPrompt,
                     imagePicker: widget.imagePicker,
                     fontPicker: widget.fontPicker,
+                    onExportCustomStamps: widget.onExportCustomStamps,
+                    onImportCustomStamps: widget.onImportCustomStamps,
                     palette: widget.palette,
                     tools: features.tools,
                     groups: features.toolGroups,

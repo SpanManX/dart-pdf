@@ -162,17 +162,38 @@ class PdfCustomStamp {
       Object.hashAll(tags.map((tag) => tag.trim().toLowerCase())));
 }
 
+/// Saves user-managed custom stamps somewhere outside the editor package.
+///
+/// The stock picker passes only [PdfEditingController.savedCustomStamps];
+/// host-provided stamps are managed by the host and are not exported here.
+typedef PdfStampExportCallback = Future<void> Function(
+  BuildContext context,
+  List<PdfCustomStamp> stamps,
+);
+
+/// Loads user-managed custom stamps from somewhere outside the editor package.
+///
+/// Return null when the user cancels. Returned stamps are merged into the
+/// saved custom stamp list, skipping exact duplicates already shown.
+typedef PdfStampImportCallback = Future<List<PdfCustomStamp>?> Function(
+  BuildContext context,
+);
+
 /// Shows the stamp picker: choose the stamp the stamp tool places,
 /// create a new one, or delete saved ones. Selections apply directly to
 /// [controller].
 Future<void> showPdfStampPicker(BuildContext context,
         {required PdfEditingController controller,
-        PdfImagePicker? imagePicker}) =>
+        PdfImagePicker? imagePicker,
+        PdfStampExportCallback? onExportStamps,
+        PdfStampImportCallback? onImportStamps}) =>
     showDialog<void>(
       context: context,
       builder: (context) => PdfStampPickerDialog(
         controller: controller,
         imagePicker: imagePicker,
+        onExportStamps: onExportStamps,
+        onImportStamps: onImportStamps,
       ),
     );
 
@@ -182,10 +203,14 @@ class PdfStampPickerDialog extends StatelessWidget {
     super.key,
     required this.controller,
     this.imagePicker,
+    this.onExportStamps,
+    this.onImportStamps,
   });
 
   final PdfEditingController controller;
   final PdfImagePicker? imagePicker;
+  final PdfStampExportCallback? onExportStamps;
+  final PdfStampImportCallback? onImportStamps;
 
   Future<void> _create(BuildContext context) async {
     final created = await showPdfStampEditor(context,
@@ -205,6 +230,26 @@ class PdfStampPickerDialog extends StatelessWidget {
     );
     if (edited == null) return;
     controller.replaceCustomStamp(stamp, edited);
+  }
+
+  Future<void> _export(BuildContext context) async {
+    final stamps = controller.savedCustomStamps;
+    if (stamps.isEmpty) return;
+    await onExportStamps?.call(context, stamps);
+  }
+
+  Future<void> _import(BuildContext context) async {
+    final imported = await onImportStamps?.call(context);
+    if (imported == null || imported.isEmpty) return;
+    final existing = controller.customStamps.toSet();
+    PdfCustomStamp? firstAdded;
+    for (final stamp in imported) {
+      if (existing.contains(stamp)) continue;
+      controller.saveCustomStamp(stamp);
+      existing.add(stamp);
+      firstAdded ??= stamp;
+    }
+    if (firstAdded != null) controller.activeStamp = firstAdded;
   }
 
   @override
@@ -263,6 +308,25 @@ class PdfStampPickerDialog extends StatelessWidget {
         ),
       ),
       actions: [
+        if (onImportStamps != null)
+          TextButton.icon(
+            key: const ValueKey('pdf-stamp-import'),
+            onPressed: () => _import(context),
+            icon: const Icon(Icons.file_upload_outlined),
+            label: const Text('Import…'),
+          ),
+        if (onExportStamps != null)
+          ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) => TextButton.icon(
+              key: const ValueKey('pdf-stamp-export'),
+              onPressed: controller.savedCustomStamps.isEmpty
+                  ? null
+                  : () => _export(context),
+              icon: const Icon(Icons.file_download_outlined),
+              label: const Text('Export…'),
+            ),
+          ),
         TextButton(
           onPressed: () => _create(context),
           child: const Text('New stamp…'),
