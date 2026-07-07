@@ -47,6 +47,7 @@ flutter:
   # Bitstream Vera / Arev licence; Fira Sans, Spectral and Lobster are
   # SIL Open Font Licence - see the *-LICENSE.txt files in assets/fonts/.
   assets:
+    - assets/web/pdf_render_worker.dart.js
     - assets/fonts/DejaVuSans.ttf
     - assets/fonts/DejaVuSerif.ttf
     - assets/fonts/DejaVuSansMono.ttf

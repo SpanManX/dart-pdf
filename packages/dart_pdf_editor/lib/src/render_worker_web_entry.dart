@@ -7,8 +7,11 @@ import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_graphics/pdf_graphics.dart';
 import 'package:web/web.dart' as web;
 
-/// Runs the render worker inside a dedicated Web Worker. A consuming web app
-/// ships a tiny worker script that calls this:
+/// Runs the render worker inside a dedicated Web Worker.
+///
+/// dart_pdf_editor ships a prebuilt worker as a Flutter package asset, so most
+/// consuming apps do not call this directly. Apps that want to self-host a
+/// custom worker can still compile a tiny worker script that calls this:
 ///
 /// ```dart
 /// // web/pdf_render_worker.dart
@@ -17,9 +20,10 @@ import 'package:web/web.dart' as web;
 /// ```
 ///
 /// compiled with `dart compile js web/pdf_render_worker.dart -o
-/// web/pdf_render_worker.dart.js` and served alongside the app; the app then
-/// sets `pdfRenderWorkerScriptUrl = 'pdf_render_worker.dart.js'` before opening
-/// a viewer. See `doc/render_worker_web.md` for the full wiring.
+/// web/pdf_render_worker.dart.js` and served alongside the app; set
+/// `pdfRenderWorkerScriptUrl = 'pdf_render_worker.dart.js'` before opening a
+/// viewer to use that custom script. See `doc/render_worker_web.md` for the
+/// full wiring.
 ///
 /// Protocol (mirrors the native isolate backend):
 /// - `{kind:'init', bytes:ArrayBuffer|SharedArrayBuffer, shared}` → opens the

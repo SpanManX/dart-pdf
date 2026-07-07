@@ -58,11 +58,12 @@ bool pdfRenderWorkerUseSharedArrayBuffer = true;
 /// interpreter walk happen entirely off the main thread, mirroring the native
 /// isolate backend.
 ///
-/// The worker only runs when [pdfRenderWorkerScriptUrl] names a compiled
-/// worker script (whose `main()` calls `runPdfRenderWorker`). With no URL - or
-/// if the [web.Worker] fails to construct - this degrades to a null worker
-/// ([isActive] false), so web apps that haven't built the worker script behave
-/// exactly as before (local rendering). See `doc/render_worker_web.md`.
+/// The worker runs when [pdfRenderWorkerScriptUrl] names a compiled worker
+/// script (whose `main()` calls `runPdfRenderWorker`). By default this points at
+/// dart_pdf_editor's bundled package asset. With a null URL - or if the
+/// [web.Worker] fails to construct - this degrades to a null worker
+/// ([isActive] false), so hosts can force local rendering. See
+/// `doc/render_worker_web.md`.
 PdfRenderWorker startRenderWorker(Uint8List bytes) {
   final url = pdfRenderWorkerScriptUrl;
   _wlog('startRenderWorker url=$url bytes=${bytes.length}');

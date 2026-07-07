@@ -7,16 +7,25 @@ import 'render_worker_stub.dart'
     if (dart.library.io) 'render_worker_isolate.dart'
     if (dart.library.js_interop) 'render_worker_web.dart';
 
+/// The package-asset URL of dart_pdf_editor's bundled Web Worker script.
+///
+/// Flutter serves package assets under `assets/packages/<package>/...`, so a
+/// Flutter web app that depends on this package can use the worker without
+/// copying a script into its own `web/` directory.
+const String defaultPdfRenderWorkerScriptUrl =
+    'assets/packages/dart_pdf_editor/assets/web/pdf_render_worker.dart.js';
+
 /// On web, the URL of the compiled Web Worker script that backs the render
 /// worker (its `main()` calls `runPdfRenderWorker`; see the web-only library
 /// `package:dart_pdf_editor/render_worker_web.dart` and
 /// `doc/render_worker_web.md` for the build wiring).
 ///
-/// Set this once before opening a viewer to move page interpretation off the
-/// main thread on web. Left null, web falls back to local rendering - exactly
-/// the historical behavior - so apps that haven't built the worker script are
-/// unaffected. Ignored on native, where the isolate backend needs no script.
-String? pdfRenderWorkerScriptUrl;
+/// The default points at dart_pdf_editor's bundled package asset, so apps get
+/// off-main-thread rendering on web without startup configuration. Set this to
+/// another URL before opening a viewer to self-host/cache-bust a custom worker,
+/// or set it to null to force local main-thread rendering. Ignored on native,
+/// where the isolate backend needs no script.
+String? pdfRenderWorkerScriptUrl = defaultPdfRenderWorkerScriptUrl;
 
 /// Default number of platform workers [PdfRenderWorker.start] fans page
 /// records across.
@@ -101,9 +110,9 @@ abstract class PdfRenderWorker {
   /// Starts the platform's worker over [bytes] (the document image the page
   /// indices passed to [record] refer to). Native: a long-lived background
   /// isolate that opens its own [PdfDocument]. Web: a Web Worker over the
-  /// script at [pdfRenderWorkerScriptUrl] when one is configured (else a null
-  /// worker). Platforms without either: a null worker whose [record] always
-  /// defers to local rendering.
+  /// script at [pdfRenderWorkerScriptUrl] when one is configured (by default
+  /// the bundled package asset, else a null worker). Platforms without either:
+  /// a null worker whose [record] always defers to local rendering.
   ///
   /// With [pdfRenderWorkerPoolSize] > 1 the backend is a [PdfPooledRenderWorker]
   /// that fans page records across that many platform workers, so a raster-heavy

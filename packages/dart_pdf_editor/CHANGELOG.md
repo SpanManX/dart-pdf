@@ -16,6 +16,9 @@
 - Page and annotation chrome: add hover-only controls on mouse platforms,
   arrow-key navigation for thumbnail/page views, page-grid click-to-select
   with double-click navigation, and layout fixes for thumbnail/search chrome.
+- Web rendering: ship the render worker as a package asset and use it by
+  default, so Flutter web apps no longer need to set
+  `pdfRenderWorkerScriptUrl` unless they want to self-host the worker.
 - App integrations: improve macOS open-with/file access handling, multi-file
   picking, recent-file menus, menu shortcut labels, and the built-in feedback
   link.

@@ -55,6 +55,17 @@ perl_replace_string_url() {
   ' "$file"
 }
 
+replace_in_compiled_dart() {
+  local path="$1"
+  local hash="$2"
+
+  while IFS= read -r -d '' js_file; do
+    perl_replace_string_url "$js_file" "$path" "$hash"
+  done < <(find "$BUILD_DIR" -maxdepth 1 \
+    \( -name 'main.dart.js' -o -name 'main.dart.js_*.part.js' -o -name 'main.dart.mjs' \) \
+    -type f -print0)
+}
+
 echo "Cache-busting Flutter web build in $BUILD_DIR"
 
 for path in main.dart.wasm main.dart.mjs main.dart.js; do
@@ -77,10 +88,16 @@ if [[ -f "$MAIN_JS" ]]; then
   if [[ -f "$worker" ]]; then
     hash="$(hash_file "$worker")"
     echo "  pdf_render_worker.dart.js  ?v=$hash"
-    while IFS= read -r -d '' js_file; do
-      perl_replace_string_url "$js_file" "pdf_render_worker.dart.js" "$hash"
-    done < <(find "$BUILD_DIR" -maxdepth 1 \( -name 'main.dart.js' -o -name 'main.dart.js_*.part.js' \) -type f -print0)
+    replace_in_compiled_dart "pdf_render_worker.dart.js" "$hash"
   fi
+fi
+
+asset_worker_path="assets/packages/dart_pdf_editor/assets/web/pdf_render_worker.dart.js"
+asset_worker="$BUILD_DIR/$asset_worker_path"
+if [[ -f "$asset_worker" ]]; then
+  hash="$(hash_file "$asset_worker")"
+  echo "  $asset_worker_path  ?v=$hash"
+  replace_in_compiled_dart "$asset_worker_path" "$hash"
 fi
 
 if grep -qE '"main\.dart\.(wasm|mjs|js)"' "$BOOTSTRAP"; then
