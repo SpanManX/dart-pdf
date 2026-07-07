@@ -124,6 +124,29 @@ void main() {
       expect(pasted.subtype, 'Square');
       expect(pasted.rect.left, closeTo(112, 1e-6));
     });
+
+    test('applySelectedAnnotationsToPages copies selection to other pages', () {
+      final editing = PdfEditingController(buildMultiPagePdf(3))
+        ..addRectangle(0, const PdfRect(100, 650, 250, 750));
+      addTearDown(editing.dispose);
+      editing.selectAnnotation(0, 0);
+
+      final count = editing.applySelectedAnnotationsToPages([0, 1, 2]);
+
+      expect(count, 2);
+      expect(editing.document.page(0).annotations, hasLength(1),
+          reason: 'the source page is not duplicated');
+      expect(editing.document.page(1).annotations.single.rect,
+          const PdfRect(100, 650, 250, 750));
+      expect(editing.document.page(2).annotations.single.rect,
+          const PdfRect(100, 650, 250, 750));
+      expect(editing.selectedAnnotationSlots, [(0, 0)]);
+
+      editing.undo();
+      expect(editing.document.page(1).annotations, isEmpty);
+      expect(editing.document.page(2).annotations, isEmpty);
+      expect(editing.document.page(0).annotations, hasLength(1));
+    });
   });
 
   group('controller restyle', () {
@@ -430,6 +453,33 @@ void main() {
       await tester.pumpAndSettle();
       expect(editing.document.page(0).annotations, isEmpty);
       expect(editing.hasAnnotationClipboard, isTrue);
+      await settle(tester);
+    });
+
+    testWidgets('the context menu applies an annotation to a page range',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester, pages: 3);
+      editing.addRectangle(0, const PdfRect(100, 650, 250, 750));
+      await tester.pump();
+
+      await rightClick(tester, view(175, 700));
+      expect(find.byKey(const ValueKey('pdf-annot-menu-apply-pages')),
+          findsOneWidget);
+
+      await tester
+          .tap(find.byKey(const ValueKey('pdf-annot-menu-apply-pages')));
+      await tester.pumpAndSettle();
+      expect(
+          find.byKey(const ValueKey('pdf-page-range-dialog')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('pdf-page-range-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(editing.document.page(0).annotations, hasLength(1));
+      expect(editing.document.page(1).annotations.single.rect,
+          const PdfRect(100, 650, 250, 750));
+      expect(editing.document.page(2).annotations.single.rect,
+          const PdfRect(100, 650, 250, 750));
       await settle(tester);
     });
 

@@ -3538,6 +3538,55 @@ class PdfEditingController extends ChangeNotifier {
     return true;
   }
 
+  /// Copies the current annotation selection to every page in [pageIndices],
+  /// preserving each annotation's page coordinates.
+  ///
+  /// Source pages are skipped for their own annotations, so applying a
+  /// selection to the whole document does not duplicate it on the page where
+  /// it already lives. Returns the number of annotations created. The edit is
+  /// a single undoable revision.
+  int applySelectedAnnotationsToPages(Iterable<int> pageIndices) {
+    final snapshots = <({int page, PdfAnnotationSnapshot snapshot})>[];
+    for (final slot in _selected) {
+      final annotation = _annotationAt(slot);
+      if (annotation == null) continue;
+      final snapshot = PdfAnnotationSnapshot.capture(_document, annotation);
+      if (snapshot != null) snapshots.add((page: slot.$1, snapshot: snapshot));
+    }
+    if (snapshots.isEmpty) return 0;
+
+    final targets = pageIndices
+        .where((index) => index >= 0 && index < _document.pageCount)
+        .toSet()
+        .toList()
+      ..sort();
+    if (targets.isEmpty) return 0;
+
+    final touched = <int>{};
+    var count = 0;
+    for (final page in targets) {
+      var pageCount = 0;
+      for (final item in snapshots) {
+        if (item.page == page) continue;
+        pageCount++;
+      }
+      if (pageCount == 0) continue;
+      touched.add(page);
+      count += pageCount;
+    }
+    if (count == 0) return 0;
+
+    final changed = apply((e) {
+      for (final page in targets) {
+        for (final item in snapshots) {
+          if (item.page == page) continue;
+          e.pasteAnnotation(page, item.snapshot);
+        }
+      }
+    }, pages: touched, contentPages: const <int>[]);
+    return changed ? count : 0;
+  }
+
   // ---------------------------------------------------------------------
   // snapshot clipboard (the Snapshot tool's vector paste)
 

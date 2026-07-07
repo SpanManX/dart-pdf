@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:pdf_document/pdf_document.dart';
 
+import '../page_range_dialog.dart';
 import 'editing_controller.dart';
 import 'editing_form_style.dart';
 import 'text_prompt.dart';
@@ -76,8 +77,8 @@ typedef PdfAnnotationMenuBuilder = List<PdfAnnotationMenuItem> Function(
     BuildContext context, PdfAnnotationMenuRequest request);
 
 /// Shows the annotation context menu at [position] (global coordinates)
-/// for [controller]'s current selection: copy/cut/paste, bring to
-/// front, send to back, delete, then whatever [customActions] adds.
+/// for [controller]'s current selection: copy/cut/apply-to-pages/paste,
+/// bring to front, send to back, delete, then whatever [customActions] adds.
 /// Resolves when the menu closes, after the picked action ran.
 ///
 /// [pagePoint] is where on the page the menu was opened (page space) -
@@ -113,6 +114,29 @@ Future<void> showPdfAnnotationMenu({
         label: 'Cut',
         icon: Icons.cut,
         onSelected: (request) => request.controller.cutSelectedAnnotations(),
+      ),
+      PdfAnnotationMenuItem(
+        key: const ValueKey('pdf-annot-menu-apply-pages'),
+        label: 'Apply to pages…',
+        icon: Icons.copy_all_outlined,
+        onSelected: (request) async {
+          final pageCount = request.controller.document.pageCount;
+          final range = await showPdfPageRangeDialog(
+            context,
+            pageCount: pageCount,
+            title: request.annotations.length == 1
+                ? 'Apply annotation to pages'
+                : 'Apply annotations to pages',
+            confirmLabel: 'Apply',
+          );
+          if (range == null) return;
+          request.controller.applySelectedAnnotationsToPages(
+            Iterable<int>.generate(
+              range.end - range.start + 1,
+              (i) => range.start + i,
+            ),
+          );
+        },
       ),
     ],
     PdfAnnotationMenuItem(
