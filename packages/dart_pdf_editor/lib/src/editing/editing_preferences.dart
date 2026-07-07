@@ -20,8 +20,9 @@ import 'editing_stamps.dart';
 /// Every [PdfEditingController] creates one by default, so tool styles
 /// (color, stroke width, opacity, font size) and the stylus mode come
 /// back the way the user left them, in this session and the next.
-/// Panel visibility ([showThumbnailSidebar], [showAnnotationSidebar])
-/// lives here too for the host's chrome - pass one instance to both the
+/// Panel visibility ([showThumbnailSidebar], [showBookmarkSidebar],
+/// [showAnnotationSidebar]) lives here too for the host's chrome - pass
+/// one instance to both the
 /// controller and the surrounding scaffold:
 ///
 /// ```dart
@@ -61,6 +62,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   bool _fingerDrawsInk = true;
   bool _showThumbnailSidebar = true;
   bool _hasShowThumbnailSidebarPreference = false;
+  bool _showBookmarkSidebar = false;
   bool _showAnnotationSidebar = false;
   String? _author;
   PdfInkSignature? _signature;
@@ -81,6 +83,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   bool _searchWholeWord = false;
   bool _searchRegex = false;
   double? _thumbnailSidebarWidth;
+  double? _bookmarkSidebarWidth;
   double? _annotationSidebarWidth;
   double? _propertiesPanelWidth;
   double? _searchPanelWidth;
@@ -170,6 +173,8 @@ class PdfEditingPreferences extends ChangeNotifier {
         _showThumbnailSidebar =
             store.getBool(thumbnailSidebarKey) ?? _showThumbnailSidebar;
       }
+      _showBookmarkSidebar = store.getBool('${_prefix}showBookmarkSidebar') ??
+          _showBookmarkSidebar;
       _showAnnotationSidebar =
           store.getBool('${_prefix}showAnnotationSidebar') ??
               _showAnnotationSidebar;
@@ -202,6 +207,9 @@ class PdfEditingPreferences extends ChangeNotifier {
       _thumbnailSidebarWidth =
           store.getDouble('${_prefix}thumbnailSidebarWidth') ??
               _thumbnailSidebarWidth;
+      _bookmarkSidebarWidth =
+          store.getDouble('${_prefix}bookmarkSidebarWidth') ??
+              _bookmarkSidebarWidth;
       _annotationSidebarWidth =
           store.getDouble('${_prefix}annotationSidebarWidth') ??
               _annotationSidebarWidth;
@@ -883,6 +891,29 @@ class PdfEditingPreferences extends ChangeNotifier {
     if (value == _showAnnotationSidebar) return;
     _showAnnotationSidebar = value;
     _write((s) => s.setBool('${_prefix}showAnnotationSidebar', value));
+    notifyListeners();
+  }
+
+  /// Whether the host shows the document bookmarks/outline panel.
+  bool get showBookmarkSidebar => _showBookmarkSidebar;
+
+  set showBookmarkSidebar(bool value) {
+    if (value == _showBookmarkSidebar) return;
+    _showBookmarkSidebar = value;
+    _write((s) => s.setBool('${_prefix}showBookmarkSidebar', value));
+    notifyListeners();
+  }
+
+  /// The bookmarks panel's user-dragged width, or null while it has
+  /// never been resized.
+  double? get bookmarkSidebarWidth => _bookmarkSidebarWidth;
+
+  set bookmarkSidebarWidth(double? value) {
+    if (value == _bookmarkSidebarWidth) return;
+    _bookmarkSidebarWidth = value;
+    _write((s) => value == null
+        ? s.remove('${_prefix}bookmarkSidebarWidth')
+        : s.setDouble('${_prefix}bookmarkSidebarWidth', value));
     notifyListeners();
   }
 

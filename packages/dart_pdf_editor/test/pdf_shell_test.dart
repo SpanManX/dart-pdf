@@ -27,6 +27,13 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
+  Uint8List buildBookmarkedPdf() {
+    final editor = PdfEditor(PdfDocument.open(buildMultiPagePdf(3)));
+    editor.addOutlineItem('Intro', pageIndex: 0);
+    editor.addOutlineItem('Details', pageIndex: 1);
+    return editor.save();
+  }
+
   Future<void> openShellControls(WidgetTester tester) async {
     await tester.tap(find.byKey(const ValueKey('pdf-shell-controls')),
         kind: PointerDeviceKind.mouse);
@@ -46,6 +53,8 @@ void main() {
       expect(
           find.byKey(const ValueKey('pdf-shell-zoom-reset')), findsOneWidget);
       expect(find.byKey(const ValueKey('pdf-shell-thumbnails-toggle')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('pdf-shell-bookmarks-toggle')),
           findsOneWidget);
       // view-only: no editing toolbar anywhere
       expect(find.byType(PdfEditingToolbar), findsNothing);
@@ -103,6 +112,29 @@ void main() {
         ),
         findsNothing,
       );
+    });
+
+    testWidgets('bookmarks panel navigates in reader mode', (tester) async {
+      final viewer = PdfViewerController();
+      final prefs = PdfEditingPreferences();
+      addTearDown(viewer.dispose);
+      addTearDown(prefs.dispose);
+      prefs.showBookmarkSidebar = true;
+
+      await pump(
+          tester,
+          PdfReader(
+              bytes: buildBookmarkedPdf(),
+              controller: viewer,
+              preferences: prefs));
+
+      expect(find.byType(PdfBookmarkSidebar), findsOneWidget);
+      expect(find.text('Details'), findsOneWidget);
+      expect(find.byKey(const ValueKey('pdf-bookmark-add')), findsNothing);
+
+      await tester.tap(find.text('Details'));
+      await tester.pumpAndSettle();
+      expect(viewer.currentPage, 1);
     });
 
     testWidgets('compact first run starts with thumbnails closed',
@@ -230,6 +262,7 @@ void main() {
         'pdf-shell-search-results-toggle',
         'pdf-shell-view-options',
         'pdf-shell-thumbnails-toggle',
+        'pdf-shell-bookmarks-toggle',
         'pdf-shell-annotations-toggle',
         'pdf-shell-properties-toggle',
       ]) {
@@ -508,6 +541,52 @@ void main() {
       await tester.pump();
       expect(find.byType(PdfAnnotationSidebar), findsOneWidget);
       expect(find.byType(PdfAnnotationPropertiesPanel), findsOneWidget);
+    });
+
+    testWidgets('bookmarks panel creates edits and deletes outline items',
+        (tester) async {
+      final editing = PdfEditingController(buildMultiPagePdf(3));
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+      editing.preferences.showBookmarkSidebar = true;
+
+      await pump(
+          tester, PdfEditorView(controller: editing, viewerController: viewer));
+
+      expect(find.byType(PdfBookmarkSidebar), findsOneWidget);
+      expect(
+          find.byKey(const ValueKey('pdf-bookmark-empty-add')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('pdf-bookmark-empty-add')),
+          kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('pdf-bookmark-title')), 'Chapter 1');
+      await tester.enterText(
+          find.byKey(const ValueKey('pdf-bookmark-page')), '2');
+      await tester.tap(find.byKey(const ValueKey('pdf-bookmark-save')),
+          kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+
+      expect(editing.outline.items.single.title, 'Chapter 1');
+      expect(editing.outline.items.single.destination?.pageIndex, 1);
+
+      await tester.tap(find.byKey(const ValueKey('pdf-bookmark-edit-0')),
+          kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey('pdf-bookmark-title')), 'Renamed');
+      await tester.tap(find.byKey(const ValueKey('pdf-bookmark-save')),
+          kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+
+      expect(editing.outline.items.single.title, 'Renamed');
+
+      await tester.tap(find.byKey(const ValueKey('pdf-bookmark-delete-0')),
+          kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(editing.outline.items, isEmpty);
     });
 
     testWidgets('features can strip the chrome down to the viewer',
@@ -809,8 +888,16 @@ void main() {
       editing.addRectangle(0, const PdfRect(100, 550, 300, 650));
       await tester.pump();
       // save now lives in the shell header (near the host's Open), keyed
-      await tester.tap(find.byKey(const ValueKey('pdf-shell-save')),
-          kind: PointerDeviceKind.mouse);
+      final save = find.byKey(const ValueKey('pdf-shell-save'));
+      await tester.scrollUntilVisible(
+        save,
+        80,
+        scrollable: find.ancestor(
+          of: save,
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.tap(save, kind: PointerDeviceKind.mouse);
       expect(saved, isNotNull);
       expect(saved!.length, editing.bytes.length);
     });

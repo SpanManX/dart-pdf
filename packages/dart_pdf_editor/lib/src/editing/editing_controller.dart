@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:pdf_cos/pdf_cos.dart';
 import 'package:pdf_document/pdf_document.dart';
 
 import '../page_geometry.dart';
@@ -472,6 +473,109 @@ class PdfEditingController extends ChangeNotifier {
     _emitAnnotationChanges(beforeLength, touched);
     notifyListeners();
     return true;
+  }
+
+  // ---------------------------------------------------------------------
+  // document outline / bookmarks
+
+  /// The current document outline (`/Outlines`) as nested bookmark items.
+  PdfOutline get outline => PdfOutline.of(_document);
+
+  /// Adds a PDF bookmark pointing at [pageIndex], or the first page when no
+  /// page is supplied. [parentPath] identifies the parent outline item; null
+  /// adds a top-level bookmark. Returns false when the title/page/path is
+  /// invalid or the edit stages no PDF changes.
+  bool addBookmark(String title,
+      {int? pageIndex, List<int>? parentPath, int? index, bool open = true}) {
+    final text = title.trim();
+    if (text.isEmpty) return false;
+    final page = (pageIndex ?? 0);
+    if (page < 0 || page >= _document.pageCount) return false;
+    var resolvedParent = true;
+    final changed = apply((editor) {
+      final parent = parentPath == null
+          ? null
+          : _outlineRefAt(editor.document, parentPath);
+      if (parentPath != null && parent == null) {
+        resolvedParent = false;
+        return;
+      }
+      editor.addOutlineItem(text,
+          pageIndex: page, parent: parent, index: index, open: open);
+    }, pages: const <int>[], contentPages: const <int>[]);
+    return resolvedParent && changed;
+  }
+
+  /// Edits an existing bookmark addressed by [path]. A null field is left
+  /// unchanged. Page destinations are written as explicit `/Fit` destinations.
+  bool editBookmark(List<int> path,
+      {String? title, int? pageIndex, bool? open}) {
+    final text = title?.trim();
+    if (text != null && text.isEmpty) return false;
+    if (pageIndex != null &&
+        (pageIndex < 0 || pageIndex >= _document.pageCount)) {
+      return false;
+    }
+    if (text == null && pageIndex == null && open == null) return false;
+    var resolved = true;
+    final changed = apply((editor) {
+      final item = _outlineRefAt(editor.document, path);
+      if (item == null) {
+        resolved = false;
+        return;
+      }
+      if (text != null) editor.setOutlineTitle(item, text);
+      if (pageIndex != null) {
+        editor.setOutlineDestination(
+            item, PdfExplicitDestination.fit(pageIndex));
+      }
+      if (open != null) editor.setOutlineStyle(item, open: open);
+    }, pages: const <int>[], contentPages: const <int>[]);
+    return resolved && changed;
+  }
+
+  /// Deletes the bookmark at [path], including its child bookmark subtree.
+  bool deleteBookmark(List<int> path) {
+    var resolved = true;
+    final changed = apply((editor) {
+      final item = _outlineRefAt(editor.document, path);
+      if (item == null) {
+        resolved = false;
+        return;
+      }
+      editor.removeOutlineItem(item);
+    }, pages: const <int>[], contentPages: const <int>[]);
+    return resolved && changed;
+  }
+
+  static CosReference? _outlineRefAt(PdfDocument document, List<int> path) {
+    if (path.isEmpty) return null;
+    final cos = document.cos;
+    final root = cos.resolve(document.catalog['Outlines']);
+    if (root is! CosDictionary) return null;
+    var parent = root;
+    CosReference? foundRef;
+    for (final index in path) {
+      if (index < 0) return null;
+      var cur = parent['First'];
+      var i = 0;
+      final seen = <int>{};
+      CosDictionary? foundDict;
+      while (cur is CosReference && seen.add(cur.objectNumber)) {
+        final dict = cos.resolve(cur);
+        if (dict is! CosDictionary) return null;
+        if (i == index) {
+          foundRef = cur;
+          foundDict = dict;
+          break;
+        }
+        i++;
+        cur = dict['Next'];
+      }
+      if (foundDict == null) return null;
+      parent = foundDict;
+    }
+    return foundRef;
   }
 
   // ---------------------------------------------------------------------

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_graphics/pdf_graphics.dart';
 
+import 'editing/editing_bookmarks.dart';
 import 'editing/editing_controller.dart';
 import 'editing/editing_menu.dart';
 import 'editing/editing_pencil.dart';
@@ -52,6 +53,7 @@ class PdfEditorFeatures {
     this.reflowView = true,
     this.pageColorEditable = true,
     this.thumbnails = true,
+    this.bookmarks = true,
     this.pageEditing = true,
     this.annotationSidebar = true,
     this.propertiesPanel = true,
@@ -108,6 +110,9 @@ class PdfEditorFeatures {
 
   /// The page-thumbnail sidebar and its toggle.
   final bool thumbnails;
+
+  /// The PDF bookmarks/outline sidebar and its toggle.
+  final bool bookmarks;
 
   /// Whether the thumbnail strip can reorder (drag) and delete pages.
   final bool pageEditing;
@@ -657,6 +662,18 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                     ? null
                     : () => prefs.showSearchResultsPanel = false,
               );
+          PdfBookmarkSidebar bookmarks({required bool bottomSheet}) =>
+              PdfBookmarkSidebar(
+                key: ValueKey(
+                    'pdf-shell-bookmarks-${bottomSheet ? 'sheet' : 'docked'}'),
+                controller: session,
+                viewerController: _viewer,
+                editable: true,
+                bottomSheet: bottomSheet,
+                onClose: bottomSheet
+                    ? null
+                    : () => prefs.showBookmarkSidebar = false,
+              );
           PdfAnnotationSidebar annotations({required bool bottomSheet}) =>
               PdfAnnotationSidebar(
                 key: ValueKey(
@@ -714,6 +731,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
               features.searchResultsPanel &&
               prefs.showSearchResultsPanel &&
               !altView;
+          final showBookmarksPanel =
+              features.bookmarks && prefs.showBookmarkSidebar && !altView;
           final showAnnotationsPanel = features.annotationSidebar &&
               prefs.showAnnotationSidebar &&
               !altView;
@@ -739,6 +758,15 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                       closeKey: const ValueKey('pdf-shell-search-sheet-close'),
                       onClose: () => prefs.showSearchResultsPanel = false,
                       child: searchResults(bottomSheet: true),
+                    ),
+                  if (showBookmarksPanel)
+                    PdfPanelBottomSheet(
+                      key: const ValueKey('pdf-shell-bookmarks-sheet'),
+                      title: 'Bookmarks',
+                      closeKey:
+                          const ValueKey('pdf-shell-bookmarks-sheet-close'),
+                      onClose: () => prefs.showBookmarkSidebar = false,
+                      child: bookmarks(bottomSheet: true),
                     ),
                   if (showAnnotationsPanel)
                     PdfPanelBottomSheet(
@@ -833,6 +861,15 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                 tooltip: 'Pages',
                 selected: showThumbnails,
                 onPressed: () => prefs.showThumbnailSidebar = !showThumbnails,
+              ),
+            if (features.bookmarks)
+              PdfShellPanelItem(
+                key: const ValueKey('pdf-shell-bookmarks-toggle'),
+                icon: Icons.bookmarks_outlined,
+                tooltip: 'Bookmarks',
+                selected: prefs.showBookmarkSidebar,
+                onPressed: () =>
+                    prefs.showBookmarkSidebar = !prefs.showBookmarkSidebar,
               ),
             if (features.annotationSidebar)
               PdfShellPanelItem(
@@ -952,6 +989,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                     thumbnails(bottomSheet: false),
                   if (showSearchPanel && !useSheets)
                     searchResults(bottomSheet: false),
+                  if (showBookmarksPanel && !useSheets)
+                    bookmarks(bottomSheet: false),
                 ],
                 viewer: reflowActive
                     ? PdfReflowView(

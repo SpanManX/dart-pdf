@@ -78,6 +78,28 @@ void main() {
       expect(editing.isModified, isFalse);
     });
 
+    test('bookmarks create, edit and delete PDF outline items', () {
+      final editing = PdfEditingController(buildMultiPagePdf(3));
+      expect(editing.outline.isEmpty, isTrue);
+
+      expect(editing.addBookmark('Start', pageIndex: 0), isTrue);
+      expect(editing.outline.items.single.title, 'Start');
+      expect(editing.outline.items.single.destination?.pageIndex, 0);
+      expect(PdfOutline.rootCount(editing.document), 1);
+
+      expect(
+          editing.addBookmark('Child', pageIndex: 1, parentPath: [0]), isTrue);
+      expect(editing.outline.items.single.children.single.title, 'Child');
+      expect(PdfOutline.rootCount(editing.document), 2);
+
+      expect(editing.editBookmark([0], title: 'Renamed', pageIndex: 2), isTrue);
+      expect(editing.outline.items.single.title, 'Renamed');
+      expect(editing.outline.items.single.destination?.pageIndex, 2);
+
+      expect(editing.deleteBookmark([0, 0]), isTrue);
+      expect(editing.outline.items.single.children, isEmpty);
+    });
+
     test('ink strokes buffer until finishInk commits one Ink annotation', () {
       final editing = PdfEditingController(buildMultiPagePdf(1))
         ..addInkStroke(0, [(100, 100), (150, 130), (200, 100)])

@@ -262,6 +262,11 @@ class PdfViewerController extends ChangeNotifier {
 
   Future<void> jumpToPage(int index) async => _state?._jumpToPage(index);
 
+  /// Scrolls to a PDF destination, using the same `/Fit`, `/FitH`, and
+  /// `/XYZ` handling as in-document GoTo links.
+  void showDestination(PdfDestination destination) =>
+      _state?._scrollToDestination(destination);
+
   /// Sets the viewer zoom around the center of the viewport.
   ///
   /// The value is logical pixels per PDF point: 1 is actual size (100%),
