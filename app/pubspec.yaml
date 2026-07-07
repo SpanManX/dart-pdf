@@ -59,6 +59,7 @@ dev_dependencies:
   # Text extraction, used by the on-device OCR integration test to assert
   # the recognized layer is selectable (pdf_ocr_ondevice is a runtime dep).
   pdf_graphics: ^1.3.2
+  file_selector_platform_interface: ^2.7.0
 
 flutter:
   uses-material-design: true

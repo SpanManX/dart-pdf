@@ -408,16 +408,19 @@ class _EditorScreenState extends State<EditorScreen>
 
   Future<void> _pickAndOpen() async {
     try {
-      final file = await pickPdfFile();
-      if (file == null) return;
-      final path = originPathForPickedFile(file);
-      final bookmark = await securityBookmarkForPath(path);
-      await _openLoadedBytes(
-        file.readAsBytes(),
-        title: file.name,
-        originPath: path,
-        originBookmark: bookmark,
-      );
+      final files = await pickPdfFiles();
+      if (files.isEmpty) return;
+      for (final file in files) {
+        if (!mounted) return;
+        final path = originPathForPickedFile(file);
+        final bookmark = await securityBookmarkForPath(path);
+        await _openLoadedBytes(
+          file.readAsBytes(),
+          title: file.name,
+          originPath: path,
+          originBookmark: bookmark,
+        );
+      }
     } catch (e) {
       _openError('Open failed', 'Could not open the selected file\n$e');
     }

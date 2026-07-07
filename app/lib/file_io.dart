@@ -48,6 +48,11 @@ class PickedPdf {
 Future<XFile?> pickPdfFile() =>
     openFile(acceptedTypeGroups: const [pdfTypeGroup]);
 
+/// Opens the system file picker for one or more PDFs. Returns an empty list
+/// when the user cancels.
+Future<List<XFile>> pickPdfFiles() =>
+    openFiles(acceptedTypeGroups: const [pdfTypeGroup]);
+
 /// Opens the system file picker and reads the chosen PDF. Returns null when
 /// the user cancels. Throws if the file can't be read — callers surface that.
 Future<PickedPdf?> pickPdf() async {
