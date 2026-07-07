@@ -20,6 +20,10 @@ import 'recent_files.dart';
 /// The project's source repository, opened from the AppBar links menu.
 final _githubUrl = Uri.parse('https://github.com/ben-milanko/dart-pdf');
 
+/// A plain-language GitHub issue form for app feedback from end users.
+final _feedbackUrl = Uri.parse(
+    'https://github.com/ben-milanko/dart-pdf/issues/new?template=app_feedback.yml');
+
 /// The published Flutter package the example is built on.
 final _pubDevUrl = Uri.parse('https://pub.dev/packages/dart_pdf_editor');
 
@@ -427,6 +431,13 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ),
         ),
         const PopupMenuDivider(),
+        PopupMenuItem(
+          value: () => _openLink(_feedbackUrl),
+          child: _appMenuTile(
+            icon: Icons.feedback_outlined,
+            title: 'Supply feedback…',
+          ),
+        ),
         PopupMenuItem(
           value: () => _openLink(_githubUrl),
           child: _appMenuTile(

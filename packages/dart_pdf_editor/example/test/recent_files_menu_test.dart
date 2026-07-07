@@ -69,6 +69,15 @@ void main() {
     expect(find.text(shortcut('O', shift: true)), findsOneWidget);
   });
 
+  testWidgets('app menu includes a feedback link', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(ViewerApp(cacheStore: PdfMemoryCacheStore()));
+    await tester.pump();
+
+    await openAppMenu(tester);
+    expect(find.text('Supply feedback…'), findsOneWidget);
+  });
+
   testWidgets('files already open in a tab are excluded from recents',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
