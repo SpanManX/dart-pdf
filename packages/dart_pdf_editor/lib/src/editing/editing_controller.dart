@@ -2761,13 +2761,15 @@ class PdfEditingController extends ChangeNotifier {
   /// operators rewritten, or the number of paint sides suppressed when
   /// [transparent] is true.
   ///
-  /// [find] and [replace] are opaque Flutter colors; alpha is ignored.
+  /// [find], [findColors], and [replace] are opaque Flutter colors; alpha is
+  /// ignored. Pass [findColors] to replace several source colors in one pass.
   /// [replace] may be omitted only when [transparent] is true. [tolerance] is
   /// an 8-bit per-channel tolerance. This is an undoable edit over page
   /// content streams (text/vector colors), not annotation styling or raster
   /// image pixel editing.
   int replaceDocumentColors({
-    required Color find,
+    Color? find,
+    Iterable<Color>? findColors,
     Color? replace,
     Iterable<int>? pages,
     int tolerance = 0,
@@ -2782,6 +2784,13 @@ class PdfEditingController extends ChangeNotifier {
         .toList()
       ..sort();
     if (targets.isEmpty || (!fill && !stroke)) return 0;
+    final finds = {
+      if (find != null) find.toARGB32() & 0xFFFFFF,
+      if (findColors != null)
+        for (final color in findColors) color.toARGB32() & 0xFFFFFF,
+    }.toList()
+      ..sort();
+    if (finds.isEmpty) return 0;
     if (!transparent && replace == null) {
       throw ArgumentError.notNull('replace');
     }
@@ -2789,7 +2798,7 @@ class PdfEditingController extends ChangeNotifier {
     final changed = apply((editor) {
       count = editor.replaceColorsOnPages(
         targets,
-        find: find.toARGB32() & 0xFFFFFF,
+        finds: finds,
         replace: replace?.toARGB32() ?? 0,
         tolerance: tolerance,
         fill: fill,
@@ -2803,7 +2812,8 @@ class PdfEditingController extends ChangeNotifier {
   /// Replaces colors on the thumbnail-strip page selection. Returns zero
   /// when no pages are selected.
   int replaceSelectedPageColors({
-    required Color find,
+    Color? find,
+    Iterable<Color>? findColors,
     Color? replace,
     int tolerance = 0,
     bool fill = true,
@@ -2815,6 +2825,7 @@ class PdfEditingController extends ChangeNotifier {
           : replaceDocumentColors(
               pages: selectedPages,
               find: find,
+              findColors: findColors,
               replace: replace,
               tolerance: tolerance,
               fill: fill,

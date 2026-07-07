@@ -90,12 +90,12 @@ extension PdfColorProcessing on PdfEditor {
 
   /// Replaces matching vector/text drawing colors on page [index].
   ///
-  /// [find] and [replace] are `0xRRGGBB`; [replace] is ignored when
-  /// [transparent] is true. [tolerance] is an 8-bit channel tolerance (`0`
-  /// means exact; `255` matches every channel). Set [fill] or [stroke] false
-  /// to leave that paint side untouched. Returns the number of color-setting
-  /// operators rewritten, or the number of paint sides suppressed in
-  /// transparent mode.
+  /// [find] and [finds] are `0xRRGGBB`; pass [finds] to match several source
+  /// colors in one pass. [replace] is ignored when [transparent] is true.
+  /// [tolerance] is an 8-bit channel tolerance (`0` means exact; `255`
+  /// matches every channel). Set [fill] or [stroke] false to leave that paint
+  /// side untouched. Returns the number of color-setting operators rewritten,
+  /// or the number of paint sides suppressed in transparent mode.
   ///
   /// This edits page content streams: text fill, path fill/stroke, and other
   /// operators that set the current non-stroking/stroking color. It handles
@@ -105,7 +105,8 @@ extension PdfColorProcessing on PdfEditor {
   /// appearance streams are intentionally left unchanged.
   int replaceColors(
     int index, {
-    required int find,
+    int? find,
+    Iterable<int>? finds,
     int replace = 0x000000,
     int tolerance = 0,
     bool fill = true,
@@ -113,6 +114,8 @@ extension PdfColorProcessing on PdfEditor {
     bool transparent = false,
   }) {
     if (!fill && !stroke) return 0;
+    final findColors = _findColors(find, finds);
+    if (findColors.isEmpty) return 0;
     if (index < 0 || index >= document.pageCount) {
       throw RangeError.range(index, 0, document.pageCount - 1, 'index');
     }
@@ -121,7 +124,7 @@ extension PdfColorProcessing on PdfEditor {
     final processor = _ColorProcessor(
       editor: this,
       page: page,
-      find: find & 0xFFFFFF,
+      finds: findColors,
       replace: replace & 0xFFFFFF,
       tolerance: tolerance.clamp(0, 255).toInt(),
       fill: fill,
@@ -138,20 +141,23 @@ extension PdfColorProcessing on PdfEditor {
   /// the total number of color-setting operators rewritten.
   int replaceColorsOnPages(
     Iterable<int> indices, {
-    required int find,
+    int? find,
+    Iterable<int>? finds,
     int replace = 0x000000,
     int tolerance = 0,
     bool fill = true,
     bool stroke = true,
     bool transparent = false,
   }) {
+    final findColors = _findColors(find, finds);
+    if (findColors.isEmpty) return 0;
     var count = 0;
     final seen = <int>{};
     for (final index in indices) {
       if (!seen.add(index)) continue;
       count += replaceColors(
         index,
-        find: find,
+        finds: findColors,
         replace: replace,
         tolerance: tolerance,
         fill: fill,
@@ -160,6 +166,16 @@ extension PdfColorProcessing on PdfEditor {
       );
     }
     return count;
+  }
+
+  List<int> _findColors(int? find, Iterable<int>? finds) {
+    final colors = {
+      if (find != null) find & 0xFFFFFF,
+      if (finds != null)
+        for (final color in finds) color & 0xFFFFFF,
+    }.toList()
+      ..sort();
+    return colors;
   }
 }
 
@@ -429,7 +445,7 @@ class _ColorProcessor extends _ColorScannerBase {
   _ColorProcessor({
     required super.editor,
     required super.page,
-    required this.find,
+    required this.finds,
     required this.replace,
     required this.tolerance,
     required super.fill,
@@ -437,7 +453,7 @@ class _ColorProcessor extends _ColorScannerBase {
     required this.transparent,
   });
 
-  final int find;
+  final List<int> finds;
   final int replace;
   final int tolerance;
   final bool transparent;
@@ -536,12 +552,17 @@ class _ColorProcessor extends _ColorScannerBase {
     final ar = (rgb >> 16) & 0xFF;
     final ag = (rgb >> 8) & 0xFF;
     final ab = rgb & 0xFF;
-    final br = (find >> 16) & 0xFF;
-    final bg = (find >> 8) & 0xFF;
-    final bb = find & 0xFF;
-    return (ar - br).abs() <= tolerance &&
-        (ag - bg).abs() <= tolerance &&
-        (ab - bb).abs() <= tolerance;
+    for (final find in finds) {
+      final br = (find >> 16) & 0xFF;
+      final bg = (find >> 8) & 0xFF;
+      final bb = find & 0xFF;
+      if ((ar - br).abs() <= tolerance &&
+          (ag - bg).abs() <= tolerance &&
+          (ab - bb).abs() <= tolerance) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @override

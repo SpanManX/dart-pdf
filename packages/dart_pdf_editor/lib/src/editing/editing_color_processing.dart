@@ -38,6 +38,7 @@ class _ColorProcessingDialog extends StatefulWidget {
 
 class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
   Color _find = const Color(0xFF000000);
+  final Set<int> _selectedDocumentColorRgbs = {};
   late Color _replace;
   late bool _selectedPages;
   List<Color> _documentColors = const [];
@@ -64,7 +65,10 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
     super.dispose();
   }
 
-  Future<void> _pickFind() => _pickColor(_find, (value) => _find = value);
+  Future<void> _pickFind() => _pickColor(_find, (value) {
+        _find = value;
+        _selectedDocumentColorRgbs.clear();
+      });
   Future<void> _pickReplace() =>
       _pickColor(_replace, (value) => _replace = value);
 
@@ -140,7 +144,17 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
     setState(() {
       _documentColors = colors;
       _documentColorsLoading = false;
-      if (preferFirst && colors.isNotEmpty) _find = colors.first;
+      final available = {for (final color in colors) _rgb(color)};
+      _selectedDocumentColorRgbs.removeWhere((rgb) => !available.contains(rgb));
+      if (preferFirst && colors.isNotEmpty) {
+        _find = colors.first;
+        _selectedDocumentColorRgbs
+          ..clear()
+          ..add(_rgb(colors.first));
+      } else if (_selectedDocumentColorRgbs.isNotEmpty) {
+        final selected = _selectedDocumentColorRgbs.first;
+        _find = colors.firstWhere((color) => _rgb(color) == selected);
+      }
     });
   }
 
@@ -182,10 +196,39 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
     });
   }
 
+  static int _rgb(Color color) => color.toARGB32() & 0xFFFFFF;
+
+  List<Color> get _findColors {
+    if (_selectedDocumentColorRgbs.isEmpty) return [_find];
+    return [
+      for (final rgb in _selectedDocumentColorRgbs) Color(0xFF000000 | rgb),
+    ];
+  }
+
+  String? get _findValueText => _selectedDocumentColorRgbs.length <= 1
+      ? null
+      : '${_selectedDocumentColorRgbs.length} colors selected';
+
+  void _toggleDocumentColor(Color color) {
+    final rgb = _rgb(color);
+    setState(() {
+      if (!_selectedDocumentColorRgbs.remove(rgb)) {
+        _selectedDocumentColorRgbs.add(rgb);
+        _find = color;
+      } else if (_selectedDocumentColorRgbs.isNotEmpty) {
+        final selected = _selectedDocumentColorRgbs.first;
+        _find = _documentColors.firstWhere(
+          (candidate) => _rgb(candidate) == selected,
+          orElse: () => Color(0xFF000000 | selected),
+        );
+      }
+    });
+  }
+
   void _apply() {
     final count = widget.controller.replaceDocumentColors(
       pages: _targetPages,
-      find: _find,
+      findColors: _findColors,
       replace: _replaceTransparent ? null : _replace,
       tolerance: _tolerance,
       fill: _fill,
@@ -212,17 +255,18 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
                 key: const ValueKey('pdf-color-process-find'),
                 label: 'Find',
                 color: _find,
+                valueText: _findValueText,
                 pickerKey: const ValueKey('pdf-color-process-find-picker'),
                 onTap: _pickFind,
               ),
               const SizedBox(height: 10),
               _DocumentColors(
                 colors: _documentColors,
-                selected: _find,
+                selectedRgbs: _selectedDocumentColorRgbs,
                 loading: _documentColorsLoading,
                 progress: _documentColorProgress,
                 total: _documentColorTotal,
-                onSelected: (color) => setState(() => _find = color),
+                onSelected: _toggleDocumentColor,
               ),
               const SizedBox(height: 8),
               _ColorRow(
@@ -330,6 +374,7 @@ class _ColorRow extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
+    this.valueText,
     this.pickerKey,
     this.transparent = false,
     this.enabled = true,
@@ -337,6 +382,7 @@ class _ColorRow extends StatelessWidget {
 
   final String label;
   final Color color;
+  final String? valueText;
   final VoidCallback onTap;
   final Key? pickerKey;
   final bool transparent;
@@ -356,7 +402,7 @@ class _ColorRow extends StatelessWidget {
             SizedBox(width: 68, child: Text(label)),
             _SwatchBox(color: color, transparent: transparent),
             const SizedBox(width: 10),
-            Text(transparent ? 'Transparent' : hex),
+            Text(valueText ?? (transparent ? 'Transparent' : hex)),
             const Spacer(),
             IconButton(
               key: pickerKey,
@@ -374,7 +420,7 @@ class _ColorRow extends StatelessWidget {
 class _DocumentColors extends StatelessWidget {
   const _DocumentColors({
     required this.colors,
-    required this.selected,
+    required this.selectedRgbs,
     required this.loading,
     required this.progress,
     required this.total,
@@ -382,7 +428,7 @@ class _DocumentColors extends StatelessWidget {
   });
 
   final List<Color> colors;
-  final Color selected;
+  final Set<int> selectedRgbs;
   final bool loading;
   final int progress;
   final int total;
@@ -435,8 +481,9 @@ class _DocumentColors extends StatelessWidget {
               for (final color in colors)
                 _ColorOption(
                   color: color,
-                  selected: (color.toARGB32() & 0xFFFFFF) ==
-                      (selected.toARGB32() & 0xFFFFFF),
+                  selected: selectedRgbs.contains(
+                    color.toARGB32() & 0xFFFFFF,
+                  ),
                   onTap: () => onSelected(color),
                 ),
             ],

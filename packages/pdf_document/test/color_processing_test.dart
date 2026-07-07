@@ -71,6 +71,24 @@ void main() {
     expect(content, contains('0 1 0 rg'));
   });
 
+  test('replaces several source colors in one pass', () {
+    final editor = PdfEditor(PdfDocument.open(_pdf([
+      '1 0 0 rg 0 0 10 10 re f\n'
+          '0 0 1 rg 20 20 10 10 re f\n',
+    ])));
+
+    final count = editor.replaceColors(
+      0,
+      finds: const [0xFF0000, 0x0000FF],
+      replace: 0x0000FF,
+    );
+    expect(count, 2);
+
+    final content = _content(editor.save(), 0);
+    expect(RegExp(r'0 0 1 rg').allMatches(content), hasLength(2));
+    expect(content, isNot(contains('1 0 0 rg')));
+  });
+
   test('can limit processing to fills or strokes', () {
     final editor = PdfEditor(PdfDocument.open(_pdf([
       '1 0 0 rg 0 0 10 10 re f\n'

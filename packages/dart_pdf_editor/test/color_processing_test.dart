@@ -85,6 +85,29 @@ void main() {
     expect(_content(controller, 1), contains('0 0 1 rg'));
   });
 
+  test('replaceDocumentColors accepts several source colors', () {
+    final controller = PdfEditingController(_pdf([
+      '1 0 0 rg 0 0 10 10 re f\n'
+          '0 1 0 rg 20 20 10 10 re f\n'
+          '0 0 1 rg 40 40 10 10 re f',
+    ]));
+    addTearDown(controller.dispose);
+
+    final count = controller.replaceDocumentColors(
+      findColors: const [
+        Color(0xFFFF0000),
+        Color(0xFF00FF00),
+      ],
+      replace: const Color(0xFF0000FF),
+    );
+
+    expect(count, 2);
+    final content = _content(controller, 0);
+    expect(RegExp(r'0 0 1 rg').allMatches(content), hasLength(3));
+    expect(content, isNot(contains('1 0 0 rg')));
+    expect(content, isNot(contains('0 1 0 rg')));
+  });
+
   testWidgets('PdfEditorView exposes the color processing dialog',
       (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
@@ -130,6 +153,61 @@ void main() {
     expect(_content(controller, 0), contains('0 0 1 rg'));
 
     // Drain the result SnackBar's timer.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('color processing dialog can select multiple document colors',
+      (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = PdfEditingController(_pdf([
+      '1 0 0 rg 0 0 10 10 re f\n'
+          '1 0 0 rg 20 20 10 10 re f\n'
+          '0 1 0 rg 40 40 10 10 re f',
+    ]))
+      ..color = const Color(0xFF0000FF);
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: PdfEditorView(
+          controller: controller,
+          showSaveButton: false,
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('pdf-group-edit')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('pdf-toolbar-color-processing')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pdf-color-process-color-16711680')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pdf-color-process-color-65280')),
+        findsOneWidget);
+
+    await tester.tap(
+        find.byKey(const ValueKey('pdf-color-process-color-65280')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pump();
+
+    expect(find.text('2 colors selected'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('pdf-color-process-apply')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+
+    final content = _content(controller, 0);
+    expect(RegExp(r'0 0 1 rg').allMatches(content), hasLength(3));
+    expect(content, isNot(contains('1 0 0 rg')));
+    expect(content, isNot(contains('0 1 0 rg')));
+
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
   });
