@@ -438,6 +438,42 @@ class PdfEditingPreferences extends ChangeNotifier {
   static Color? _colorOrNull(Object? value) =>
       value is int ? Color(value) : null;
 
+  /// Saves the current live style values into the active tool scope.
+  ///
+  /// This is separate from [_recordScoped], which only runs when a setter
+  /// changes a value. A tool still needs to remember the style it inherited
+  /// on first activation, otherwise switching to another tool with seeded
+  /// defaults can leak that other tool's style back into it.
+  void snapshotActiveStyleScope() {
+    final scope = _styleScope;
+    if (scope == null || _styleScopeFields.isEmpty) return;
+    final slot = _toolStyles[scope] ??= <String, Object?>{};
+    var changed = false;
+
+    void put(String field, Object? value) {
+      if (!_styleScopeFields.contains(field)) return;
+      if (slot[field] == value && slot.containsKey(field)) return;
+      slot[field] = value;
+      changed = true;
+    }
+
+    put('color', _color.toARGB32());
+    put('strokeWidth', _strokeWidth);
+    put('eraserRadius', _eraserRadius);
+    put('opacity', _opacity);
+    put('fontSize', _fontSize);
+    put('fontFamily', _fontFamily.name);
+    put('textAlign', _textAlign?.name);
+    put('lineStyle', _lineStyle.name);
+    put('lineStartEnding', _lineStartEnding.name);
+    put('lineEndEnding', _lineEndEnding.name);
+    put('textFillColor', _textFillColor?.toARGB32());
+    put('textBorderColor', _textBorderColor?.toARGB32());
+    put('shapeFillColor', _shapeFillColor?.toARGB32());
+
+    if (changed) _writeToolStyles();
+  }
+
   /// Records [value] for [field] under the active scope when that scope
   /// remembers the field. Called from the style setters.
   void _recordScoped(String field, Object? value) {

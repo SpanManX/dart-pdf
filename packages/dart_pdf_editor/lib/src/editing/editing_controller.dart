@@ -619,6 +619,7 @@ class PdfEditingController extends ChangeNotifier {
 
   set tool(PdfEditTool? value) {
     if (value == _tool) return;
+    preferences.snapshotActiveStyleScope();
     // leaving an ink-like tool commits the drawing, like lifting the pen.
     //
     // Switching directly from ink to the eraser is the latency-sensitive

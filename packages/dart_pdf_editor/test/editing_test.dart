@@ -1055,6 +1055,20 @@ void main() {
       expect(editing.strokeWidth, 12);
       expect(editing.opacity, 0.45);
 
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.draw));
+      await tester.pump();
+      expect(editing.tool, PdfEditTool.ink);
+      expect(editing.color, const Color(0xFFE53935));
+      expect(editing.strokeWidth, 2);
+      expect(editing.opacity, 1);
+
+      await tester.tap(find.byTooltip('Highlight - draw freehand'));
+      await tester.pump();
+      expect(editing.tool, PdfEditTool.highlight);
+      expect(editing.color, const Color(0xFFFFD100));
+      expect(editing.strokeWidth, 12);
+      expect(editing.opacity, 0.45);
+
       final gesture = await tester.startGesture(view(80, 720),
           kind: PointerDeviceKind.mouse);
       await gesture.moveTo(view(200, 720));
