@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+
+- Version bump to keep the dart-pdf package suite aligned at 1.4.0. Rendering
+  changes in this cycle support the editor's color-processing, cloud polygon,
+  and large-document interaction improvements.
+
 ## 1.3.2
 
 - Version bump to keep the dart-pdf package suite aligned at 1.3.2. No

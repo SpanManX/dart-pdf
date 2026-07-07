@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.4.0
+
+- Color processing: add a Bluebeam-style tool that can list document colors,
+  replace one or more selected colors across selected pages or the whole
+  document, replace colors with transparency, and run large-document
+  processing in the background to avoid UI hangs.
+- Bookmarks: add a PDF outline/bookmarks panel with create, edit, delete, and
+  navigation support in the reader and editor shells.
+- Editing tools: add freehand highlighting, cloudy polygon annotations,
+  annotation apply-to-pages, selected-image export, color locking, and stronger
+  style isolation when switching tools.
+- Stamps: support hover placement previews, custom template dimensions, and
+  import/export for custom stamp libraries.
+- Page and annotation chrome: add hover-only controls on mouse platforms,
+  arrow-key navigation for thumbnail/page views, page-grid click-to-select
+  with double-click navigation, and layout fixes for thumbnail/search chrome.
+- App integrations: improve macOS open-with/file access handling, multi-file
+  picking, recent-file menus, menu shortcut labels, and the built-in feedback
+  link.
+
 ## 1.3.2
 
 - Viewer rendering: annotation appearances now paint in a separate overlay

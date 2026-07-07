@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0
+
+- Add document color-processing APIs that discover paint colors, replace
+  multiple source colors in one pass, support page ranges, tolerance, and
+  transparent replacements.
+- Add cloudy polygon annotation appearance generation and resizing support for
+  cloud-style shape markups.
+- Improve annotation/page editing support used by the editor UI, including
+  page-range extraction and more robust annotation duplication workflows.
+
 ## 1.3.2
 
 - Add vector stamp templates (`PdfStampTemplate` and
