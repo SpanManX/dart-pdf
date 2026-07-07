@@ -33,7 +33,8 @@ builds update through their own channels. For it to work the published Release
 must keep the **`app-v<version>` tag** (other tags, e.g. the pub-package
 release tags in this repo, are ignored) and keep the artifact file names CI
 produces (`dartpdf-macos.dmg`, `dartpdf-windows-portable.exe` /
-`dartpdf-windows-x64.zip`, `dartpdf-linux-x86_64.AppImage` /
+`dartpdf-windows-installer.exe` / `dartpdf-windows-x64.zip`,
+`dartpdf-linux-x86_64.AppImage` /
 `dartpdf-linux-x64.tar.gz`, `app-release.apk`). Publish the draft Release so
 the GitHub `/releases` API exposes it (drafts aren't visible unauthenticated).
 The web build is always served fresh, so it skips the check.
@@ -45,7 +46,7 @@ The web build is always served fresh, so it skips the check.
 | Android | `app-release.apk`, `app-release.aab` | Debug keys unless a release keystore is configured (below) |
 | iOS | `…-ios-unsigned.zip` (`.app`) | **No**, not installable; needs your Apple signing |
 | macOS | `…-macos.dmg` | Ad-hoc signed for internal consistency; needs Developer ID signing + notarization for public distribution |
-| Windows | `…-windows-x64.zip` | **No**, needs an Authenticode cert / MSIX |
+| Windows | `…-windows-installer.exe`, `…-windows-portable.exe`, `…-windows-x64.zip` | **No**, needs an Authenticode cert / MSIX |
 | Linux | `…-linux-x64.tar.gz` | n/a |
 | Web | `…-web.zip` | n/a |
 
@@ -119,9 +120,13 @@ membership needed). What that means concretely:
 - Add privacy-usage strings to `Info.plist` if you later use the camera/photos.
 
 ### Windows (Microsoft Store / signed installer)
-- An Authenticode code-signing certificate, or package as MSIX (add the
-  `msix` dev-dependency + `msix_config`, which also declares the `.pdf` file
-  association) and sign with your cert.
+- CI produces an unsigned per-user NSIS installer. It installs under
+  `%LOCALAPPDATA%\Programs\DartPDF`, creates Start Menu shortcuts, registers
+  uninstall metadata, and adds DartPDF to the PDF "Open with" list.
+- For public distribution, sign the NSIS installer with an Authenticode
+  code-signing certificate, or package as MSIX (add the `msix` dev-dependency +
+  `msix_config`, which also declares the `.pdf` file association) and sign with
+  your cert.
 
 ### Linux
 - The tarball runs as-is. For distribution, wrap as AppImage / Flatpak / Snap /
