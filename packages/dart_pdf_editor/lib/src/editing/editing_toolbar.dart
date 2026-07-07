@@ -30,7 +30,7 @@ typedef PdfEditingToolbarWidgetBuilder = Widget Function(
   PdfViewerController viewerController,
 );
 
-/// A tool *type* — one dock group in [PdfEditingToolbar]. Pass a subset
+/// A tool *type* - one dock group in [PdfEditingToolbar]. Pass a subset
 /// to [PdfEditingToolbar.groups] (or [PdfEditorFeatures.toolGroups]) to
 /// hide whole groups: e.g. `{PdfEditToolGroup.select,
 /// PdfEditToolGroup.markup}` shows only the Select and Markup groups.
@@ -62,8 +62,8 @@ enum PdfEditToolGroup {
 
 /// A ready-made toolbar for [PdfEditingController].
 ///
-/// The bar is organised as a **dock** of tool *groups* — Select, Markup,
-/// Draw, Shapes, Insert, Measure and Edit — flanked by the global
+/// The bar is organised as a **dock** of tool *groups* - Select, Markup,
+/// Draw, Shapes, Insert, Measure and Edit - flanked by the global
 /// undo/redo, flatten and save actions. Tapping a group raises a
 /// **contextual strip** above the dock: the group's tools on the left and
 /// the active tool's live settings (colour, stroke, opacity, font,
@@ -76,7 +76,7 @@ enum PdfEditToolGroup {
 /// with group tabs, a tool grid and the active tool's settings.
 ///
 /// Place it in a Scaffold's `bottomNavigationBar` or as the bottom child
-/// of a Column — it sizes to its content. Apps wanting different chrome
+/// of a Column - it sizes to its content. Apps wanting different chrome
 /// can skip this widget entirely and drive the controller from their own
 /// UI, or add focused host actions with [leading] and [trailing].
 class PdfEditingToolbar extends StatefulWidget {
@@ -142,23 +142,23 @@ class PdfEditingToolbar extends StatefulWidget {
   /// The tools to expose, null meaning all of them. A group disappears
   /// from the dock when none of its tools are in the set. Sub-controls
   /// tied to an armed tool (the form field-type menu, signature redraw)
-  /// follow their tool. Hiding a tool doesn't disable it — it can still
+  /// follow their tool. Hiding a tool doesn't disable it - it can still
   /// be armed through the controller.
   final Set<PdfEditTool>? tools;
 
   /// The tool *types* (dock groups) to expose, null meaning all of them.
-  /// A group not in the set vanishes from the dock entirely — this is the
+  /// A group not in the set vanishes from the dock entirely - this is the
   /// way to disable a whole tool type (Measure, Markup, Draw…) without
   /// enumerating each of its tools in [tools].
   ///
   /// Combines with [tools] and [showMarkup]: a group shows only when it
-  /// is in this set (when given), is not emptied by [tools], and — for
-  /// Markup — [showMarkup] is true. Hiding a group only hides its UI; its
+  /// is in this set (when given), is not emptied by [tools], and - for
+  /// Markup - [showMarkup] is true. Hiding a group only hides its UI; its
   /// tools can still be armed through the controller.
   final Set<PdfEditToolGroup>? groups;
 
   /// Whether text markup actions (highlight, underline, strike out,
-  /// squiggly — they act on the viewer's text selection) are shown. A
+  /// squiggly - they act on the viewer's text selection) are shown. A
   /// convenience for the common case; equivalent to dropping
   /// [PdfEditToolGroup.markup] from [groups]. The Draw group's freehand
   /// Highlight tool is controlled by [PdfEditTool.highlight].
@@ -168,9 +168,9 @@ class PdfEditingToolbar extends StatefulWidget {
   /// shortcuts work either way.
   final bool showUndoRedo;
 
-  /// Whether the colour controls — the palette swatches, the "More
+  /// Whether the colour controls - the palette swatches, the "More
   /// colours…" picker, the eyedropper, and the text-box fill/border colour
-  /// rows in the style popup — are shown. Split from [showStyle] so a
+  /// rows in the style popup - are shown. Split from [showStyle] so a
   /// colour-locked session can hide the colour changer while leaving
   /// stroke/opacity/font editable.
   final bool showColor;
@@ -216,7 +216,7 @@ class PdfEditingToolbar extends StatefulWidget {
   State<PdfEditingToolbar> createState() => _PdfEditingToolbarState();
 }
 
-/// One entry in a tool group — either an armable [PdfEditTool] or a
+/// One entry in a tool group - either an armable [PdfEditTool] or a
 /// text-markup action ([PdfMarkupKind], which acts on the live text
 /// selection rather than arming a tool).
 class _GroupTool {
@@ -255,7 +255,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   String? _openGroupId = 'select';
 
   /// In-flight opacity while dragging the strip's inline slider over a
-  /// selected annotation — it only restyles on release (one revision per
+  /// selected annotation - it only restyles on release (one revision per
   /// gesture), so the thumb needs its own state meanwhile.
   double? _dragOpacity;
 
@@ -301,7 +301,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         [
           _GroupTool.tool(PdfEditTool.ink, Icons.draw, 'Draw'),
           _GroupTool.tool(PdfEditTool.highlight, Icons.border_color,
-              'Highlight — draw freehand'),
+              'Highlight - draw freehand'),
           _GroupTool.tool(
               PdfEditTool.eraser, Icons.auto_fix_normal, 'Erase ink strokes'),
         ],
@@ -333,11 +333,11 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
               PdfEditTool.note, Icons.sticky_note_2_outlined, 'Note'),
           _GroupTool.tool(PdfEditTool.stamp, Icons.approval, 'Stamp'),
           _GroupTool.tool(PdfEditTool.count, Icons.task_alt,
-              'Count — tap to drop check-marks and tally them'),
+              'Count - tap to drop check-marks and tally them'),
           _GroupTool.tool(PdfEditTool.image, Icons.image_outlined,
-              'Image — tap to place, or drag out a box'),
+              'Image - tap to place, or drag out a box'),
           _GroupTool.tool(PdfEditTool.signature, Icons.history_edu,
-              'Signature — tap a page to place it'),
+              'Signature - tap a page to place it'),
         ],
         defaultTool: PdfEditTool.freeText),
     _ToolGroup('measure', 'Measure', Icons.straighten, [
@@ -351,19 +351,19 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
       _GroupTool.tool(PdfEditTool.measureSlope, Icons.trending_up,
           'Measure slope (rise/run)'),
       _GroupTool.tool(PdfEditTool.measureAngle, Icons.architecture,
-          'Measure angle — click three points'),
+          'Measure angle - click three points'),
       _GroupTool.tool(PdfEditTool.measureArc, Icons.gesture,
-          'Measure arc length — click three points'),
+          'Measure arc length - click three points'),
     ]),
     _ToolGroup('edit', 'Edit', Icons.design_services, [
       _GroupTool.tool(
           PdfEditTool.content, Icons.format_shapes, 'Edit page content'),
       _GroupTool.tool(PdfEditTool.form, Icons.ballot_outlined,
-          'Form fields — tap to select, double-tap to fill, drag to add'),
+          'Form fields - tap to select, double-tap to fill, drag to add'),
       _GroupTool.tool(PdfEditTool.redact, Icons.gradient,
-          'Redact — drag a region, then apply'),
+          'Redact - drag a region, then apply'),
       _GroupTool.tool(PdfEditTool.snapshot, Icons.crop,
-          'Snapshot — drag a region to capture it (paste back as vector)'),
+          'Snapshot - drag a region to capture it (paste back as vector)'),
     ]),
   ];
 
@@ -430,7 +430,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     if (restoreTool && previousTool != null) controller.tool = previousTool;
   }
 
-  /// Sets the creation colour — and recolours the selected annotations in
+  /// Sets the creation colour - and recolours the selected annotations in
   /// place when the whole selection restyles.
   void _applyColor(Color color) {
     controller.color = color;
@@ -443,14 +443,14 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
 
   void _toggleTool(PdfEditTool value) {
     // disarming a tool drops back to Select (the resting mode), never to a
-    // null/no-tool state — tapping the active tool off should leave you
+    // null/no-tool state - tapping the active tool off should leave you
     // able to select and move things, not in limbo
     controller.tool = controller.tool == value ? PdfEditTool.select : value;
     viewerController.clearSelection();
   }
 
   /// Opens [group]'s strip and, when arming is side-effect-free, arms its
-  /// default tool — so its settings are live immediately. Re-tapping the
+  /// default tool - so its settings are live immediately. Re-tapping the
   /// open group collapses back to the resting Select dock.
   void _openGroupTap(_ToolGroup group) {
     final alreadyOpen = _openGroup?.id == group.id;
@@ -473,7 +473,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
       viewerController.clearSelection();
     }
     // markup arms no tool, so its style scope is set explicitly (after the
-    // tool reset above, which would otherwise clear it) — this is what lets
+    // tool reset above, which would otherwise clear it) - this is what lets
     // the highlighter keep its own colour from the other tools'
     if (group.id == 'markup') controller.useMarkupStyleScope();
   }
@@ -540,7 +540,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     if (signature == null) return false;
     controller.signature = signature;
     // the signature follows the selected colour, so seed it with the ink
-    // the user just drew in — they can recolour it from the toolbar after
+    // the user just drew in - they can recolour it from the toolbar after
     controller.color = Color(0xFF000000 | signature.color);
     return true;
   }
@@ -591,7 +591,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         ?..clearSnackBars()
         ..showSnackBar(SnackBar(
           content: const Text(
-              "Couldn't reflow — this isn't a single-column paragraph this "
+              "Couldn't reflow - this isn't a single-column paragraph this "
               'tool can re-wrap. Try Replace text instead.'),
           behavior: SnackBarBehavior.floating,
           margin: pdfFloatingToastMargin(context),
@@ -881,7 +881,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
           IconButton(
             icon: const Icon(Icons.save_alt),
             tooltip: 'Save… (⌘S / Ctrl+S)',
-            // disabled while the document matches what was opened — there's
+            // disabled while the document matches what was opened - there's
             // nothing to write until an edit bumps the revision cursor
             onPressed: controller.isModified
                 ? () => widget.onSave!(controller.bytes)
@@ -901,8 +901,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   /// The tools-left / settings-right card for an open [group].
   Widget _groupStrip(BuildContext context, _ToolGroup group) {
     final hasTextSelection = viewerController.hasSelection;
-    // the Edit group's tools (content/form/redact) read as bare icons —
-    // too cryptic for destructive document edits — so they get text labels
+    // the Edit group's tools (content/form/redact) read as bare icons -
+    // too cryptic for destructive document edits - so they get text labels
     final labelled = group.id == 'edit';
     final toolButtons = <Widget>[];
     for (final entry in group.tools) {
@@ -956,7 +956,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         key: const ValueKey('pdf-toolbar-color-processing'),
         icon: Icons.palette_outlined,
         label: 'Color',
-        tooltip: 'Color processing — find and replace page-content colors',
+        tooltip: 'Color processing - find and replace page-content colors',
         active: false,
         onTap: () => _showColorProcessing(context),
       ));
@@ -1076,8 +1076,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         IconButton(
           icon: const Icon(Icons.touch_app),
           tooltip: controller.fingerDrawsInk
-              ? 'Finger draws — tap so it scrolls instead'
-              : 'Finger scrolls (pen draws) — tap so it draws',
+              ? 'Finger draws - tap so it scrolls instead'
+              : 'Finger scrolls (pen draws) - tap so it draws',
           isSelected: controller.fingerDrawsInk,
           onPressed: () =>
               controller.fingerDrawsInk = !controller.fingerDrawsInk,
@@ -1139,7 +1139,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         if (flatten != null) ...[flatten, const _MiniDivider()],
         PopupMenuButton<PdfFormFieldKind>(
           key: const ValueKey('pdf-form-field-type'),
-          tooltip: 'New field type — drag on a page to add one',
+          tooltip: 'New field type - drag on a page to add one',
           icon: Icon(switch (controller.newFormFieldKind) {
             PdfFormFieldKind.text => Icons.text_fields,
             PdfFormFieldKind.checkBox => Icons.check_box_outlined,
@@ -1170,7 +1170,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         ),
         IconButton(
           icon: const Icon(Icons.layers_clear_outlined),
-          tooltip: 'Flatten form — bake values into the pages',
+          tooltip: 'Flatten form - bake values into the pages',
           onPressed:
               controller.acroForm == null ? null : () => _flattenForm(context),
         ),
@@ -1518,7 +1518,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     ]);
   }
 
-  /// The measure scale chip — its ratio label, opening the calibration
+  /// The measure scale chip - its ratio label, opening the calibration
   /// dialog on tap.
   Widget _scaleChip(BuildContext context) {
     return _SettingChip(
@@ -1571,7 +1571,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     ];
   }
 
-  /// The style controls relevant to [group]'s active tool — see
+  /// The style controls relevant to [group]'s active tool - see
   /// [_StyleFields]. Drives the tune popup so a rectangle never offers a
   /// font picker, ink never offers line endings, and so on.
   _StyleFields _groupStyleFields(_ToolGroup group) {
@@ -1616,7 +1616,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     }
   }
 
-  /// The style controls relevant to the current annotation selection — by
+  /// The style controls relevant to the current annotation selection - by
   /// the primary selection's subtype, gated by what can actually restyle.
   _StyleFields _selectionStyleFields() {
     final annotation = controller.selectedAnnotation;
@@ -1721,7 +1721,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   /// The mobile dock's trailing cluster, between the active-tool label and
   /// the Tools handle. It shows only what's relevant to the moment so the
   /// colour swatches never sit dead next to a tool that ignores them.
-  /// A selected annotation gets its own quick actions (delete, edit text) —
+  /// A selected annotation gets its own quick actions (delete, edit text) -
   /// the better use of the space the request asks for, since those were
   /// otherwise unreachable from the dock; an armed colour-using tool gets
   /// the swatches; anything else leaves the space to the tool label.
@@ -1856,7 +1856,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         if (entry.tool == tool) {
           // the tip's leading clause is the tool's name
           final tip = entry.tip;
-          final dash = tip.indexOf(' —');
+          final dash = tip.indexOf(' -');
           return dash == -1 ? tip : tip.substring(0, dash);
         }
       }
@@ -1900,7 +1900,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
                               active: g.id == tabId,
                               onTap: () {
                                 setSheetState(() => tabId = g.id);
-                                // markup arms no tool — scope it so its
+                                // markup arms no tool - scope it so its
                                 // settings row edits markup's own style
                                 if (g.id == 'markup') {
                                   controller.useMarkupStyleScope();
@@ -1997,7 +1997,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   }
 
   static String _entryLabel(_GroupTool entry) {
-    final dash = entry.tip.indexOf(' —');
+    final dash = entry.tip.indexOf(' -');
     return dash == -1 ? entry.tip : entry.tip.substring(0, dash);
   }
 
@@ -2012,7 +2012,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
     return key == null ? entry.tip : '${entry.tip} ($key)';
   }
 
-  /// The settings block under the sheet's tool grid — reuses the same
+  /// The settings block under the sheet's tool grid - reuses the same
   /// inline clusters as the desktop strip, laid out in rows.
   List<Widget> _sheetSettings(BuildContext context, _ToolGroup group) {
     final settings = _groupSettings(context, group)
@@ -2693,12 +2693,12 @@ class _SettingChip extends StatelessWidget {
 }
 
 /// A small fallback for `colorScheme.onSurfaceFaint` (not a Material role)
-/// — the faint hint colour used for strip labels and disabled tiles.
+/// - the faint hint colour used for strip labels and disabled tiles.
 extension _FaintColor on ColorScheme {
   Color get onSurfaceFaintOr => onSurfaceVariant.withValues(alpha: 0.75);
 }
 
-/// Which controls the style popup should show for the active context —
+/// Which controls the style popup should show for the active context -
 /// each tool/selection only carries the settings it can actually use, so
 /// the popup never shows (say) a font picker while a rectangle is armed.
 /// Parses a points readout ("12.0 pt") back to its number.
@@ -2727,7 +2727,7 @@ class _StyleFields {
   final bool stroke;
   final bool opacity;
 
-  /// The line-type dropdown (solid / dashed / dotted / dash-dot) — shapes
+  /// The line-type dropdown (solid / dashed / dotted / dash-dot) - shapes
   /// and the line family.
   final bool lineType;
   final bool lineEndings;
@@ -2741,11 +2741,11 @@ class _StyleFields {
   /// The shape interior-fill colour row (rectangle / ellipse).
   final bool shapeFill;
 
-  /// Eraser radius — replaces every other control while the eraser is armed.
+  /// Eraser radius - replaces every other control while the eraser is armed.
   final bool eraser;
 
   /// The form text field style block (font, alignment, auto-size, size,
-  /// multiline, colour) — a single text-field widget is selected.
+  /// multiline, colour) - a single text-field widget is selected.
   final bool formField;
 
   bool get isEmpty =>
@@ -2763,7 +2763,7 @@ class _StyleFields {
 /// The style popup: sliders for stroke width, opacity, and font size,
 /// the font family for free text, and the text box's fill and border
 /// colors. With a free-text annotation selected, the text controls show
-/// — and change — that annotation's style; otherwise they set the style
+/// - and change - that annotation's style; otherwise they set the style
 /// new text is created with. Only the [fields] relevant to the active
 /// tool or selection are rendered.
 class _StyleMenu extends StatefulWidget {
@@ -2776,7 +2776,7 @@ class _StyleMenu extends StatefulWidget {
     this.fontPicker,
   });
 
-  /// Which controls to show — see [_StyleFields].
+  /// Which controls to show - see [_StyleFields].
   final _StyleFields fields;
 
   /// How the font menu's "Load font…" entry loads a custom font.
@@ -2788,7 +2788,7 @@ class _StyleMenu extends StatefulWidget {
   final List<Color> palette;
 
   /// Whether the text-box fill/border color rows are shown. The
-  /// stroke/opacity/font controls show regardless — this only hides the
+  /// stroke/opacity/font controls show regardless - this only hides the
   /// color rows so a color-locked session keeps the sliders.
   final bool showColor;
 
@@ -2804,7 +2804,7 @@ class _StyleMenuState extends State<_StyleMenu> {
   PdfEditingController get controller => widget.controller;
 
   /// The font-size slider's in-flight value while dragging over a
-  /// selected annotation — the annotation only restyles on release (one
+  /// selected annotation - the annotation only restyles on release (one
   /// revision per gesture), so the thumb needs its own state meanwhile.
   double? _draggingFontSize;
 
@@ -3017,7 +3017,7 @@ class _StyleMenuState extends State<_StyleMenu> {
       onClose: _endTextEditFocusHold,
       menuChildren: [
         // the menu lives in its own overlay, outside the toolbar's
-        // ListenableBuilder — it needs its own listener to track sliders
+        // ListenableBuilder - it needs its own listener to track sliders
         ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
@@ -3028,10 +3028,10 @@ class _StyleMenuState extends State<_StyleMenu> {
             // is non-null
             final captionStyle = controller.selectedMeasurementCaptionStyle;
             // with a restylable selection the stroke/opacity sliders
-            // show — and change — its style; otherwise the defaults
+            // show - and change - its style; otherwise the defaults
             final restylingAnnotation = controller.canRestyleSelected;
             // the eraser doesn't paint, so none of the stroke/opacity/
-            // font/line controls apply to it — while it's armed the menu
+            // font/line controls apply to it - while it's armed the menu
             // collapses to just the eraser-size slider
             final isEraser = fields.eraser;
             final annotationStyle =
@@ -3374,7 +3374,7 @@ class _StyleMenuState extends State<_StyleMenu> {
         ),
       ),
       // the readout is editable: type an exact value (general rule across
-      // the editing UI) — committing routes through the change-end callback,
+      // the editing UI) - committing routes through the change-end callback,
       // or onChanged for sliders that have none (live-only)
       PdfSliderValueField(
         key: key is ValueKey ? ValueKey('${key.value}-input') : null,
@@ -3390,7 +3390,7 @@ class _StyleMenuState extends State<_StyleMenu> {
   }
 }
 
-/// The Insert / free-text font chip — "Aa  Sans  14" — that opens the
+/// The Insert / free-text font chip - "Aa  Sans  14" - that opens the
 /// style popup. Reflects the selected free text's style, else the
 /// creation defaults.
 class _FontChip extends StatelessWidget {
@@ -3456,7 +3456,7 @@ class _FontChip extends StatelessWidget {
   }
 }
 
-/// Draws a short segment with [ending] rendered at one end — the preview
+/// Draws a short segment with [ending] rendered at one end - the preview
 /// icon for the line-ending dropdown. Purely indicative geometry (not the
 /// exact appearance the editor generates), oriented so [atEnd] puts the
 /// ending on the right.

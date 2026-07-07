@@ -53,7 +53,7 @@ part 'vector_snapshot.dart';
 /// High-level editing session over a [PdfDocument].
 ///
 /// Edits accumulate and [save] appends them as one incremental update, so
-/// the original file content — including any digital signatures — survives.
+/// the original file content - including any digital signatures - survives.
 class PdfEditor {
   PdfEditor(this.document) : _updater = CosIncrementalUpdater(document.cos);
 
@@ -66,7 +66,7 @@ class PdfEditor {
   /// Session-time open/closed intent for outline items, keyed by object
   /// number. Lets a childless item remember the state it was created with
   /// until it gains children (whose /Count then records the sign). Reopened
-  /// documents fall back to the /Count sign — see [PdfOutlineEditing].
+  /// documents fall back to the /Count sign - see [PdfOutlineEditing].
   final Map<int, bool> _outlineOpenOverride = {};
 
   /// The document-default measurement scale, set by

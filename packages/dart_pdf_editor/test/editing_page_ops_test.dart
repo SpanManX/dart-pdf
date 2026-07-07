@@ -32,7 +32,7 @@ void main() {
       // buildVariedHeightPdf cycles heights 792, 396, 1008 (all 612 wide)
       final editing = PdfEditingController(buildVariedHeightPdf(3));
       addTearDown(editing.dispose);
-      // insert after page index 1 (height 396) — the new page copies it
+      // insert after page index 1 (height 396) - the new page copies it
       editing.addBlankPage(at: 2);
       expect(editing.document.pageCount, 4);
       expect(editing.document.page(2).mediaBox, const PdfRect(0, 0, 612, 396));
@@ -165,7 +165,7 @@ void main() {
       editing.selectPage(2);
       editing.selectPageRange(4);
       expect(editing.selectedPages, [2, 3, 4]);
-      // anchor stays at 2 — extend the other way, replacing the range
+      // anchor stays at 2 - extend the other way, replacing the range
       editing.selectPageRange(0);
       expect(editing.selectedPages, [0, 1, 2]);
     });
@@ -417,7 +417,7 @@ void main() {
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
       await tester.pump();
       // 1..3 now read as filled chips (anchor + the previewed run); the
-      // pages outside the range stay clear — and nothing is committed
+      // pages outside the range stay clear - and nothing is committed
       expect(chip(1).color, isNotNull);
       expect(chip(2).color, isNotNull);
       expect(chip(3).color, isNotNull);

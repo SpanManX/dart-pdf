@@ -14,7 +14,7 @@ import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// One page whose single text line is long on both sides of the word
-/// "sentinel" — long enough that a search snippet truncates both ways.
+/// "sentinel" - long enough that a search snippet truncates both ways.
 Uint8List buildLongLinePdf() {
   const line = 'AAAA BBBB CCCC DDDD EEEE FFFF GGGG HHHH sentinel '
       'IIII JJJJ KKKK LLLL MMMM NNNN OOOO PPPP QQQQ RRRR SSSS TTTT';
@@ -378,7 +378,7 @@ void main() {
               controller: controller, preferences: preferences));
 
       // let the async preference load (and the bar's seeding) run, then
-      // rebuild — the stored whole-word option lands on the controller
+      // rebuild - the stored whole-word option lands on the controller
       await tester.runAsync(() => preferences.ready);
       await tester.pump();
       expect(controller.searchOptions.wholeWord, isTrue);

@@ -21,7 +21,7 @@ import 'editing_stamps.dart';
 /// (color, stroke width, opacity, font size) and the stylus mode come
 /// back the way the user left them, in this session and the next.
 /// Panel visibility ([showThumbnailSidebar], [showAnnotationSidebar])
-/// lives here too for the host's chrome — pass one instance to both the
+/// lives here too for the host's chrome - pass one instance to both the
 /// controller and the surrounding scaffold:
 ///
 /// ```dart
@@ -31,8 +31,8 @@ import 'editing_stamps.dart';
 /// ```
 ///
 /// Values load asynchronously ([ready]); each change is written back
-/// immediately. Where no local storage exists — plain widget tests, for
-/// example — loading fails silently and the defaults stand.
+/// immediately. Where no local storage exists - plain widget tests, for
+/// example - loading fails silently and the defaults stand.
 class PdfEditingPreferences extends ChangeNotifier {
   PdfEditingPreferences() {
     _ready = _load();
@@ -44,7 +44,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   late final Future<void> _ready;
   bool _modified = false;
 
-  /// Completes once stored values have been applied — or storage turned
+  /// Completes once stored values have been applied - or storage turned
   /// out to be unavailable and the defaults stand.
   Future<void> get ready => _ready;
 
@@ -124,7 +124,7 @@ class PdfEditingPreferences extends ChangeNotifier {
     try {
       store = await SharedPreferences.getInstance();
     } catch (_) {
-      return; // no local storage here (e.g. widget tests) — defaults stand
+      return; // no local storage here (e.g. widget tests) - defaults stand
     }
     // a value set while the disk read was in flight wins over the stored one
     if (!_modified) {
@@ -250,7 +250,7 @@ class PdfEditingPreferences extends ChangeNotifier {
       }
     }
     // viewports are a write-mostly store, not user-set UI state, so they
-    // load regardless of _modified and merge by key — any saved before the
+    // load regardless of _modified and merge by key - any saved before the
     // disk read (a fast scroll) keeps its place
     for (final entry in _decodeViewports(store.getString(_viewportsKey))) {
       _viewports.putIfAbsent(entry.$1, () => entry.$2);
@@ -295,14 +295,14 @@ class PdfEditingPreferences extends ChangeNotifier {
   }
 
   /// The saved viewport for the document keyed by [documentKey] (see
-  /// `pdfDocumentKey`), or null when none has been stored — what a host
+  /// `pdfDocumentKey`), or null when none has been stored - what a host
   /// passes to `PdfViewer.initialViewport` so reopening a document lands
   /// where the user left it.
   PdfViewport? viewportFor(String documentKey) => _viewports[documentKey];
 
   /// Remembers [viewport] as the position for the document keyed by
   /// [documentKey], evicting the least-recently-touched document past the
-  /// cap. Passing null forgets it. Persisted but deliberately silent — it
+  /// cap. Passing null forgets it. Persisted but deliberately silent - it
   /// is called on every scroll/zoom settle, so it never notifies
   /// listeners.
   void setViewport(String documentKey, PdfViewport? viewport) {
@@ -348,7 +348,7 @@ class PdfEditingPreferences extends ChangeNotifier {
         }
       });
     } catch (_) {
-      // corrupt blob — drop it, the defaults stand
+      // corrupt blob - drop it, the defaults stand
     }
   }
 
@@ -361,7 +361,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   /// While a scope is active every style setter ([color], [strokeWidth],
   /// [opacity], [fontSize], [fontFamily], [lineStyle], the line endings,
   /// the fill colors, [eraserRadius]) also records its new value under the
-  /// scope — so each annotation tool keeps its own colour, stroke and so on
+  /// scope - so each annotation tool keeps its own colour, stroke and so on
   /// across sessions. A null [scope] (select mode, or restyling a
   /// selection) writes only the shared defaults.
   void beginStyleScope(String? scope, Set<String> fields,
@@ -492,7 +492,7 @@ class PdfEditingPreferences extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Font family for free-text annotations — one of the standard PDF
+  /// Font family for free-text annotations - one of the standard PDF
   /// text fonts (sans-serif, serif, monospace).
   PdfStandardFont get fontFamily => _fontFamily;
 
@@ -505,7 +505,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   }
 
   /// Horizontal alignment (left/center/right) new free-text boxes are
-  /// created with — the box's /Q quadding. Null (the default) follows the
+  /// created with - the box's /Q quadding. Null (the default) follows the
   /// text direction: left for LTR, right for RTL. Persisted.
   PdfTextAlign? get textAlign => _textAlign;
 
@@ -667,7 +667,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   }
 
   /// The value format the color picker last showed (hex, RGB, HSL, or
-  /// CMYK) — the picker reopens in it.
+  /// CMYK) - the picker reopens in it.
   PdfColorFormat get colorPickerFormat => _colorPickerFormat;
 
   set colorPickerFormat(PdfColorFormat value) {
@@ -678,7 +678,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   }
 
   /// The paper color pages are displayed on (see [PdfViewer.pageColor]).
-  /// White — the PDF convention — by default; a display setting only,
+  /// White - the PDF convention - by default; a display setting only,
   /// the document is untouched.
   Color get pageColor => _pageColor;
 
@@ -690,7 +690,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   }
 
   /// Whether pages are displayed with their annotations (see
-  /// [PdfViewer.showAnnotations]). A display setting only — hiding
+  /// [PdfViewer.showAnnotations]). A display setting only - hiding
   /// changes nothing in the document.
   bool get showAnnotations => _showAnnotations;
 
@@ -725,7 +725,7 @@ class PdfEditingPreferences extends ChangeNotifier {
 
   /// Whether the host shows the dedicated full-area page thumbnail grid
   /// (`PdfThumbnailView`) in place of the page viewer. A view mode, not a
-  /// docked panel — distinct from [showThumbnailSidebar].
+  /// docked panel - distinct from [showThumbnailSidebar].
   bool get showThumbnailView => _showThumbnailView;
 
   set showThumbnailView(bool value) {
@@ -735,7 +735,7 @@ class PdfEditingPreferences extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The page thumbnail grid's tile width, in logical pixels — the size
+  /// The page thumbnail grid's tile width, in logical pixels - the size
   /// control in `PdfThumbnailView` drives it. Null until first changed,
   /// where the widget's own default applies.
   double? get thumbnailViewTileWidth => _thumbnailViewTileWidth;

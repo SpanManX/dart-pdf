@@ -47,7 +47,7 @@ String? _textEditUiFamily(PdfTextFont font) {
 /// function the rich controller calls) and the overlay state share it.
 final Map<String, String> _embeddedPreviewFamilies = {};
 
-/// A stable key for an embedded font's outline data — its PostScript name
+/// A stable key for an embedded font's outline data - its PostScript name
 /// plus byte length, enough to dedupe registrations without holding the
 /// bytes. The registered family is `'pdfedit-<key>'`.
 String _embeddedFontKey(PdfEmbeddedFont font) =>
@@ -267,7 +267,7 @@ class _ScaledTextSelectionControls extends MaterialTextSelectionControls
       [VoidCallback? onTap]) {
     // The collapsed handle is the touch caret's draggable dot. In an
     // expanded text box it floats well below the caret (a stray dot near
-    // the box's bottom edge), so suppress it — the blinking caret already
+    // the box's bottom edge), so suppress it - the blinking caret already
     // marks the insertion point. Range-selection handles stay.
     if (type == TextSelectionHandleType.collapsed) {
       return const SizedBox.shrink();
@@ -352,8 +352,8 @@ Color _inlineTextHandleColor(BuildContext context) {
 /// every page.
 ///
 /// A per-page overlay would clip its preview behind the page below the
-/// moment a move drag crosses a page boundary — sibling list items paint
-/// over it — so the artwork is hoisted to a viewer-level layer that sits
+/// moment a move drag crosses a page boundary - sibling list items paint
+/// over it - so the artwork is hoisted to a viewer-level layer that sits
 /// over the whole list.
 ///
 /// [from]/[to] are the reporting page overlay's local (page-view)
@@ -437,17 +437,17 @@ class EditingPageOverlay extends StatefulWidget {
   /// ([PdfEditTool.snapshot]). With none, the snapshot tool does nothing.
   final PdfSnapshotHandler? onSnapshot;
 
-  /// The paper color the page is displayed with — the eyedropper's
+  /// The paper color the page is displayed with - the eyedropper's
   /// raster must match what's on screen.
   final Color pageColor;
 
-  /// Whether the page is displayed with its annotations — same
+  /// Whether the page is displayed with its annotations - same
   /// requirement as [pageColor]: the eyedropper samples what's visible.
   final bool showAnnotations;
 
   /// Pans the viewer by a pointer delta (this overlay's local space).
   /// Lets a drag on empty page area scroll the document even though the
-  /// overlay's recognizers won the arena — grab panning and annotation
+  /// overlay's recognizers won the arena - grab panning and annotation
   /// selection co-existing in the select tool.
   final void Function(Offset delta)? onPanViewport;
 
@@ -460,17 +460,17 @@ class EditingPageOverlay extends StatefulWidget {
   /// pointer's global position, returns the viewport scroll delta (this
   /// overlay's local space, same as [onPanViewport]) to apply this frame so
   /// the document keeps moving while the pointer rests against a viewport
-  /// edge — [Offset.zero] when the pointer is clear of every edge. With none,
+  /// edge - [Offset.zero] when the pointer is clear of every edge. With none,
   /// dragging to the edge does not scroll the viewer.
   final Offset Function(Offset globalPosition)? edgeAutoScroll;
 
   /// Whether the page raster on screen already shows the controller's
   /// current revision. While false (an edit just committed and the
   /// re-render is in flight), the overlay keeps painting the committed
-  /// edit's preview — its afterimage — so the edit never blinks out.
+  /// edit's preview - its afterimage - so the edit never blinks out.
   final bool rasterCurrent;
 
-  /// Screen pixels per overlay pixel — the viewer's transform zoom. The
+  /// Screen pixels per overlay pixel - the viewer's transform zoom. The
   /// overlay paints inside that transform, so selection chrome (outline,
   /// handles, the rotate knob) divides its sizes and hit radii by this
   /// to stay constant-size on screen at any zoom. Page-content previews
@@ -482,7 +482,7 @@ class EditingPageOverlay extends StatefulWidget {
   /// the pen tip.
   final bool predictStrokes;
 
-  /// Opens the annotation context menu at a global position — the
+  /// Opens the annotation context menu at a global position - the
   /// selection action chip's "more" button and the touch long-press,
   /// which give touch input the menu that mice reach by right-clicking.
   /// The viewer supplies its menu (including the host's custom actions);
@@ -491,24 +491,24 @@ class EditingPageOverlay extends StatefulWidget {
       {(double, double)? pagePoint})? onShowAnnotationMenu;
 
   /// Opens the form-field context menu (edit/rename/convert/delete/flatten)
-  /// at a global position — the touch long-press counterpart of
+  /// at a global position - the touch long-press counterpart of
   /// right-clicking a field widget with the form tool armed.
   final void Function(Offset globalPosition, String fieldName,
       {int? widgetIndex})? onShowFormFieldMenu;
 
   /// Resolves a global point to the page index and page-space coordinates
-  /// under it — lets a move drag that ends over a *different* page re-home
+  /// under it - lets a move drag that ends over a *different* page re-home
   /// the dragged annotation there. Returns null off any page.
   final (int, double, double)? Function(Offset globalPosition)?
       onResolvePagePoint;
 
   /// Reports a single-selection move drag's floating preview so the viewer
-  /// paints it above every page — a per-page overlay clips it behind the
+  /// paints it above every page - a per-page overlay clips it behind the
   /// page below once the drag crosses a page boundary. Null clears it.
   final PdfMoveDragPreviewCallback? onMoveDragPreview;
 
   /// Called when the in-place text editor closes while it still owned the
-  /// keyboard (Escape, ⌘Enter, or a commit by tapping the page) — not when
+  /// keyboard (Escape, ⌘Enter, or a commit by tapping the page) - not when
   /// focus moved to another widget. The viewer wires this to reclaim its
   /// own focus so its shortcuts (Escape → back out, tool keys, delete) work
   /// again immediately; otherwise the removed field's focus node leaves
@@ -558,7 +558,7 @@ typedef _StampAfterimage = ({
 /// afterimage). The editor *regenerates* a shape's appearance at the new
 /// rect with a constant stroke width rather than stretching the old one,
 /// so a stretched ghost would thicken the line during the drag and snap
-/// back on commit — this draws the shape the way the commit will, line
+/// back on commit - this draws the shape the way the commit will, line
 /// width and all. [strokeWidth] is view space; [rotation] view radians.
 typedef _ShapeResize = ({
   Rect rect,
@@ -650,11 +650,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// Repaint signal for the in-progress stroke. Appending a point during a
   /// pencil/mouse stroke bumps this instead of calling setState, so the
   /// dedicated active-stroke layer (its own RepaintBoundary) re-rasterizes
-  /// without rebuilding the overlay subtree or the heavy preview painter —
+  /// without rebuilding the overlay subtree or the heavy preview painter -
   /// the difference between a per-point widget rebuild and a per-point
   /// repaint, which is what the pen latency was paying for. Every mutation
   /// of [_activeStroke]/[_activeStrokePressures] must call [_bumpActiveStroke]
-  /// (the painter's shouldRepaint stays false — this Listenable is the only
+  /// (the painter's shouldRepaint stays false - this Listenable is the only
   /// thing that drives it, including the clear on commit/bail).
   final ValueNotifier<int> _activeStrokeRepaint = ValueNotifier<int>(0);
 
@@ -665,7 +665,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   double? _pointerPressure;
 
   // raw-driven drawing: with ink or the eraser armed, stylus pointers
-  // (and touch, when fingers draw) skip the gesture arena entirely — a
+  // (and touch, when fingers draw) skip the gesture arena entirely - a
   // pan recognizer only wins after ~36px of motion, which swallowed the
   // start of every pencil stroke and dropped quick dots as taps. The
   // pointer id claims the gesture; moves append, up commits.
@@ -675,7 +675,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   // drawing OFF (Apple Pencil mode), a finger must still scroll the
   // document. The list's physics are NeverScrollable while a tool is
   // armed and touch is excluded from the overlay's gesture arena, so a
-  // single finger reaches neither — it would do nothing. This raw path
+  // single finger reaches neither - it would do nothing. This raw path
   // pans the viewer instead (the pen keeps drawing through [_pointers], so the
   // two never collide). A touch landing during an active pen stroke is a palm
   // and is ignored; a second finger bails to the viewer's pinch-zoom
@@ -683,7 +683,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// Raw-pointer, touch-bail, and finger-pan bookkeeping lives in
   /// [_pointers]; the overlay keeps the actual preview/commit state.
 
-  /// The device kind of the latest pointer down on this page — the
+  /// The device kind of the latest pointer down on this page - the
   /// selection action chip only shows for touch and stylus input.
   PointerDeviceKind? _lastPointerKind;
 
@@ -692,7 +692,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   // original, so the preview shows exactly what the commit keeps), the
   // original strokes of each touched sliceable annotation (washed over
   // so the baked-in ink fades without obscuring the page content around
-  // it — the wash follows the strokes, not the bounding box), inkless
+  // it - the wash follows the strokes, not the bounding box), inkless
   // slots that can only be deleted whole (washed by their rect), and the
   // ring cursor's view position (drag for any pointer, hover for a mouse)
   final List<(double, double)> _erasePath = [];
@@ -722,7 +722,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// painted to track the pointer instead.
   Offset? _rotateCursor;
 
-  /// Erase results kept painted until the new revision's raster lands —
+  /// Erase results kept painted until the new revision's raster lands -
   /// without them the old strokes pop back at full strength for a frame.
   List<Rect>? _afterEraseRects;
   List<_InkPaint>? _afterEraseFade;
@@ -733,7 +733,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   Rect? _textEditRect; // view space; null = closed; derived per build
   // page space is the source of truth: a zoom that re-lays-out the page
   // (the _layoutZoom regime changes _geometry.scale) would leave a cached
-  // view rect stale, so the box would drift across the page — build
+  // view rect stale, so the box would drift across the page - build
   // refreshes _textEditRect from this through the live geometry
   PdfRect? _textEditPageRect;
   bool _textEditExisting = false;
@@ -770,7 +770,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   Offset? _moveStart;
   Offset? _moveCurrent;
 
-  /// The global position of [_moveCurrent] — captured during a move drag
+  /// The global position of [_moveCurrent] - captured during a move drag
   /// so a drop over another page can be resolved to a page point (drag-end
   /// details carry no position).
   Offset? _moveCurrentGlobal;
@@ -823,7 +823,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   // rotate drag: the pointer's start angle about the selection center,
   // the annotation's resting rotation when the drag started, and the
-  // current delta (view space, clockwise positive — y is down)
+  // current delta (view space, clockwise positive - y is down)
   double? _rotateStartAngle;
   double _rotateResting = 0;
   double _rotateDelta = 0;
@@ -835,7 +835,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   bool _signatureDrag = false;
 
   // afterimage of the last commit, painted until the new revision's
-  // raster lands ([widget.rasterCurrent]) — without it the preview
+  // raster lands ([widget.rasterCurrent]) - without it the preview
   // clears frames before the page re-renders and the edit blinks out
   PdfDocument? _afterDocument;
   ui.Picture? _afterGhost;
@@ -850,7 +850,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   ({Rect rect, PdfEditTool tool, Color color, double strokeWidth})? _afterShape;
   _StampAfterimage? _afterStamp;
   // a just-committed Square/Circle resize, held (constant stroke width)
-  // until the new revision's raster lands — see [_shapeResizeStyle]
+  // until the new revision's raster lands - see [_shapeResizeStyle]
   _ShapeResize? _afterShapeResize;
   ({
     List<Offset> points,
@@ -873,7 +873,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   // the lifted clean page (the page rendered without the resized text box)
   // kept alive past the drag so a transparent box's commit afterimage shows
   // the real page content behind it instead of an opaque-paper flash. Null
-  // when the lift wasn't ready — then [_afterText.washed] paints the paper
+  // when the lift wasn't ready - then [_afterText.washed] paints the paper
   // fallback. Hides the old footprint [_afterTextHideRect] (view space).
   ui.Picture? _afterTextClean;
   Rect? _afterTextHideRect;
@@ -892,7 +892,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     ..addListener(_onFlashTick)
     ..addStatusListener(_onFlashStatus);
   int _flashSequence = 0;
-  PdfRect? _flashRect; // page space — view rect derives per build
+  PdfRect? _flashRect; // page space - view rect derives per build
 
   void _onFlashTick() => setState(() {});
 
@@ -908,7 +908,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   PdfEditingController get _controller => widget.controller;
   PdfPageGeometry get _geometry => widget.geometry;
 
-  /// Overlay pixels per intended screen pixel for chrome metrics — the
+  /// Overlay pixels per intended screen pixel for chrome metrics - the
   /// inverse of the viewer's transform zoom (see [EditingPageOverlay.zoom]).
   double get _chromeScale {
     final zoom = widget.zoom;
@@ -920,7 +920,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   PdfEditTool? get _tool => _controller.tool;
 
   /// Select-tool behavior applies: the tool is armed, or an annotation
-  /// was selected in default mode (no tool) by a mouse click — the
+  /// was selected in default mode (no tool) by a mouse click - the
   /// selection needs its move/resize/marquee interactions either way.
   bool get _selectMode =>
       _tool == PdfEditTool.select ||
@@ -941,7 +941,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
   }
 
-  /// Shift/⌘/Ctrl held — a click toggles membership, a marquee adds.
+  /// Shift/⌘/Ctrl held - a click toggles membership, a marquee adds.
   static bool get _additiveModifier {
     final keyboard = HardwareKeyboard.instance;
     return keyboard.isShiftPressed ||
@@ -974,7 +974,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _tool == PdfEditTool.measureVolume;
 
   /// The number of clicks a fixed-arity poly tool takes before it
-  /// auto-finishes — three for the angle and arc takeoffs — or null for an
+  /// auto-finishes - three for the angle and arc takeoffs - or null for an
   /// open-ended poly tool (finished by a double-tap).
   int? get _fixedPolyCount => switch (_tool) {
         PdfEditTool.measureAngle || PdfEditTool.measureArc => 3,
@@ -1006,7 +1006,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// Whether a pointer of [kind] draws (or erases) through the raw
   /// event stream instead of the gesture arena. Pan recognizers only
   /// win the arena after ~36px of motion, which swallowed the start of
-  /// every pencil stroke and dropped quick dots as taps — so with ink
+  /// every pencil stroke and dropped quick dots as taps - so with ink
   /// or the eraser armed, stylus input (and touch, when fingers draw)
   /// starts on pointer-down. Mouse and trackpad keep the arena path:
   /// they have no latency problem and hover/click semantics to honor.
@@ -1021,7 +1021,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   /// Raw-pointer bookkeeping the pan callbacks can't see: the pressure
   /// stream, stylus detection for palm rejection, multi-touch bail, and
-  /// — with ink or the eraser armed — the stroke itself.
+  /// - with ink or the eraser armed - the stroke itself.
   void _onPointerDown(PointerDownEvent event) {
     _pointerPressure = _normalizedPressure(event);
     if (_lastPointerKind != event.kind) {
@@ -1031,7 +1031,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (event.kind == PointerDeviceKind.touch) {
       _pointers.touchPointers.add(event.pointer);
       if (_pointers.touchPointers.length >= 2) {
-        // a stylus stroke survives stray touches — that second contact
+        // a stylus stroke survives stray touches - that second contact
         // is the palm resting on the screen, not a gesture
         if (_pointers.rawPointer != null &&
             !_pointers.touchPointers.contains(_pointers.rawPointer)) {
@@ -1060,7 +1060,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
     if (_pointers.rawPointer == null && _rawDrives(event.kind)) {
       _pointers.rawPointer = event.pointer;
-      // a flipped pencil erases even while the ink tool is armed —
+      // a flipped pencil erases even while the ink tool is armed -
       // that's what the flip is for
       _pointers.rawErasing = _tool == PdfEditTool.eraser ||
           event.kind == PointerDeviceKind.invertedStylus;
@@ -1120,7 +1120,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
   }
 
-  /// Aborts whatever gesture is in flight — a second finger landed, so
+  /// Aborts whatever gesture is in flight - a second finger landed, so
   /// the first one wasn't drawing or dragging after all (it's a pinch,
   /// or just a clumsy grip). Nothing commits; the rest of the gesture
   /// is dead air until every touch pointer lifts.
@@ -1128,7 +1128,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _pointers.gestureBailed = true;
     _pointers.clearRaw();
     // a second finger landed: stop panning so the viewer's pinch-zoom
-    // recognizer takes both touches (no fling — the gesture isn't a pan)
+    // recognizer takes both touches (no fling - the gesture isn't a pan)
     _pointers.clearPan();
     setState(() {
       _activeStroke = null;
@@ -1213,7 +1213,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// swipe's path by one capsule and re-slices every ink annotation it
   /// touches, so the live preview (faded original + remainder strokes)
   /// shows exactly what the commit will keep. Ink annotations without a
-  /// usable /InkList can't be sliced — they fade whole and the commit
+  /// usable /InkList can't be sliced - they fade whole and the commit
   /// deletes them.
   void _eraseAt(Offset position) {
     final point = _geometry.toPagePoint(position);
@@ -1298,7 +1298,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// The primary selected annotation's view rect when it lives on this
-  /// page — the one that gets resize/rotate handles (single selection).
+  /// page - the one that gets resize/rotate handles (single selection).
   Rect? get _selectedViewRect {
     if (_controller.selectedPage != widget.pageIndex) return null;
     final annotation = _controller.selectedAnnotation;
@@ -1381,7 +1381,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     return [for (final (x, y) in vertices) _geometry.toViewOffset(x, y)];
   }
 
-  /// The view-space rotation of [quad]'s bottom edge — the angle the
+  /// The view-space rotation of [quad]'s bottom edge - the angle the
   /// selection chrome spins by (canvas.rotate convention: clockwise
   /// positive). Numeric noise within ~0.3° reads as unrotated.
   static double _quadAngle(List<Offset> quad) {
@@ -1393,7 +1393,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   /// The selection chrome's box and resting rotation: the axis-aligned
   /// view rect for an unrotated appearance, otherwise the quad's own
-  /// (pre-rotation) rectangle — the painter spins it back into place,
+  /// (pre-rotation) rectangle - the painter spins it back into place,
   /// so the chrome hugs the rotated artwork instead of boxing its
   /// axis-aligned bounds.
   (Rect, double)? get _selectionChrome {
@@ -1452,12 +1452,12 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   /// Runs [commit] and, when it produced a new revision, keeps the
   /// current ghost painted at [to] (spun by [rotation]) as the
-  /// afterimage — the move/resize/rotate result stays visible while the
+  /// afterimage - the move/resize/rotate result stays visible while the
   /// page re-renders. The ghost's ownership transfers to the afterimage;
   /// [_ensureGhost] re-renders a fresh one for the new revision.
   ///
   /// For a rotated selection's resize, [localAngle] is its resting
-  /// rotation and [to] the dragged *local* box — the afterimage then
+  /// rotation and [to] the dragged *local* box - the afterimage then
   /// scales along the local axes, exactly like the live preview did.
   ///
   /// [flipX]/[flipY] mirror the afterimage so a resize that inverted the
@@ -1691,7 +1691,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// The selection's text style when a resize commit will RE-WRAP it at
-  /// a constant font size — the editor's FreeText regenerate path:
+  /// a constant font size - the editor's FreeText regenerate path:
   /// an /AP to replace and a /DA naming a standard font. Null means the
   /// commit stretches the appearance and the ghost previews faithfully.
   ({String text, PdfStandardFont font, double size, Color color, Color? fill})?
@@ -1718,7 +1718,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// The selected annotation's style when a resize commit will
-  /// REGENERATE it (Square/Circle) at a constant stroke width — the
+  /// REGENERATE it (Square/Circle) at a constant stroke width - the
   /// editor's shape regenerate path: an /AP to replace, no cloudy /BE,
   /// no dashed border, and a stroke or fill to draw. [strokeWidth] is in
   /// view pixels (the page-space border width scaled), so the preview
@@ -1802,13 +1802,13 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// Pushes the current single-selection move drag's floating preview up
-  /// to the viewer, which paints it above the page below — this overlay
+  /// to the viewer, which paints it above the page below - this overlay
   /// clips its own ghost at the page edge, so the part dragged past the
   /// boundary would otherwise vanish behind the next page.
   ///
   /// Only fires once the dragged rect actually leaves this page; a move
   /// that stays on the page keeps the overlay's own ghost (no floating
-  /// layer, so no double exposure). Reports null otherwise — the ghost
+  /// layer, so no double exposure). Reports null otherwise - the ghost
   /// isn't ready, it's a resize/rotate, or it's not a single selection.
   void _reportMovePreview() {
     final report = widget.onMoveDragPreview;
@@ -1867,7 +1867,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             identical(a.dict, key) || (name != null && a.name == name),
       );
       // discard if the drag ended, the selection changed, or the document
-      // moved under us — a stale clean page would hide the wrong thing
+      // moved under us - a stale clean page would hide the wrong thing
       if (!mounted ||
           !identical(_resizeCleanFor, key) ||
           !identical(_controller.document, document)) {
@@ -2018,7 +2018,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final request = _controller.editingTextStyleRequest;
     if (request == null) return;
     // register an embedded font's bytes so the styled run previews in its
-    // real face, not the fallback — covers the inline menu and a host that
+    // real face, not the fallback - covers the inline menu and a host that
     // drives restyleEditingTextSelection directly
     if (request.font is PdfEmbeddedFont) {
       _ensureEmbeddedFontPreview(request.font as PdfEmbeddedFont);
@@ -2244,7 +2244,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     return Rect.fromLTWH(left, top, w, h);
   }
 
-  /// Opens the inline text editor over [viewRect] — empty for a fresh
+  /// Opens the inline text editor over [viewRect] - empty for a fresh
   /// free-text box, prefilled from the selected annotation when
   /// [existing]. The editor renders with the same font, size, and color
   /// the committed annotation will use.
@@ -2303,7 +2303,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _controller.setEditingText(true);
     // the field's autofocus is ignored: the creating gesture's
     // pointer-down put primary focus on the viewer's own node, and
-    // autofocus only fires into an unfocused scope — claim it so typing
+    // autofocus only fires into an unfocused scope - claim it so typing
     // lands in the fresh box without clicking into it first
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _textEditRect != null) _textEditFocus.requestFocus();
@@ -2311,7 +2311,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// Opens the inline editor over a text field's widget, prefilled with
-  /// its value — the form tool's tap-to-fill. The commit goes into the
+  /// its value - the form tool's tap-to-fill. The commit goes into the
   /// field's /V instead of creating an annotation.
   void _openFormTextEditor(PdfFormField field, int widgetIndex) {
     final rect = field.widgetRect(widgetIndex);
@@ -2348,7 +2348,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// Commits the editor's text: a new free-text annotation, the
-  /// selected one rewritten, or — for the form tool — the field's new
+  /// selected one rewritten, or - for the form tool - the field's new
   /// value. Empty text adds nothing / changes nothing.
   void _commitTextEdit() {
     final rect = _textEditRect;
@@ -2405,7 +2405,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
     if (identical(before, _controller.document)) return;
     // the editor's rendering, frozen until the new revision's raster
-    // lands — otherwise the text vanishes for the render's duration
+    // lands - otherwise the text vanishes for the render's duration
     _clearAfterimage();
     _afterText = (
       rect: rect,
@@ -2425,10 +2425,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// What Escape does to the open editor. It must never destroy a box: a
   /// brand-new free-text box keeps what was typed (an empty one just adds
   /// nothing on close), matching the desktop convention where Escape
-  /// *finishes* the box rather than throwing it away — discarding it read
+  /// *finishes* the box rather than throwing it away - discarding it read
   /// as Escape "deleting" the annotation you'd just placed. An existing box
   /// or a form field reverts to its saved value instead (a real cancel,
-  /// and still non-destructive — the box stays).
+  /// and still non-destructive - the box stays).
   void _onEscapeTextEdit() {
     if (_textEditExisting || _textEditFieldName != null) {
       _cancelTextEdit();
@@ -2458,7 +2458,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     // whether the editor still owned the keyboard: a close driven by Escape,
     // ⌘Enter, or a tap on the page arrives with focus still on the field; a
     // close because the user clicked another widget (e.g. a toolbar field)
-    // does not — that new focus must be left alone
+    // does not - that new focus must be left alone
     final ownedFocus = _textEditFocus.hasFocus;
     if (mounted) {
       setState(() {
@@ -2488,7 +2488,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
   }
 
-  /// Losing focus commits — tapping another widget, switching panes.
+  /// Losing focus commits - tapping another widget, switching panes.
   /// (Escape cancels first, so by the time the unfocus arrives the
   /// session is already gone and this is a no-op.)
   void _onTextEditFocus() {
@@ -2519,7 +2519,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
     switch (_tool) {
       case null:
-        break; // eyedropper only — taps, no drags
+        break; // eyedropper only - taps, no drags
       case PdfEditTool.select:
         break; // handled by _selectPanStart above
       case PdfEditTool.eraser:
@@ -2710,7 +2710,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// Whether a touch/stylus long-press at [position] would open a
-  /// context menu — checked on pointer DOWN (the recognizer only joins
+  /// context menu - checked on pointer DOWN (the recognizer only joins
   /// the arena when this is true), so a long-press that has nothing to
   /// offer never steals the gesture from text selection or the viewer.
   bool _menuLongPressClaims(Offset position) {
@@ -2788,7 +2788,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// Applies a region drag's current pointer (view space) to whichever drag
-  /// is in flight — shared by [_panUpdate] and the edge auto-scroll tick so a
+  /// is in flight - shared by [_panUpdate] and the edge auto-scroll tick so a
   /// held pointer keeps tracking the page as it scrolls underneath.
   void _applyDragPosition(Offset position) {
     if (_marqueeStart != null) {
@@ -2875,7 +2875,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (box is! RenderBox || !box.hasSize) return;
     // Re-derive the view-space pointer: the page may have scrolled under a
     // held pointer (the edge auto-scroll below, or a manual shift-scroll), so
-    // the same global point now lands on different content — grow the drag to
+    // the same global point now lands on different content - grow the drag to
     // it. The guard skips redundant rebuilds when nothing moved.
     final local = box.globalToLocal(global);
     if (local != _autoScrollLastLocal) {
@@ -2917,7 +2917,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     // a free-text resize lifts the original box out of the page so the drag
     // shows real content behind a transparent box; detach that lift (taking
     // ownership from [_clearResizeClean]) so the commit afterimage can keep
-    // it up until the new raster lands — without it a transparent box
+    // it up until the new raster lands - without it a transparent box
     // flashes opaque paper on release
     final textResizing = resizeRect != null && _textResizeStyle != null;
     final liftClean = textResizing ? _resizeCleanPicture : null;
@@ -2981,7 +2981,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
     if (rotating) {
       // view-space clockwise (y down) is page-space clockwise, and PDF
-      // rotation is counterclockwise-positive — hence the sign flip
+      // rotation is counterclockwise-positive - hence the sign flip
       _commitWithGhost(
           () => _controller.rotateSelected(-rotateDelta * 180 / math.pi),
           to: _selectedViewRect,
@@ -3000,7 +3000,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
           : _controller.resizeSelectedLocal(_geometry.toPageRect(resizeRect),
               flipX: resizeFlipX, flipY: resizeFlipY);
       if (wrapStyle != null) {
-        // the commit re-wraps the text at constant size — a stretched
+        // the commit re-wraps the text at constant size - a stretched
         // ghost afterimage would show scaled glyphs, so freeze the same
         // wrapped-text preview the drag showed instead
         final before = _controller.document;
@@ -3028,7 +3028,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
           liftClean?.dispose(); // no commit: don't leak the detached lift
         }
       } else if (shapeStyle != null) {
-        // the commit regenerates the shape at a constant stroke width —
+        // the commit regenerates the shape at a constant stroke width -
         // freeze the same constant-width preview the drag showed
         final before = _controller.document;
         commit();
@@ -3382,7 +3382,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         final vector = _controller.copyVectorSnapshot(widget.pageIndex, rect);
         final handler = widget.onSnapshot;
         if (handler == null) return;
-        // page raster space (post-/Rotate, y down) = view space / scale —
+        // page raster space (post-/Rotate, y down) = view space / scale -
         // the same mapping the eyedropper's sampler uses
         final s = _geometry.scale;
         final region = Rect.fromLTRB(viewRect.left / s, viewRect.top / s,
@@ -3513,7 +3513,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// Releasing the pointer commits the raw gesture (stroke or erase
-  /// swipe) and picks the eyedropper's previewed color — so both a
+  /// swipe) and picks the eyedropper's previewed color - so both a
   /// plain tap and press-drag-release (watching the preview) work. A
   /// raw listener, so it fires regardless of the gesture arena.
   Future<void> _onPointerUp(PointerUpEvent event) async {
@@ -3786,7 +3786,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (cursor != _cursor) setState(() => _cursor = cursor);
   }
 
-  /// The floating action row beside a touch/stylus selection — the
+  /// The floating action row beside a touch/stylus selection - the
   /// affordances mice get from hover and right-click (delete, the
   /// context menu, edit-in-place). Rides above the selection, clear of
   /// the rotate knob; flips below when the selection hugs the page top.
@@ -3880,7 +3880,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   }
 
   /// Registers an embedded font's outline bytes with the engine under a
-  /// synthetic family so the inline editor can *preview* it — base-14
+  /// synthetic family so the inline editor can *preview* it - base-14
   /// faces map to platform families, but an embedded/bundled font is drawn
   /// from raw bytes the page renderer turns into paths, which a Flutter
   /// `TextField` can't use until they're loaded as a font. Idempotent and
@@ -3908,13 +3908,13 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     });
   }
 
-  /// Toggles bold (or [italic]) on the inline text editor — the desktop
+  /// Toggles bold (or [italic]) on the inline text editor - the desktop
   /// Cmd/Ctrl+B / Cmd/Ctrl+I shortcuts. Bold and italic are variants of the
   /// base-14 faces, so an embedded font is left alone. With a selection the
   /// toggle restyles it; with none it styles the whole box (or just sets the
   /// face when the box is still empty).
   void _toggleInlineTextStyle({required bool italic}) {
-    // form fields carry a single /DA font — no rich styling to toggle
+    // form fields carry a single /DA font - no rich styling to toggle
     if (_textEditRect == null || _textEditFieldName != null) return;
 
     final base = _canStyleInlineTextSelection
@@ -4048,7 +4048,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     );
   }
 
-  /// The running measurement readout during placement — the formatted
+  /// The running measurement readout during placement - the formatted
   /// distance/perimeter/area, and the view-space point it should ride.
   /// Null when no measurement tool is mid-placement.
   (String text, Offset anchor)? _measureReadout() {
@@ -4108,7 +4108,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   /// A `"{width} pt · {opacity}%"` readout while a shape/line is being
   /// drawn (the creation pen width and opacity) or a stroked selection is
-  /// being resized (its own values) — so they're visible mid-gesture.
+  /// being resized (its own values) - so they're visible mid-gesture.
   /// Null for measurement tools (their own readout shows) and when nothing
   /// stroke-bearing is mid-drag.
   (String text, Offset anchor)? _styleReadout() {
@@ -4180,7 +4180,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     );
   }
 
-  /// A wrapped-text box mirroring a committed free-text appearance —
+  /// A wrapped-text box mirroring a committed free-text appearance -
   /// the live resize preview and the post-commit afterimage share it.
   /// [rotation] spins the box about its center (a rotated annotation's
   /// resting angle, view convention).
@@ -4228,7 +4228,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     );
   }
 
-  /// The Flutter font family that visually matches [font] — the same
+  /// The Flutter font family that visually matches [font] - the same
   /// substitution the renderer uses for non-embedded base-14 fonts.
   static String _uiFamily(PdfStandardFont font) => switch (font.family) {
         PdfStandardFontFamily.sans => 'Helvetica',
@@ -4242,7 +4242,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _ensureGhost();
     _ensureSourceClean();
     // the afterimage has served once the committed revision's raster is
-    // on screen — or is stale once the document moved past that revision
+    // on screen - or is stale once the document moved past that revision
     if (_afterDocument != null &&
         (widget.rasterCurrent ||
             !identical(_afterDocument, _controller.document))) {
@@ -4331,7 +4331,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             flipY: _afterGhostFlipY,
           )
         : restGhost;
-    // a free-text resize re-wraps at constant font size — preview the
+    // a free-text resize re-wraps at constant font size - preview the
     // wrapping live instead of the ghost's stretched glyphs
     final wrapResize =
         _resizeHandle != null && _resizeRect != null ? _textResizeStyle : null;
@@ -4371,7 +4371,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       if (_afterSignature != null) _afterSignature!,
       if (signaturePreview != null) signaturePreview,
       // the eraser's live remainders, then the committed slice held
-      // until its raster lands — painted over the fade wash
+      // until its raster lands - painted over the fade wash
       ..._eraseSliced.values,
       ...?_afterEraseInk,
     ];
@@ -4430,7 +4430,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
               }
             : null,
         // anchor drags at the press point, not where the recognizer won the
-        // arena — a shape should start exactly where the pointer went down
+        // arena - a shape should start exactly where the pointer went down
         dragStartBehavior: DragStartBehavior.down,
         onPanStart: _panStart,
         onPanUpdate: _panUpdate,
@@ -4490,7 +4490,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                     color: _controller.color,
                     strokeWidth: _controller.strokeWidth * _geometry.scale,
                     geometry: _geometry,
-                    // the in-progress stroke is NOT here — it rides its own
+                    // the in-progress stroke is NOT here - it rides its own
                     // RepaintBoundary layer below so each appended point is a
                     // repaint, not a rebuild of this whole painter
                     strokes: _controller.strokesOn(widget.pageIndex),
@@ -4608,7 +4608,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
               // The in-progress pencil/mouse stroke, isolated on its own
               // RepaintBoundary and repainted via _activeStrokeRepaint. While
               // a stroke is live nothing above rebuilds, so only this layer
-              // re-rasterizes per appended point — the latency fix.
+              // re-rasterizes per appended point - the latency fix.
               Positioned.fill(
                 child: RepaintBoundary(
                   child: CustomPaint(
@@ -4618,7 +4618,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                 ),
               ),
               // a free-text resize in flight: the text re-wrapped to the
-              // dragged box at its committed size — never the ghost's
+              // dragged box at its committed size - never the ghost's
               // stretched glyphs. The original box is hidden by the
               // painter's lift layer (the page rendered without it), so
               // this preview is TRANSPARENT save for the box's own fill:
@@ -4695,7 +4695,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                         // and paints as a FOREGROUND decoration: a regular
                         // decoration border adds itself to the padding, and
                         // any net inset shifts the text when the editor
-                        // opens — content must sit exactly on the box
+                        // opens - content must sit exactly on the box
                         padding: const EdgeInsets.all(2),
                         // the box's own fill when it has one; otherwise wash
                         // the paper color over what's underneath: faint for a
@@ -4820,7 +4820,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
 /// The overlay's context-menu long-press: touch and stylus only, and it
 /// only enters the gesture arena when [shouldClaim] says the press point
-/// has a menu to offer — otherwise a held finger must stay available to
+/// has a menu to offer - otherwise a held finger must stay available to
 /// text selection, marquees, and slow move drags.
 class _MenuLongPressRecognizer extends LongPressGestureRecognizer {
   _MenuLongPressRecognizer({super.debugOwner})
@@ -4950,7 +4950,7 @@ void _paintInkStrokes(
 /// The single in-progress pencil/mouse stroke, on its own RepaintBoundary.
 ///
 /// Reads the live stroke buffers straight off the overlay state and repaints
-/// only when [_EditingPageOverlayState._activeStrokeRepaint] ticks — so a
+/// only when [_EditingPageOverlayState._activeStrokeRepaint] ticks - so a
 /// pointer-move appends a point and bumps the notifier without rebuilding the
 /// overlay or the heavy [_EditingPreviewPainter]. [shouldRepaint] stays false:
 /// the repaint Listenable is the sole driver (the start, every point, and the
@@ -4972,7 +4972,7 @@ class _ActiveStrokePainter extends CustomPainter {
     final geometry = _state._geometry;
     var display = stroke;
     var pressures = _state._activeStrokePressures;
-    // a forward-extrapolated lead so the line keeps up with the pen tip —
+    // a forward-extrapolated lead so the line keeps up with the pen tip -
     // display only, recomputed each repaint (so the next real sample
     // replaces it) and never folded into the committed stroke
     if (_state.widget.predictStrokes) {
@@ -5128,20 +5128,20 @@ class _EditingPreviewPainter extends CustomPainter {
   final Rect? marqueeRect;
 
   /// The selected annotation's appearance in page raster space, and its
-  /// resting view rect — drawn stretched onto [ghostTo] while
+  /// resting view rect - drawn stretched onto [ghostTo] while
   /// [dragging], so the user sees the move/resize result live.
   final ui.Picture? ghost;
   final Rect? ghostFrom;
   final Rect? ghostTo;
 
   /// A Square/Circle resize preview (or its committed afterimage) drawn
-  /// with a constant stroke width — the shape regenerates rather than
+  /// with a constant stroke width - the shape regenerates rather than
   /// stretching, so the ghost is suppressed in its favour.
   final _ShapeResize? shapeResize;
   final bool dragging;
 
   /// The chrome's total rotation (view radians, clockwise positive):
-  /// the annotation's resting rotation plus a rotate drag's sweep — the
+  /// the annotation's resting rotation plus a rotate drag's sweep - the
   /// selection box hugs rotated artwork instead of boxing its bounds.
   final double rotation;
 
@@ -5179,7 +5179,7 @@ class _EditingPreviewPainter extends CustomPainter {
 
   /// Inkless annotations the eraser swipe will delete whole: their view
   /// rects, washed with [fadeColor] (the paper color, mostly opaque) so
-  /// they read as going — live during the swipe, and as the afterimage
+  /// they read as going - live during the swipe, and as the afterimage
   /// until the deletion's raster lands.
   final List<Rect> fadeRects;
 
@@ -5247,7 +5247,7 @@ class _EditingPreviewPainter extends CustomPainter {
   final bool showRotateHandle;
   final List<Offset>? vertexHandles;
 
-  /// The selected content element's box — orange, to read as "page
+  /// The selected content element's box - orange, to read as "page
   /// content", distinct from the blue annotation chrome.
   final Rect? elementRect;
 
@@ -5259,7 +5259,7 @@ class _EditingPreviewPainter extends CustomPainter {
 
   final PdfViewerThemeData theme;
 
-  /// Overlay pixels per intended screen pixel — chrome (selection boxes,
+  /// Overlay pixels per intended screen pixel - chrome (selection boxes,
   /// handles, marquee, flash ring) multiplies its sizes by this so it
   /// stays constant-size on screen while the viewer is zoomed in.
   final double chromeScale;
@@ -5647,7 +5647,7 @@ class _EditingPreviewPainter extends CustomPainter {
   /// a constant-width stroke inset by half its width (so it stays inside
   /// the rect, matching `_shapeContent`), an optional fill, rotated about
   /// the rect center and dimmed to the appearance's opacity. The
-  /// constant width is the whole point — the ghost would stretch it.
+  /// constant width is the whole point - the ghost would stretch it.
   void _paintShapeResize(Canvas canvas, _ShapeResize s) {
     canvas.save();
     if (s.rotation != 0) {
@@ -5763,7 +5763,7 @@ class _EditingPreviewPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // a free-text resize lifts the dragged box off the page: hide its
     // ORIGINAL footprint with the page rendered without it (the content
-    // behind shows through) — or, until that async render lands, an opaque
+    // behind shows through) - or, until that async render lands, an opaque
     // paper wash. Drawn first so the chrome and the floating re-wrapped
     // preview paint on top.
     final hideRect = resizeHideRect;
@@ -6018,7 +6018,7 @@ class _EditingPreviewPainter extends CustomPainter {
     }
 
     // the eraser's ring cursor, topmost: page-space radius (it shows
-    // exactly what a stamp removes), screen-constant line weight — a
+    // exactly what a stamp removes), screen-constant line weight - a
     // light ring over a dark halo so it reads on any page color
     final cursor = eraserCursor;
     if (cursor != null && eraserRadius > 0) {
@@ -6170,24 +6170,24 @@ class _EditingPreviewPainter extends CustomPainter {
           oldDelegate.strokes.last.length != strokes.last.length);
 }
 
-/// Paints [picture] — an annotation appearance recorded in page raster
+/// Paints [picture] - an annotation appearance recorded in page raster
 /// space (1 unit = 1 point, y down; see
-/// [PdfPageRenderer.renderAnnotationPicture]) — mapped from its resting
+/// [PdfPageRenderer.renderAnnotationPicture]) - mapped from its resting
 /// view rect [from] onto [to], the live preview of a move/resize drag.
 /// [scale] is the view's pixels-per-point.
 ///
 /// Drawn at ~75% [opacity] by default: solid enough to judge the
 /// result, light enough to read as a preview over the still-rendered
-/// original. The post-commit afterimage paints at 1.0 — it *is* the
+/// original. The post-commit afterimage paints at 1.0 - it *is* the
 /// committed result, standing in until the new raster lands.
 ///
 /// [rotation] (view radians, clockwise positive) additionally spins the
-/// preview about [to]'s center — the rotate handle's live feedback.
+/// preview about [to]'s center - the rotate handle's live feedback.
 ///
 /// With [localAngle] (a rotated selection's resting angle), [from] and
 /// [to] are *local* boxes: the picture scales by their size ratio along
 /// the rotated axes about the box centers, instead of stretching one
-/// page-axis rect onto another — a rotated annotation's resize preview
+/// page-axis rect onto another - a rotated annotation's resize preview
 /// must not shear.
 /// Paints the hatched "marked for redaction" preview into [rect]: a faint
 /// dark wash, a solid border, and diagonal cross-hatch lines, so a marked

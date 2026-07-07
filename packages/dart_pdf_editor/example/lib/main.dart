@@ -24,7 +24,7 @@ final _githubUrl = Uri.parse('https://github.com/ben-milanko/dart-pdf');
 final _pubDevUrl = Uri.parse('https://pub.dev/packages/dart_pdf_editor');
 
 /// One filter, every platform: desktop and web match on the extension,
-/// Android on the MIME type, iOS/macOS on the uniform type identifier —
+/// Android on the MIME type, iOS/macOS on the uniform type identifier -
 /// a type group missing the field a platform filters by throws there.
 const _pdfTypeGroup = XTypeGroup(
   label: 'PDF documents',
@@ -97,7 +97,7 @@ void main() {
   // Diagnostics: turn on the in-app performance trace (interpret times,
   // render-hold/scheduler transitions, prerender warms, and frame JANK,
   // streamed to the browser console) without a rebuild by opening the demo
-  // with `?perf=1`. Off otherwise — it's verbose and adds per-line print
+  // with `?perf=1`. Off otherwise - it's verbose and adds per-line print
   // overhead. `Uri.base` carries the page URL on web (and is harmless on
   // native, where there's no query string), so no `package:web` import.
   if (Uri.base.queryParameters['perf'] == '1') {
@@ -119,7 +119,7 @@ class ViewerApp extends StatefulWidget {
 }
 
 class _ViewerAppState extends State<ViewerApp> {
-  /// UI preferences saved on this device — tool styles, which panels
+  /// UI preferences saved on this device - tool styles, which panels
   /// are open, and the theme mode. Owned here so the MaterialApp can
   /// follow the persisted light/dark choice; the screen below shares
   /// the same instance with every editing session.
@@ -184,7 +184,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   PdfEditingPreferences get _prefs => widget.prefs;
 
   /// App-wide on-disk caches sharing one persistent backend (filesystem on
-  /// native, IndexedDB on web — see persistent_cache.dart). The raster
+  /// native, IndexedDB on web - see persistent_cache.dart). The raster
   /// cache makes a reopened document paint soft page content immediately
   /// instead of blank paper; the text cache lets search reuse a prior
   /// session's extraction instead of re-walking every page. Separate
@@ -229,16 +229,16 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// OCR connection settings, supplied through the credentials dialog and
   /// remembered for the app's lifetime (the API key is deliberately kept in
-  /// memory only — the example never writes a secret to disk). Defaults to a
+  /// memory only - the example never writes a secret to disk). Defaults to a
   /// local vLLM/dots.ocr server; see the pdf_ocr_vlm README to run one.
   String _ocrEndpoint = 'http://localhost:8000/v1/chat/completions';
   String _ocrModel = 'model';
   String? _ocrApiKey;
 
   /// GoTo, the standard named page actions, and real web links (the
-  /// page's https pub.dev link) never get here — the viewer follows them
-  /// itself. Custom-scheme URIs are dispatched as app commands — the
-  /// conventional way a PDF drives its host app — and anything else just
+  /// page's https pub.dev link) never get here - the viewer follows them
+  /// itself. Custom-scheme URIs are dispatched as app commands - the
+  /// conventional way a PDF drives its host app - and anything else just
   /// gets described in a snackbar.
   void _onAction(PdfAction action, PdfAnnotation annotation) {
     final tab = _active;
@@ -265,7 +265,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     });
   }
 
-  /// The app's own entries in the annotation right-click menu — here a
+  /// The app's own entries in the annotation right-click menu - here a
   /// "Copy text" action when the clicked annotation carries any.
   List<PdfAnnotationMenuItem> _annotationMenuActions(
       BuildContext context, PdfAnnotationMenuRequest request) {
@@ -319,9 +319,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
       ValueKey<Object>((tab, mode, _workerConfigEpoch));
 
   String get _nextThemeLabel => switch (_prefs.themeMode) {
-        ThemeMode.system => 'Theme: system — switch to light',
-        ThemeMode.light => 'Theme: light — switch to dark',
-        ThemeMode.dark => 'Theme: dark — switch to system',
+        ThemeMode.system => 'Theme: system - switch to light',
+        ThemeMode.light => 'Theme: light - switch to dark',
+        ThemeMode.dark => 'Theme: dark - switch to system',
       };
 
   List<PopupMenuEntry<VoidCallback>> _appMenuItems(
@@ -412,8 +412,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// The "Open recent" entry of the app menu: a single "Recent files" row
   /// that expands into a submenu listing remembered files (newest first)
-  /// plus a clear action. Files already open in a tab are left out — there's
-  /// no point offering a shortcut to reopen them — so the row is hidden
+  /// plus a clear action. Files already open in a tab are left out - there's
+  /// no point offering a shortcut to reopen them - so the row is hidden
   /// entirely until there's at least one closed file to show.
   List<PopupMenuEntry<VoidCallback>> _recentMenuItems(
       BuildContext menuContext) {
@@ -682,7 +682,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     }
   }
 
-  /// Picks a PDF and returns its bytes (null when cancelled) — the source
+  /// Picks a PDF and returns its bytes (null when cancelled) - the source
   /// for the editor's "Insert PDF…" action.
   Future<Uint8List?> _pickPdfBytes() async {
     final file = await openFile(acceptedTypeGroups: const [_pdfTypeGroup]);
@@ -750,7 +750,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
           loading,
           _DocumentTab.error(
             title: entry.title,
-            error: 'Could not reopen ${entry.title} — its saved copy is no '
+            error: 'Could not reopen ${entry.title} - its saved copy is no '
                 'longer available.',
           ),
         );
@@ -780,7 +780,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     }
   }
 
-  /// The suggested save name — the active tab's title (the opened file's
+  /// The suggested save name - the active tab's title (the opened file's
   /// name, or the demo's title), with a `.pdf` extension guaranteed.
   String _saveFileName() {
     var name = (_active?.title ?? '').trim();
@@ -827,7 +827,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     }
   }
 
-  /// Exports a Snapshot tool capture as a PNG image — a save dialog on
+  /// Exports a Snapshot tool capture as a PNG image - a save dialog on
   /// desktop, a download on the web, the share sheet on phones. The vector
   /// copy of the same region stays on the editor's clipboard, so ⌘V/Ctrl+V
   /// (or the right-click Paste) drops it back into the PDF as vectors.
@@ -837,7 +837,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
         XFile.fromData(snapshot.pngBytes, mimeType: 'image/png', name: name);
     if (kIsWeb) {
       await file.saveTo(name);
-      _toast('Downloaded $name — paste back into the PDF with Ctrl+V');
+      _toast('Downloaded $name - paste back into the PDF with Ctrl+V');
       return;
     }
     switch (defaultTargetPlatform) {
@@ -858,7 +858,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
         if (location == null) return;
         try {
           await file.saveTo(location.path);
-          _toast('Saved $name — paste back into the PDF with ⌘V');
+          _toast('Saved $name - paste back into the PDF with ⌘V');
         } catch (e) {
           _toast('Save failed: $e');
         }
@@ -1050,7 +1050,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop(); // dismiss progress
       _openBytes(result, '${tab.title} (OCR)');
-      _toast('OCR added $spans text spans — the page text is now selectable');
+      _toast('OCR added $spans text spans - the page text is now selectable');
     } on VlmOcrException catch (e) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
@@ -1150,7 +1150,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                           after: tab.compareAfter!,
                         )
                       // the two drop-in widgets carry all the PDF chrome (search,
-                      // page number, panels, toolbar) — the app supplies the edit
+                      // page number, panels, toolbar) - the app supplies the edit
                       // session, its file handling, and the demo's app-side wiring
                       : _readOnly
                           ? PdfReader(
@@ -1442,7 +1442,7 @@ class _OcrSettings {
 }
 
 /// Collects the OCR service endpoint, model name, and an optional API
-/// key/token before a run — the "supply credentials / login" step. The key
+/// key/token before a run - the "supply credentials / login" step. The key
 /// is sent as an `Authorization: Bearer …` header by the engine.
 class _OcrSettingsDialog extends StatefulWidget {
   const _OcrSettingsDialog({
@@ -1594,7 +1594,7 @@ class _OcrProgressDialog extends StatelessWidget {
   }
 }
 
-/// Shows the counter the PDF's "Increment" link annotation drives —
+/// Shows the counter the PDF's "Increment" link annotation drives -
 /// PDF → app state → widget, completing the loop on the same page.
 class _CounterBadge extends StatelessWidget {
   const _CounterBadge({required this.count});
@@ -1620,7 +1620,7 @@ class _CounterBadge extends StatelessWidget {
   }
 }
 
-/// Ticks every second — proof the overlay is a live widget, not artwork.
+/// Ticks every second - proof the overlay is a live widget, not artwork.
 class _ClockTile extends StatefulWidget {
   const _ClockTile();
 

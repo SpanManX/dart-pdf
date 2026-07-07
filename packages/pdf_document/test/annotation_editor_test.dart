@@ -193,7 +193,7 @@ void main() {
     final ink = doc.page(0).annotations.single;
     // seg 1's c1 = p1 + (p2 − p0)/6 = (76.67, 115); pad = w/2 + 1 = 2
     expect(ink.rect.top, closeTo(115 + 2, 1e-4));
-    // seg 0's c2 = p1 − (p2 − p0)/6 = (43.33, 85) — left of every sample
+    // seg 0's c2 = p1 − (p2 − p0)/6 = (43.33, 85) - left of every sample
     expect(ink.rect.left, closeTo(60 - 100 / 6 - 2, 1e-4));
   });
 
@@ -329,7 +329,7 @@ void main() {
           text,
         ));
     final content = appearanceText(doc, doc.page(0).annotations.single);
-    // no ActualText needed — logical order in content stream
+    // no ActualText needed - logical order in content stream
     expect(content, isNot(contains('ActualText')));
     expect(content, contains('Tj'));
   });
@@ -908,7 +908,7 @@ void main() {
 
   test('a moved annotation still renders: BBox maps onto the new rect', () {
     // the fixture square's appearance BBox is [0 0 10 10] over rect
-    // (100,100)-(200,150) — after a move the §12.5.5 mapping must land it
+    // (100,100)-(200,150) - after a move the §12.5.5 mapping must land it
     // on the new rect without touching the stream
     final doc = PdfDocument.open(buildAppearanceAnnotationsPdf());
     final editor = PdfEditor(doc)
@@ -939,7 +939,7 @@ void main() {
     final resized = reopened.page(0).annotations[0];
     expect(resized.rect, const PdfRect(100, 100, 300, 250));
     // shapes regenerate their appearance at the new size (ink keeps the
-    // §12.5.5 stretch — its rect doubles below and the points follow)
+    // §12.5.5 stretch - its rect doubles below and the points follow)
     expect(resized.normalAppearance, isNotNull);
 
     // ink points scale with the rect: x doubled relative to the rect's
@@ -1367,7 +1367,7 @@ void main() {
     expect(m(2), closeTo(0, 1e-9));
     expect(m(3), closeTo(1, 1e-9));
 
-    // /InkList reflects about the rect's horizontal center, y untouched —
+    // /InkList reflects about the rect's horizontal center, y untouched -
     // so the centerline stays consistent with the mirrored appearance
     final cx = (from.left + from.right) / 2;
     final inkList = reopened.cos.resolve(flipped.dict['InkList']) as CosArray;
@@ -1410,7 +1410,7 @@ void main() {
     final rest = doc.page(0).annotations.single.rect;
     final beforePts = inkPoints(doc);
 
-    // the current local box (same size, just flipped) — measured from the
+    // the current local box (same size, just flipped) - measured from the
     // appearance quad so sx == sy == 1 and the flip only mirrors
     final quad = doc.page(0).annotations.single.appearanceQuad!;
     double dist((double, double) a, (double, double) b) {
@@ -1425,7 +1425,7 @@ void main() {
     final localBox = PdfRect(
         ccx - fromW / 2, ccy - fromH / 2, ccx + fromW / 2, ccy + fromH / 2);
 
-    // a local-frame flipX, then the same flip again — each is its own
+    // a local-frame flipX, then the same flip again - each is its own
     // inverse, so the geometry comes back exactly
     for (var i = 0; i < 2; i++) {
       doc = PdfDocument.open((PdfEditor(doc)
@@ -1575,7 +1575,7 @@ void main() {
           ..rotateAnnotation(0, doc.page(0).annotations.single, 90))
         .save());
 
-    // resting local box: 104×54 about (150,125) — double the local width
+    // resting local box: 104×54 about (150,125) - double the local width
     final editor = PdfEditor(doc)
       ..resizeAnnotationLocal(
           0, doc.page(0).annotations.single, const PdfRect(46, 98, 254, 152));

@@ -140,7 +140,7 @@ enum PdfLineEnding {
 /// [from] to [to] (a capsule of [radius]): every part of a stroke's
 /// centerline within [radius] of that segment is removed, splitting
 /// strokes where the eraser crosses them. [pressures] (the [PdfEditor]
-/// addInk convention — one optional list per stroke) travel with their
+/// addInk convention - one optional list per stroke) travel with their
 /// points, interpolated at the cut boundaries. Returns the surviving
 /// strokes, or null when the eraser touched nothing. Shared by
 /// [PdfAnnotationEditing.sliceInk] and the editing overlay's live
@@ -153,7 +153,7 @@ enum PdfLineEnding {
   (double, double) to,
   double radius,
 ) {
-  // ends of a cut shorter than this are invisible crumbs — drop them
+  // ends of a cut shorter than this are invisible crumbs - drop them
   const minFragment = 0.05;
   const epsT = 1e-6;
   final boundsLeft = math.min(from.$1, to.$1) - radius;
@@ -331,7 +331,7 @@ double _distanceToSegment(
 }
 
 /// Whether [PdfAnnotationEditing.restyleAnnotation] can faithfully
-/// regenerate [annotation]'s appearance — the gate UI style controls
+/// regenerate [annotation]'s appearance - the gate UI style controls
 /// should check before offering to restyle a selection.
 ///
 /// True for the subtypes the editor authors (shapes, ink, free text,
@@ -375,7 +375,7 @@ bool pdfCanRestyleAnnotation(PdfAnnotation annotation) {
 
 /// The /QuadPoints as one axis-aligned rect per quad, or null when they
 /// are absent, malformed, or rotated (every corner must sit on the
-/// quad's own bounds) — regenerating a markup repaints axis-aligned
+/// quad's own bounds) - regenerating a markup repaints axis-aligned
 /// rects, so rotated quads can't restyle faithfully.
 List<PdfRect>? _axisAlignedQuads(PdfAnnotation annotation) {
   final cos = annotation.document.cos;
@@ -440,7 +440,7 @@ String _generateAnnotationName() {
 /// the page's bottom-left, y up). Annotations are staged on the editor and
 /// written by [PdfEditor.save].
 ///
-/// Every creator takes an optional `name` — the /NM unique identifier
+/// Every creator takes an optional `name` - the /NM unique identifier
 /// (§12.5.2, see [PdfAnnotation.name]). Omitted, a UUID is generated;
 /// pass a name only to preserve identity through a rewrite or when
 /// replaying a synced annotation.
@@ -566,7 +566,7 @@ extension PdfAnnotationEditing on PdfEditor {
 
   /// Marks one or more regions for redaction (§12.5.6.23) by creating a
   /// `/Redact` annotation over [quads] (one rect per region). This is the
-  /// MARK phase only — nothing is removed yet; call
+  /// MARK phase only - nothing is removed yet; call
   /// [PdfRedactionApply.applyRedactions] to BURN the marks irreversibly.
   ///
   /// [fillColor] (default black) is the colour the redacted area is painted
@@ -626,7 +626,7 @@ extension PdfAnnotationEditing on PdfEditor {
   /// [pressures] optionally gives one normalized pressure (0–1) per point
   /// of the corresponding stroke (a null entry leaves that stroke at the
   /// uniform [strokeWidth]). Pressured strokes render with a varying
-  /// width — [pdfInkStrokeWidth] per segment — the natural look for
+  /// width - [pdfInkStrokeWidth] per segment - the natural look for
   /// stylus (Apple Pencil) drawings. The /InkList always stores the
   /// centerline points; the variable width lives in the appearance
   /// stream, which conforming viewers prefer.
@@ -765,7 +765,7 @@ extension PdfAnnotationEditing on PdfEditor {
       ]);
 
   /// Erases the parts of an Ink [annotation] within [radius] page units
-  /// of the eraser's swept [path] — the PSPDFKit-style circle eraser.
+  /// of the eraser's swept [path] - the PSPDFKit-style circle eraser.
   /// Strokes split where the circle crosses them; /InkList, /Rect, and
   /// the appearance are rewritten in place (same object numbers), so
   /// the annotation keeps its identity, author, and contents. When the
@@ -828,8 +828,8 @@ extension PdfAnnotationEditing on PdfEditor {
   /// Per-point pressures recovered from an Ink appearance this editor
   /// generated: pressured strokes carry one `w` per drawn segment (see
   /// [_inkAppearance]), so inverting [pdfInkStrokeWidth] gives segment
-  /// pressures, averaged back onto the points. Returns null — uniform
-  /// width — whenever the stream doesn't match that exact shape
+  /// pressures, averaged back onto the points. Returns null - uniform
+  /// width - whenever the stream doesn't match that exact shape
   /// (foreign appearances, plain uniform ink).
   List<List<double>?>? _recoverInkPressures(CosStream form,
       List<List<(double, double)>> strokes, double strokeWidth) {
@@ -841,7 +841,7 @@ extension PdfAnnotationEditing on PdfEditor {
       return null;
     }
     // anything beyond stroked paths and line state means the appearance
-    // isn't one of ours — don't guess
+    // isn't one of ours - don't guess
     const allowed = {
       'q', 'Q', 'gs', 'cm', 'w', 'J', 'j', 'M', 'd', //
       'RG', 'rg', 'S', 's', 'n', 'm', 'l', 'c', 'v', 'y',
@@ -987,7 +987,7 @@ extension PdfAnnotationEditing on PdfEditor {
   }
 
   /// Adds a /PolyLine annotation through [vertices]. Per §12.5.6.7 a
-  /// /PolyLine may carry /LE endings on its first and last vertex —
+  /// /PolyLine may carry /LE endings on its first and last vertex -
   /// [startEnding] is drawn at `vertices.first` (pointing back toward
   /// `vertices[1]`), [endEnding] at `vertices.last`.
   void addPolyLine(
@@ -1116,8 +1116,8 @@ extension PdfAnnotationEditing on PdfEditor {
   }
 
   /// Writes [measure] into the page's /VP viewport array (§12.9) so the
-  /// drawing scale travels *with the document* — surviving a reopen and
-  /// portable across devices — rather than living only in an app-side
+  /// drawing scale travels *with the document* - surviving a reopen and
+  /// portable across devices - rather than living only in an app-side
   /// preference. A single viewport covering the page crop box carries the
   /// /Measure; an existing measurement viewport is replaced. Also adopts
   /// [measure] as the editor's default for subsequent [addMeasurement]
@@ -1193,7 +1193,7 @@ extension PdfAnnotationEditing on PdfEditor {
   }) {
     final m = measure ?? _defaultMeasure;
     if (m == null && kind != PdfMeasurementKind.count) {
-      throw StateError('no measurement scale set — call setMeasurementScale '
+      throw StateError('no measurement scale set - call setMeasurementScale '
           'or pass a measure');
     }
     final minPoints = switch (kind) {
@@ -1482,8 +1482,8 @@ extension PdfAnnotationEditing on PdfEditor {
     }
   }
 
-  /// Draws a measurement caption — a small white box and centered text at
-  /// [anchor] — into [content], returning the box's page-space bounds so
+  /// Draws a measurement caption - a small white box and centered text at
+  /// [anchor] - into [content], returning the box's page-space bounds so
   /// the caller can widen the annotation /Rect to include it. Shared by
   /// [addMeasurement] and the restyle/resize regeneration so a width or
   /// style change never drops the label.
@@ -1613,7 +1613,7 @@ extension PdfAnnotationEditing on PdfEditor {
         _appearancePageRotation(pageIndex, pageRotation);
     // When the text contains non-Latin-1 characters and the font is a
     // standard base-14 face (which only supports WinAnsi encoding), wrap it
-    // in a PdfUnicodeFont — a lightweight Type0 Identity-H font that encodes
+    // in a PdfUnicodeFont - a lightweight Type0 Identity-H font that encodes
     // characters as 2-byte Unicode code points. The renderer substitutes a
     // system font that covers the full Unicode range.
     PdfUnicodeFont? unicodeFont;
@@ -1783,7 +1783,7 @@ extension PdfAnnotationEditing on PdfEditor {
     return parts.join(';');
   }
 
-  /// Parses a free-text `/RC` string back into styled runs — the inverse
+  /// Parses a free-text `/RC` string back into styled runs - the inverse
   /// of what [addFreeTextRich] writes. Lenient: reads each `<span>`'s
   /// `font-family` (mapped to a base-14 face), `font-size` and `color`,
   /// refines bold/italic from `font-weight`/`font-style`, and falls back
@@ -2643,7 +2643,7 @@ extension PdfAnnotationEditing on PdfEditor {
   ///
   /// Modelled as a stamp so it inherits select/move/resize/rotate/delete
   /// from the annotation machinery for free. It carries no /Contents, so
-  /// [pdfCanRestyleAnnotation] returns false — the restyle path would
+  /// [pdfCanRestyleAnnotation] returns false - the restyle path would
   /// regenerate a /Stamp as a *text* stamp and destroy the picture.
   /// Resize stretches the appearance (the §12.5.5 BBox→Rect fit scales the
   /// form matrix, so the image scales with the box) and rotate bakes the
@@ -2720,7 +2720,7 @@ extension PdfAnnotationEditing on PdfEditor {
       _reorderAnnotations(pageIndex, annotations, toFront: true);
 
   /// Moves [annotations] to the start of the page's /Annots array,
-  /// preserving their relative order — behind everything else.
+  /// preserving their relative order - behind everything else.
   void sendAnnotationsToBack(
           int pageIndex, Iterable<PdfAnnotation> annotations) =>
       _reorderAnnotations(pageIndex, annotations, toFront: false);
@@ -2924,7 +2924,7 @@ extension PdfAnnotationEditing on PdfEditor {
   ///
   /// Metadata only: the appearance is untouched, so for subtypes whose
   /// contents *are* the displayed text (free text, stamps, notes) this
-  /// changes the tooltip/comment without redrawing — rewriting what's
+  /// changes the tooltip/comment without redrawing - rewriting what's
   /// painted is the controller's text-edit path. An empty string removes
   /// the entry.
   void setAnnotationContents(
@@ -2956,7 +2956,7 @@ extension PdfAnnotationEditing on PdfEditor {
   }
 
   /// Sets [annotation]'s /NM unique name in place; null or empty removes
-  /// it. The name is sync identity ([PdfAnnotation.name]) — rewrites that
+  /// it. The name is sync identity ([PdfAnnotation.name]) - rewrites that
   /// remove + re-add an annotation use this to carry it across.
   void setAnnotationName(
       int pageIndex, PdfAnnotation annotation, String? name) {
@@ -2969,7 +2969,7 @@ extension PdfAnnotationEditing on PdfEditor {
     _markAnnotationChanged(pageIndex, dict);
   }
 
-  /// Sets [annotation]'s /F flag word (§12.5.3) in place — the way to
+  /// Sets [annotation]'s /F flag word (§12.5.3) in place - the way to
   /// lock an annotation in the saved file: bit 8 (`flags | 128`,
   /// [PdfAnnotation.isLocked]) refuses move/resize/delete, bit 7
   /// (`flags | 64`, [PdfAnnotation.isReadOnly]) refuses all interaction.
@@ -2983,7 +2983,7 @@ extension PdfAnnotationEditing on PdfEditor {
 
   /// Stamps a generated /NM on every annotation in the document that
   /// lacks one, so a pre-existing (or foreign) file can join name-keyed
-  /// sync — call once before listening to a change feed. Popups, links,
+  /// sync - call once before listening to a change feed. Popups, links,
   /// and form widgets are skipped: they can't be captured as
   /// [PdfAnnotationSnapshot]s, so names would buy them nothing. Returns
   /// how many annotations were named.
@@ -3005,8 +3005,8 @@ extension PdfAnnotationEditing on PdfEditor {
   /// Resizes [annotation] so its /Rect becomes [to].
   ///
   /// Squares, circles, and free text get their appearance *regenerated*
-  /// at the new size — stroke width and font size stay what they were,
-  /// the way desktop editors behave — whenever the dictionary carries
+  /// at the new size - stroke width and font size stay what they were,
+  /// the way desktop editors behave - whenever the dictionary carries
   /// enough style to do it faithfully (see
   /// [_regenerateResizedAppearance]). Everything else (ink, stamps,
   /// foreign artwork) keeps the §12.5.5 stretch: viewers fit the
@@ -3017,13 +3017,13 @@ extension PdfAnnotationEditing on PdfEditor {
   /// the old-rect → new-rect affine, so the annotation's geometry stays
   /// consistent for viewers that regenerate appearances.
   ///
-  /// [flipX]/[flipY] mirror the annotation horizontally/vertically — what
+  /// [flipX]/[flipY] mirror the annotation horizontally/vertically - what
   /// a drag that pulls a resize handle *past* the opposite edge produces.
   /// For a §12.5.5-stretched appearance the mirror is baked into the form
   /// /Matrix (about the BBox center, which leaves the BBox→/Rect fit
   /// untouched) and the point arrays reflect about the /Rect center to
   /// match; regenerated appearances (shapes, free text, lines) ignore the
-  /// flip — a mirrored rectangle or readable-text box looks the same.
+  /// flip - a mirrored rectangle or readable-text box looks the same.
   void resizeAnnotation(int pageIndex, PdfAnnotation annotation, PdfRect to,
       {bool flipX = false, bool flipY = false, int? pageRotation}) {
     final effectivePageRotation =
@@ -3072,7 +3072,7 @@ extension PdfAnnotationEditing on PdfEditor {
   /// Mirrors [form]'s artwork in place by premultiplying a reflection
   /// about the BBox center into its /Matrix. The reflection maps the BBox
   /// onto itself, so a conforming viewer's §12.5.5 BBox→/Rect fit lands
-  /// exactly where it did — only the interior is flipped.
+  /// exactly where it did - only the interior is flipped.
   void _flipFormArtwork(CosStream form,
       {required bool flipX, required bool flipY}) {
     final bbox = pdfRectFrom(document.cos, form.dictionary['BBox']);
@@ -3096,9 +3096,9 @@ extension PdfAnnotationEditing on PdfEditor {
   /// Rotates [annotation] by [degrees] counterclockwise about the center
   /// of its /Rect.
   ///
-  /// The rotation is folded into the appearance stream's /Matrix — with
+  /// The rotation is folded into the appearance stream's /Matrix - with
   /// the current BBox→Rect fit baked in first, so artwork whose BBox
-  /// aspect differs from /Rect rotates without shearing — and /Rect
+  /// aspect differs from /Rect rotates without shearing - and /Rect
   /// becomes the bounding box of the rotated annotation, same center.
   /// Every viewer that implements the §12.5.5 fit then renders the
   /// artwork rotated. The absolute-coordinate entries that travel with
@@ -3138,7 +3138,7 @@ extension PdfAnnotationEditing on PdfEditor {
 
     // /Rect: the BBox corners' bounds under the new matrix. The matrix
     // carries the whole rotation history, so this stays the tightest box
-    // around the rotated artwork — two 45° turns land exactly where one
+    // around the rotated artwork - two 45° turns land exactly where one
     // 90° turn does, instead of compounding loose bounding boxes.
     annotation.dict['Rect'] = _rectArray(_bboxBounds(bbox, matrix));
 
@@ -3176,7 +3176,7 @@ extension PdfAnnotationEditing on PdfEditor {
   /// (constant stroke width / font size) and re-rotate; every other
   /// subtype scales along its local axes inside the appearance /Matrix.
   ///
-  /// [flipX]/[flipY] mirror the artwork along the local axes — a handle
+  /// [flipX]/[flipY] mirror the artwork along the local axes - a handle
   /// dragged past the opposite edge of the rotated box. For the stretch
   /// path the mirror folds into the local scale (a negative factor), so
   /// the /Rect and point arrays stay consistent with the appearance.
@@ -3213,7 +3213,7 @@ extension PdfAnnotationEditing on PdfEditor {
 
     if (_regenerateResizedAppearance(annotation, localTo,
         pageRotation: effectivePageRotation)) {
-      // a fresh, unrotated appearance at the local box — re-applying the
+      // a fresh, unrotated appearance at the local box - re-applying the
       // resting angle is then plain rotation (which also sets /Rect).
       // PdfAnnotation parses /Rect once, so rotate a re-wrapped view of
       // the dict instead of the stale [annotation]
@@ -3235,7 +3235,7 @@ extension PdfAnnotationEditing on PdfEditor {
       return;
     }
     final dict = annotation.dict;
-    // a flip is a negative scale along the local axis — it commutes with
+    // a flip is a negative scale along the local axis - it commutes with
     // the scale and folds straight in, mirroring both the appearance
     // /Matrix and the mapped point arrays about the local center
     final sx = (localTo.width / fromW) * (flipX ? -1 : 1);
@@ -3244,7 +3244,7 @@ extension PdfAnnotationEditing on PdfEditor {
     final tcy = (localTo.bottom + localTo.top) / 2;
     final cosT = math.cos(theta), sinT = math.sin(theta);
     // page-space affine: into the local frame about the old center,
-    // scale, back out, recenter — T(-c) · R(-θ) · S · R(θ) · T(c')
+    // scale, back out, recenter - T(-c) · R(-θ) · S · R(θ) · T(c')
     final local = _mulAffine(
       _mulAffine(
         _mulAffine([1, 0, 0, 1, -cx, -cy], [cosT, -sinT, sinT, cosT, 0, 0]),
@@ -3289,13 +3289,13 @@ extension PdfAnnotationEditing on PdfEditor {
   /// Regenerates the appearance of a Square, Circle, FreeText, Line,
   /// PolyLine, or Polygon at
   /// [to] from the style its dictionary carries, replacing the /AP /N
-  /// stream. Returns false — leaving the caller on the §12.5.5 stretch
-  /// path — for other subtypes and for styles it can't reproduce
+  /// stream. Returns false - leaving the caller on the §12.5.5 stretch
+  /// path - for other subtypes and for styles it can't reproduce
   /// faithfully: cloudy (/BE) shape borders, free text whose /DA doesn't
   /// name a standard font.
   ///
   /// [opacity], when given, replaces the alpha the old appearance
-  /// carried — [restyleAnnotation]'s opacity path.
+  /// carried - [restyleAnnotation]'s opacity path.
   bool _regenerateResizedAppearance(PdfAnnotation annotation, PdfRect to,
       {double? opacity, int pageRotation = 0}) {
     final form = annotation.normalAppearance;
@@ -3409,7 +3409,7 @@ extension PdfAnnotationEditing on PdfEditor {
     return true;
   }
 
-  /// The endings recorded on [annotation]'s /LE entry — both
+  /// The endings recorded on [annotation]'s /LE entry - both
   /// [PdfLineEnding.none] for subtypes that carry no endings
   /// (/Polygon is closed; /PolyLine endings apply to its first and last
   /// vertex per §12.5.6.7).
@@ -3417,27 +3417,27 @@ extension PdfAnnotationEditing on PdfEditor {
       pdfLineEndings(annotation) ?? (PdfLineEnding.none, PdfLineEnding.none);
 
   /// Restyles [annotation] in place: new colors, stroke width, or
-  /// opacity at its current geometry, with the appearance regenerated —
+  /// opacity at its current geometry, with the appearance regenerated -
   /// same object numbers and /Annots slot, so selection, z-order,
   /// author, and contents all survive (unlike a remove + re-add).
   ///
   /// What each parameter means per subtype:
   ///
-  /// * [color] — the stroke color of shapes and ink, the markup tint,
+  /// * [color] - the stroke color of shapes and ink, the markup tint,
   ///   the note/stamp color, and the *text* color of free text.
-  /// * [fillColor] — the interior of shapes (/IC) and the background of
+  /// * [fillColor] - the interior of shapes (/IC) and the background of
   ///   free text (/C); the single-field record distinguishes "set to
-  ///   this" — including `(null,)`, clearing the fill — from an omitted
+  ///   this" - including `(null,)`, clearing the fill - from an omitted
   ///   parameter. Ignored elsewhere.
-  /// * [strokeWidth] — shapes and ink. Ignored elsewhere (markup line
+  /// * [strokeWidth] - shapes and ink. Ignored elsewhere (markup line
   ///   weights derive from the text size; free-text borders restyle
   ///   through the text-style path).
-  /// * [opacity] — shapes, ink, markups, stamps. Free text and notes
+  /// * [opacity] - shapes, ink, markups, stamps. Free text and notes
   ///   stay opaque, as authored.
   ///
   /// Rotation survives: a rotated appearance regenerates in its local
   /// frame and re-rotates, exactly like [resizeAnnotationLocal].
-  /// Returns false when nothing applies — gate UI with
+  /// Returns false when nothing applies - gate UI with
   /// [pdfCanRestyleAnnotation].
   bool restyleAnnotation(
     int pageIndex,
@@ -3556,7 +3556,7 @@ extension PdfAnnotationEditing on PdfEditor {
         dict['DA'] = CosString.fromText('${rgb(textColor)} rg '
             '${border != null ? '${rgb(border)} RG ' : ''}'
             '/${font.resourceName} ${ContentWriter.fmt(style.fontSize)} Tf');
-        // /C is the background — or mirrors the text color when there is
+        // /C is the background - or mirrors the text color when there is
         // none, the legacy form freeTextStyle reads back as "no fill"
         dict['C'] = _colorComponents(fill ?? textColor);
         return _restyleRegenerate(pageIndex, dict,
@@ -3655,7 +3655,7 @@ extension PdfAnnotationEditing on PdfEditor {
 
   /// The constant alpha an appearance we generated carries: the first
   /// /ca found in its /Resources /ExtGState entries, else opaque. (The
-  /// dictionary deliberately has no /CA — viewers would apply it *on
+  /// dictionary deliberately has no /CA - viewers would apply it *on
   /// top* of the alpha already baked into the appearance.)
   double _appearanceOpacity(CosStream form) {
     final cos = document.cos;
@@ -3674,7 +3674,7 @@ extension PdfAnnotationEditing on PdfEditor {
   }
 
   /// Replaces [oldForm] (the annotation's /AP /N) with a fresh form of
-  /// BBox [bbox] and content [w] — keeping the same object number when
+  /// BBox [bbox] and content [w] - keeping the same object number when
   /// the stream is indirect, so existing references stay valid, and
   /// adopting the new object into the document cache so later edits in
   /// the same apply resolve it.
@@ -3735,7 +3735,7 @@ extension PdfAnnotationEditing on PdfEditor {
     return PdfRect(minX, minY, maxX, maxY);
   }
 
-  /// `first`, then `second` — the affine product in PDF's row-vector
+  /// `first`, then `second` - the affine product in PDF's row-vector
   /// convention, both as `[a b c d e f]`.
   static List<double> _mulAffine(List<double> first, List<double> second) => [
         first[0] * second[0] + first[1] * second[2],
@@ -3795,8 +3795,8 @@ extension PdfAnnotationEditing on PdfEditor {
   /// removes those annotations, making them permanent, non-interactive
   /// page graphics.
   ///
-  /// Annotations without a paintable appearance — hidden or no-view ones,
-  /// popups, and any without /AP — are left in place untouched.
+  /// Annotations without a paintable appearance - hidden or no-view ones,
+  /// popups, and any without /AP - are left in place untouched.
   void flattenAnnotations(int pageIndex) =>
       _flattenAnnotations(pageIndex, (_) => true);
 
@@ -4180,7 +4180,7 @@ extension PdfAnnotationEditing on PdfEditor {
       case PdfLineEnding.openArrow:
         final hw = s * 0.38;
         return (
-          // barb, apex (tip), barb — closed for the filled arrow
+          // barb, apex (tip), barb - closed for the filled arrow
           vertices: [at(s, hw), tip, at(s, -hw)],
           closed: kind == PdfLineEnding.closedArrow,
           filled: kind == PdfLineEnding.closedArrow,
@@ -4310,7 +4310,7 @@ extension PdfAnnotationEditing on PdfEditor {
   }
 
   /// The extreme points an ending [kind] reaches at [tip] (line arriving
-  /// from [from]) — fed into [_pointBounds] so the appearance /Rect and
+  /// from [from]) - fed into [_pointBounds] so the appearance /Rect and
   /// BBox cover the ending, not just the line.
   List<(double, double)> _endingExtent(PdfLineEnding kind, (double, double) tip,
       (double, double) from, double strokeWidth) {
@@ -4356,7 +4356,7 @@ extension PdfAnnotationEditing on PdfEditor {
   }
 
   /// Wraps the annotation content in a Form XObject whose BBox is the
-  /// annotation rect in page coordinates — the §12.5.5 algorithm then maps
+  /// annotation rect in page coordinates - the §12.5.5 algorithm then maps
   /// it onto /Rect as the identity.
   CosStream _form(PdfRect bbox, ContentWriter content,
       {CosDictionary? resources}) {
@@ -4375,7 +4375,7 @@ extension PdfAnnotationEditing on PdfEditor {
   /// page's /Annots array.
   ///
   /// Every created annotation gets an /NM (§12.5.2): [name] when given,
-  /// else a generated UUID — the durable identity that survives slot
+  /// else a generated UUID - the durable identity that survives slot
   /// shifts and revisions (see [PdfAnnotation.name]).
   void _addAnnotation(int pageIndex, CosDictionary annot, CosStream form,
       {String? name}) {

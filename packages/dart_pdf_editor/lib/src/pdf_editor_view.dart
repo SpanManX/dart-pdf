@@ -69,7 +69,7 @@ class PdfEditorFeatures {
 
   /// The slim bar above the viewer (search, page number, panel
   /// toggles). With it off, panels still follow the persisted
-  /// preferences — they just lose their toggles.
+  /// preferences - they just lose their toggles.
   final bool headerBar;
 
   /// The search field, the ⌘F/Ctrl+F shortcut, and (with
@@ -92,7 +92,7 @@ class PdfEditorFeatures {
   final bool authorEditable;
 
   /// The view-options menu: annotation visibility, form-field
-  /// highlight, text reflow, and page (paper) color — display settings only.
+  /// highlight, text reflow, and page (paper) color - display settings only.
   final bool viewOptions;
 
   /// Whether the view-options menu offers "Reflow text". Reflow is a
@@ -102,7 +102,7 @@ class PdfEditorFeatures {
   final bool reflowView;
 
   /// Whether the view-options menu offers "Page color…". With it false
-  /// the paper color can't be changed from the UI — for hosts that set
+  /// the paper color can't be changed from the UI - for hosts that set
   /// the page color from the document programmatically and lock it.
   final bool pageColorEditable;
 
@@ -131,7 +131,7 @@ class PdfEditorFeatures {
   /// colors…" picker, the eyedropper, and the text-box fill/border color
   /// rows in the style popup. Split from [styleControls] so a
   /// color-locked session can hide the color changer while keeping
-  /// stroke/opacity/font editable — pass `colorControls: false,
+  /// stroke/opacity/font editable - pass `colorControls: false,
   /// styleControls: true`.
   final bool colorControls;
 
@@ -156,7 +156,7 @@ class PdfEditorFeatures {
   /// [PdfEditingToolbar.tools].
   final Set<PdfEditTool>? tools;
 
-  /// The tool *types* (dock groups — Select, Markup, Draw, Shapes,
+  /// The tool *types* (dock groups - Select, Markup, Draw, Shapes,
   /// Insert, Measure, Edit) to offer, null meaning all of them. This is
   /// the way to disable a whole tool type at once. See
   /// [PdfEditingToolbar.groups].
@@ -164,7 +164,7 @@ class PdfEditorFeatures {
 }
 
 /// A drop-in PDF editor: the [PdfViewer] with every editing tool wired
-/// up — header with search and panel toggles, thumbnail/annotation/
+/// up - header with search and panel toggles, thumbnail/annotation/
 /// properties panels, and the bottom editing toolbar. For a view-only
 /// widget, use [PdfReader].
 ///
@@ -179,13 +179,13 @@ class PdfEditorFeatures {
 /// colors can be tuned with [viewerTheme] (or an inherited
 /// [PdfViewerTheme]). Features and tools toggle off via [features].
 /// Tool styles, panel visibility/widths, and display settings persist
-/// on the device through [PdfEditingPreferences] — pass [preferences]
+/// on the device through [PdfEditingPreferences] - pass [preferences]
 /// to share one instance across widgets, or leave null for a
 /// self-contained one.
 ///
 /// The widget owns the edit session (undo/redo, revisions). Hosts that
 /// need programmatic access pass their own [controller] instead of
-/// [bytes] — exactly one of the two must be given. [onSave] receives
+/// [bytes] - exactly one of the two must be given. [onSave] receives
 /// the current revision's bytes from the toolbar's save button or the
 /// ⌘S / Ctrl+S shortcut. [onSaveAs] receives the same bytes from
 /// ⌘⇧S / Ctrl+Shift+S; [onDocumentChanged] fires after every revision
@@ -249,7 +249,7 @@ class PdfEditorView extends StatefulWidget {
   final PdfRasterCache? rasterCache;
 
   /// Optional persistent on-disk text cache (see [PdfPageTextCache]).
-  /// Threaded to the viewer, but only consulted in read-only mode — an
+  /// Threaded to the viewer, but only consulted in read-only mode - an
   /// active edit session mutates page content, so its text is never served
   /// from the content-keyed persistent cache (in-memory only).
   final PdfPageTextCache? textCache;
@@ -258,7 +258,7 @@ class PdfEditorView extends StatefulWidget {
   /// position and zoom across sessions (persisted in the preferences).
   /// With [bytes] a key is derived from the content when this is null;
   /// with an external [controller] (no bytes) pass one explicitly to
-  /// enable the memory — a file path or URL is ideal.
+  /// enable the memory - a file path or URL is ideal.
   final String? documentId;
 
   /// An external edit session, for hosts that drive edits
@@ -292,7 +292,7 @@ class PdfEditorView extends StatefulWidget {
   /// shortcut active.
   final bool showSaveButton;
 
-  /// Called after every revision — edits, undo, redo — with the new
+  /// Called after every revision - edits, undo, redo - with the new
   /// current bytes. For autosaving hosts.
   final void Function(Uint8List bytes)? onDocumentChanged;
 
@@ -429,7 +429,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
   final _searchFocus = FocusNode();
   late Map<PdfEditTool, LogicalKeyboardKey> _toolShortcuts;
 
-  /// The revision length last reported through onDocumentChanged —
+  /// The revision length last reported through onDocumentChanged -
   /// revisions are byte prefixes of one buffer, so equal length means
   /// the same revision.
   late int _reportedLength;
@@ -442,7 +442,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
   PdfEditingPreferences get _prefs => _session.preferences;
 
   /// A stable key for the open document, or null when there is nothing to
-  /// key a remembered position on — an external controller with no
+  /// key a remembered position on - an external controller with no
   /// [documentId]. With [bytes] one is derived from the content.
   String? get _documentKey {
     if (widget.documentId != null) return widget.documentId;
@@ -492,7 +492,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
   }
 
   /// Binds the Apple Pencil double-tap to the session's eraser toggle on
-  /// iOS, where the gesture exists. The shell stays plugin-free — the host's
+  /// iOS, where the gesture exists. The shell stays plugin-free - the host's
   /// iOS runner registers the `UIPencilInteraction` and forwards it over
   /// [PdfPencilInteraction.channel]; this is the Dart end.
   void _attachPencil() {
@@ -501,7 +501,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
     (_pencil ??= PdfPencilInteraction()).attach(_session);
   }
 
-  /// Keeps [_worker] tied to the session's current document — see the field
+  /// Keeps [_worker] tied to the session's current document - see the field
   /// doc. A revision (edit, undo, redo) changes the document identity, so
   /// the old worker is disposed and a new one started over the current bytes;
   /// disposing first means the just-edited page renders locally (correctly)
@@ -516,7 +516,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
 
   void _onSessionChanged() {
     // the merged ListenableBuilder rebuilds the viewer on this same notify,
-    // so swapping the worker here is enough — no setState needed
+    // so swapping the worker here is enough - no setState needed
     _syncWorker();
     final length = _session.bytes.length;
     if (length == _reportedLength) return;
@@ -689,7 +689,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
 
           // the full-area page grid replaces the page viewer; it wins over
           // reflow if both prefs are somehow on (the toggle below also
-          // clears reflow). [altView] is "the viewer is hidden" — it
+          // clears reflow). [altView] is "the viewer is hidden" - it
           // suppresses the docked panels, the editing toolbar, and the
           // viewer-only header controls, just as reflow does.
           final gridActive = features.thumbnails && prefs.showThumbnailView;
@@ -894,7 +894,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                     key: const ValueKey('pdf-shell-panels'),
                     items: panelItems,
                   ),
-                  // Save sits in the header, not in the floating toolbar —
+                  // Save sits in the header, not in the floating toolbar -
                   // ⌘S/Ctrl+S takes the same path.
                   if (widget.onSave != null && widget.showSaveButton)
                     FilledButton.icon(

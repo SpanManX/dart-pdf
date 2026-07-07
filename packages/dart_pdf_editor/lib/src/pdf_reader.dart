@@ -39,7 +39,7 @@ class PdfReaderFeatures {
         );
 
   /// The slim bar above the viewer. With it off the remaining features
-  /// lose their buttons, so most are moot — panels still follow the
+  /// lose their buttons, so most are moot - panels still follow the
   /// persisted preferences.
   final bool headerBar;
 
@@ -55,16 +55,16 @@ class PdfReaderFeatures {
   final bool thumbnails;
 
   /// The view-options menu: annotation visibility, form-field
-  /// highlight, and page (paper) color — display settings only.
+  /// highlight, and page (paper) color - display settings only.
   final bool viewOptions;
 
   /// Whether the view-options menu offers "Page color…". With it false
-  /// the paper color can't be changed from the UI — for hosts that set
+  /// the paper color can't be changed from the UI - for hosts that set
   /// the page color from the document programmatically and lock it.
   final bool pageColorEditable;
 
   /// Whether form fields can be filled in (text entry, check boxes,
-  /// radio buttons, drop-downs) — the only document mutation the reader
+  /// radio buttons, drop-downs) - the only document mutation the reader
   /// allows, since forms are made to be filled. Filled values live in
   /// the reader's session for the life of the widget; surfacing them as
   /// bytes (to save) needs the full [PdfEditorView]. Off makes the
@@ -74,7 +74,7 @@ class PdfReaderFeatures {
 
 /// A drop-in, view-only PDF widget: the [PdfViewer] plus a slim header
 /// with search, a page-number field, view options, and a navigational
-/// thumbnail sidebar. No editing — for the full editor, use
+/// thumbnail sidebar. No editing - for the full editor, use
 /// [PdfEditorView].
 ///
 /// ```dart
@@ -85,7 +85,7 @@ class PdfReaderFeatures {
 /// colors can be tuned with [viewerTheme] (or an inherited
 /// [PdfViewerTheme]). Features toggle off via [features]. Display
 /// preferences (panel visibility and widths, page color) persist on the
-/// device through [PdfEditingPreferences] — pass [preferences] to share
+/// device through [PdfEditingPreferences] - pass [preferences] to share
 /// one instance across widgets, or leave null for a self-contained one.
 ///
 /// The widget is a plain body: give it bounded space (a [Scaffold]
@@ -174,7 +174,7 @@ class PdfReader extends StatefulWidget {
 class _PdfReaderState extends State<PdfReader> {
   // the session wraps the bytes for the viewer and the thumbnail
   // strip's caches; the reader makes no structural edits, so the
-  // document stays byte-identical to the input — except form fills
+  // document stays byte-identical to the input - except form fills
   // (PdfReaderFeatures.fillForms), the one mutation a reader allows
   late PdfEditingController _session;
   PdfEditingPreferences? _ownedPrefs;
@@ -220,7 +220,7 @@ class _PdfReaderState extends State<PdfReader> {
 
   /// Keeps [_worker] tied to the session's current document. Reading never
   /// changes it (one spawn for the document's life); a form fill produces a
-  /// new revision, so the old worker — which holds the pre-fill bytes — is
+  /// new revision, so the old worker - which holds the pre-fill bytes - is
   /// disposed and a fresh one started over the new bytes. Disposing first
   /// means pages render locally (correctly) during the brief respawn rather
   /// than from a stale isolate.
@@ -283,7 +283,7 @@ class _PdfReaderState extends State<PdfReader> {
               features.thumbnails && showThumbnails && !prefs.showReflowView;
 
           // Distinct keys for docked vs sheet so the strip is remounted, not
-          // reparented, when the breakpoint flips — reparenting reactivates
+          // reparented, when the breakpoint flips - reparenting reactivates
           // the tiles' Tooltip overlays mid-layout (a RenderObject mutation
           // assertion). See the matching note in pdf_editor_view.dart.
           PdfThumbnailSidebar thumbnails({required bool bottomSheet}) =>

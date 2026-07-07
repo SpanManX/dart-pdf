@@ -215,7 +215,7 @@ class PdfPageElements {
           pathPoints = [];
         case 'n':
           // a no-op paint: with W it defines a clip (kept as state),
-          // without it the path simply vanishes — either way no element
+          // without it the path simply vanishes - either way no element
           pathStart = -1;
           pathPoints = [];
 

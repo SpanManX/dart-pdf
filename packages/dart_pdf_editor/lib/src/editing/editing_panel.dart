@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 /// Which side of the viewer a sidebar panel is docked on. Its resize
-/// grip rides the opposite (inner) edge — the one facing the viewer.
+/// grip rides the opposite (inner) edge - the one facing the viewer.
 enum PdfSidebarSide { left, right }
 
-/// A compact close (×) button for a docked sidebar panel's header — the
+/// A compact close (×) button for a docked sidebar panel's header - the
 /// desktop counterpart of the bottom sheet's close button (which the
 /// sheet chrome supplies on its own). A panel renders this in its header
 /// only when the host wires an `onClose` and the panel is docked, not a
@@ -15,7 +15,7 @@ class PdfSidebarCloseButton extends StatelessWidget {
     required this.onPressed,
   });
 
-  /// Dismisses the panel — the shells turn its visibility preference off.
+  /// Dismisses the panel - the shells turn its visibility preference off.
   final VoidCallback onPressed;
 
   @override
@@ -47,7 +47,7 @@ class PdfSidebarResizeGrip extends StatefulWidget {
   /// the panel wider.
   final ValueChanged<double> onWidthDelta;
 
-  /// The drag ended — time to persist the new width.
+  /// The drag ended - time to persist the new width.
   final VoidCallback onResizeEnd;
 
   /// The grip's hit-test width.

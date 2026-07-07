@@ -233,7 +233,7 @@ void main() {
           ['Page 1', 'Page 2', 'Page 3', 'Page 4']);
 
       // touch is the default test pointer, so the cell waits for a long
-      // press before dragging — pick up page 1, drop it on page 3's cell
+      // press before dragging - pick up page 1, drop it on page 3's cell
       final from = tester
           .getCenter(find.byKey(const ValueKey('pdf-thumbnail-grid-cell-0')));
       final to = tester

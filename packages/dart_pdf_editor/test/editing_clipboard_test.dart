@@ -491,7 +491,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // the stroke slider shows the selected annotation's width (scope to
-      // the popup — the strip also carries an inline opacity slider)
+      // the popup - the strip also carries an inline opacity slider)
       final menuSlider = find.descendant(
           of: find.byType(MenuAnchor), matching: find.byType(Slider));
       final slider = tester.widget(menuSlider.first) as Slider;

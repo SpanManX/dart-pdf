@@ -25,20 +25,20 @@ import 'thumbnail_cache.dart';
 /// first so the list still scrolls), the per-tile button deletes a page
 /// (the last remaining page cannot be deleted), and the strip's footer
 /// appends a blank page. Right-clicking a tile (secondary tap) opens a
-/// page context menu — rotate, duplicate, insert a blank page before or
-/// after, export (when [onExportPages] is given), delete — that acts on
+/// page context menu - rotate, duplicate, insert a blank page before or
+/// after, export (when [onExportPages] is given), delete - that acts on
 /// the strip's selection when the tile belongs to it. All of this (export
 /// aside) needs [allowPageEditing].
 ///
 /// Built to stay light on large documents: thumbnails are rasterized at
 /// tile resolution and cached, keyed by
-/// [PdfEditingController.pageRenderStamp] — so an edit re-renders only
+/// [PdfEditingController.pageRenderStamp] - so an edit re-renders only
 /// the pages it touched, renders are serialized (one page at a time)
 /// instead of bursting on first layout, and scrolling the viewer
 /// repaints only each tile's viewport indicator, never the page images.
 ///
 /// The strip follows the viewer ([followsViewer]): when the current page
-/// changes — scrolling, search, a link jump — the strip scrolls its tile
+/// changes - scrolling, search, a link jump - the strip scrolls its tile
 /// into view. The inner edge is draggable ([resizable]); the chosen
 /// width persists via [PdfEditingPreferences.thumbnailSidebarWidth].
 ///
@@ -91,15 +91,15 @@ class PdfThumbnailSidebar extends StatefulWidget {
   /// The viewer to navigate when a thumbnail is tapped.
   final PdfViewerController viewerController;
 
-  /// The default width — a user-dragged width, persisted in
+  /// The default width - a user-dragged width, persisted in
   /// [PdfEditingPreferences.thumbnailSidebarWidth], wins over it.
   final double width;
 
-  /// The paper color thumbnails render on — pass the viewer's
+  /// The paper color thumbnails render on - pass the viewer's
   /// [PdfViewer.pageColor] so they match the pages.
   final Color pageColor;
 
-  /// Whether thumbnails render their annotations — pass the viewer's
+  /// Whether thumbnails render their annotations - pass the viewer's
   /// [PdfViewer.showAnnotations] so they match the pages.
   final bool showAnnotations;
 
@@ -119,7 +119,7 @@ class PdfThumbnailSidebar extends StatefulWidget {
   final bool followsViewer;
 
   /// Whether pages can be reordered (drag) and deleted (footer button)
-  /// from the strip. False makes it purely navigational — the mode a
+  /// from the strip. False makes it purely navigational - the mode a
   /// read-only viewer wants.
   final bool allowPageEditing;
 
@@ -128,7 +128,7 @@ class PdfThumbnailSidebar extends StatefulWidget {
   /// than as a fixed-width docked column.
   final bool bottomSheet;
 
-  /// Closes the docked panel — the host turns its visibility preference
+  /// Closes the docked panel - the host turns its visibility preference
   /// off. When given (and not a [bottomSheet]) a close (×) button appears
   /// in the strip's header. Null leaves the strip with no close button (a
   /// bottom sheet supplies its own).
@@ -145,7 +145,7 @@ class PdfThumbnailSidebar extends StatefulWidget {
   /// footer menu.
   final void Function(Uint8List bytes)? onExportPages;
 
-  /// How many thumbnails have actually been rasterized — cache misses
+  /// How many thumbnails have actually been rasterized - cache misses
   /// only, across all sidebars. Tests assert on the deltas.
   @visibleForTesting
   static int debugRasterizations = 0;
@@ -159,7 +159,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
   final FocusNode _focusNode = FocusNode(debugLabel: 'PdfThumbnailSidebar');
 
   /// The session's shared thumbnail cache (and viewport-ordered render
-  /// queue) — the same instance the page grid uses, so a page rendered in
+  /// queue) - the same instance the page grid uses, so a page rendered in
   /// one is reused by the other.
   PdfThumbnailCache get _cache => widget.controller.thumbnailCache;
 
@@ -177,7 +177,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
   /// range preview can appear the instant Shift goes down.
   int? _hoverPage;
 
-  /// Whether Shift is held — while it is (and a tile is hovered) the strip
+  /// Whether Shift is held - while it is (and a tile is hovered) the strip
   /// previews the range a shift-click would select.
   bool _shiftHeld = HardwareKeyboard.instance.isShiftPressed;
 
@@ -202,7 +202,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
   }
 
   /// A tile's mouse enter/exit. The field always updates; a rebuild only
-  /// happens while Shift is held, where the preview is actually visible —
+  /// happens while Shift is held, where the preview is actually visible -
   /// plain hovering never churns the list.
   void _setHover(int index, bool hovering) {
     final next = hovering ? index : (_hoverPage == index ? null : _hoverPage);
@@ -265,7 +265,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
           .clamp(widget.minWidth, widget.maxWidth);
 
   /// The scrollbar (and, when it rides the same right edge, the resize
-  /// grip) overlay the list — the list keeps clear of that zone so the
+  /// grip) overlay the list - the list keeps clear of that zone so the
   /// bar never covers a tile. Tiles already pad 12px on their own.
   double get _barClearance =>
       PdfScrollbar.hitExtent +
@@ -307,7 +307,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
       _preferences.addListener(_onPreferences);
     }
     // a different edit session brings its own (empty) shared cache, so the
-    // old session's warm prerender must be withdrawn from the old cache —
+    // old session's warm prerender must be withdrawn from the old cache -
     // [build] re-arms it against the new one
     if (!identical(old.controller, widget.controller)) {
       old.controller.thumbnailCache.clearWarm(this);
@@ -320,7 +320,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
     _preferences.removeListener(_onPreferences);
     HardwareKeyboard.instance.removeHandler(_onKeyEvent);
     // the cache outlives the panel (it belongs to the session), so only
-    // withdraw this strip's background warm — don't dispose it
+    // withdraw this strip's background warm - don't dispose it
     _cache.clearWarm(this);
     _scroll.dispose();
     _focusNode.dispose();
@@ -349,7 +349,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
     if (widget.followsViewer) _revealPage(current);
   }
 
-  /// Renders one page's thumbnail straight into the shared cache — the idle
+  /// Renders one page's thumbnail straight into the shared cache - the idle
   /// background fill of every page (see [PdfThumbnailCache.setWarm]). Renders
   /// at the lower warm worker priority and declines the UI-thread fallback,
   /// so a tile the user is looking at always preempts it; a page another
@@ -395,7 +395,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
     final context = _tileKeys[index]?.currentContext;
     if (context == null) return false;
     // the two policies each no-op unless the tile is hidden past their
-    // edge — together they scroll the minimal distance
+    // edge - together they scroll the minimal distance
     for (final policy in const [
       ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
       ScrollPositionAlignmentPolicy.keepVisibleAtStart,
@@ -450,7 +450,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
       '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
       (index) => _warmRender(index, pixelWidth),
     );
-    // pages a shift-click would select from the current hover — painted as
+    // pages a shift-click would select from the current hover - painted as
     // a ghost of the selection chip while Shift is held
     final rangePreview = _rangePreview;
     // a bottom sheet supplies its own width and resize affordance, so the
@@ -459,7 +459,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
     final showGrip = widget.resizable && !widget.bottomSheet;
     // [inset] centers the tile column inside a full-width parent: in a
     // bottom sheet the list fills the whole sheet (so a drag anywhere in
-    // it scrolls — not just over the narrow tile column) and the inset is
+    // it scrolls - not just over the narrow tile column) and the inset is
     // baked into the list's own horizontal padding, which keeps the
     // scroll viewport full-width while the tiles stay centered.
     Widget buildList(double inset) => CallbackShortcuts(
@@ -469,7 +469,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
             autofocus: true,
             child: Material(
               color: Theme.of(context).colorScheme.surfaceContainerLow,
-              // only document changes rebuild the list — viewer scrolling
+              // only document changes rebuild the list - viewer scrolling
               // repaints the per-tile indicators alone
               child: ListenableBuilder(
                 listenable: controller,
@@ -483,7 +483,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
                     // a fixed height and always present, so swapping in the bulk-
                     // action bar when 2+ pages are selected never reflows the
                     // tiles below (a single selection is just the navigation
-                    // cursor — the per-tile delete handles it).
+                    // cursor - the per-tile delete handles it).
                     Padding(
                       padding: EdgeInsets.fromLTRB(
                           8 + inset, 2, _extraRightPadding + inset, 2),
@@ -668,12 +668,12 @@ class _PageSelectionBar extends StatelessWidget {
   final void Function(Uint8List bytes)? onExportPages;
 
   /// A single-row layout (count + a horizontally-scrollable action group)
-  /// that fits a fixed-height header slot — the docked strip swaps it in
+  /// that fits a fixed-height header slot - the docked strip swaps it in
   /// for the "Pages" header so a selection never reflows the tiles. The
   /// full-area grid leaves it false for the roomier two-row layout.
   final bool compact;
 
-  /// A compact icon button — tight enough that several fit (and wrap)
+  /// A compact icon button - tight enough that several fit (and wrap)
   /// within the narrow strip.
   Widget _action({
     required String key,
@@ -785,9 +785,9 @@ TextStyle? _densePopupTextStyle(BuildContext context, {Color? color}) =>
 
 /// The thumbnail strip's page-document actions: insert the pages of
 /// another PDF (after the current page) and export a page range to a
-/// standalone PDF. Both need the host for file I/O — [onPickPdfToInsert]
+/// standalone PDF. Both need the host for file I/O - [onPickPdfToInsert]
 /// supplies the bytes to merge in, [onExportPages] receives the exported
-/// bytes — so a menu item only appears when its callback is given.
+/// bytes - so a menu item only appears when its callback is given.
 class _PageActionsButton extends StatelessWidget {
   const _PageActionsButton({
     required this.controller,
@@ -813,7 +813,7 @@ class _PageActionsButton extends StatelessWidget {
       controller.insertPagesFromBytes(bytes,
           at: viewerController.currentPage + 1);
     } catch (_) {
-      // a non-PDF, corrupt, or password-protected file can't be opened —
+      // a non-PDF, corrupt, or password-protected file can't be opened -
       // tell the user rather than failing silently
       messenger?.showSnackBar(
         SnackBar(
@@ -873,7 +873,7 @@ class _PageActionsButton extends StatelessWidget {
   }
 }
 
-/// A dedicated, full-area page thumbnail grid — the same page controls
+/// A dedicated, full-area page thumbnail grid - the same page controls
 /// as [PdfThumbnailSidebar] (click to select a page, double-click to open it,
 /// shift/⌘-click
 /// multi-select with a bulk-action bar, per-tile rotate/delete, drag to
@@ -920,7 +920,7 @@ class PdfThumbnailView extends StatefulWidget {
   /// The viewer a tapped tile scrolls to (see [onOpenPage]).
   final PdfViewerController viewerController;
 
-  /// Offloads tile interpretation to a background isolate — pass the same
+  /// Offloads tile interpretation to a background isolate - pass the same
   /// worker the viewer uses. See [PdfThumbnailSidebar.renderWorker].
   final PdfRenderWorker? renderWorker;
 
@@ -969,7 +969,7 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
   final Map<int, GlobalKey> _tileKeys = {};
 
   /// The session's shared thumbnail cache (and viewport-ordered render
-  /// queue) — the same instance the docked strip uses.
+  /// queue) - the same instance the docked strip uses.
   PdfThumbnailCache get _cache => widget.controller.thumbnailCache;
 
   PdfEditingPreferences get _preferences => widget.controller.preferences;
@@ -1017,7 +1017,7 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
   void dispose() {
     _preferences.removeListener(_onPreferences);
     HardwareKeyboard.instance.removeHandler(_onKeyEvent);
-    // the cache belongs to the session, not this grid — only withdraw its
+    // the cache belongs to the session, not this grid - only withdraw its
     // background warm
     _cache.clearWarm(this);
     _scroll.dispose();
@@ -1113,7 +1113,7 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
     }
   }
 
-  /// Renders one page's thumbnail straight into the shared cache — the idle
+  /// Renders one page's thumbnail straight into the shared cache - the idle
   /// background fill (see [PdfThumbnailCache.setWarm]). Lower worker priority
   /// and no UI-thread fallback, so a visible tile always preempts it.
   Future<void> _warmRender(int index, int pixelWidth) async {
@@ -1169,7 +1169,7 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
       final gridWidth = math.max(0, constraints.maxWidth - 24 - barClearance);
       final columns =
           math.max(1, ((gridWidth + 12) / (tileWidth + 12)).floor());
-      // opaque so the grid eats every pointer in its area — a host overlays it
+      // opaque so the grid eats every pointer in its area - a host overlays it
       // over the live viewer, and a tap in a header/inter-tile gap must not
       // fall through to the page underneath
       return CallbackShortcuts(
@@ -1181,7 +1181,7 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
             behavior: HitTestBehavior.opaque,
             child: Material(
               color: Theme.of(context).colorScheme.surfaceContainerLow,
-              // only document changes rebuild the grid — viewer scrolling
+              // only document changes rebuild the grid - viewer scrolling
               // repaints the per-tile viewport indicators alone
               child: ListenableBuilder(
                 listenable: controller,
@@ -1357,7 +1357,7 @@ class _ThumbnailSizeControl extends StatelessWidget {
 /// cell knows a pointer is present); touch and stylus need a long press,
 /// so a finger drag still scrolls the grid. Dropping onto another cell
 /// moves the page there ([PdfEditingController.movePage]). With
-/// [allowPageEditing] off the cell is the bare tile — read-only grids
+/// [allowPageEditing] off the cell is the bare tile - read-only grids
 /// only navigate.
 class _GridPageCell extends StatefulWidget {
   const _GridPageCell({
@@ -1441,7 +1441,7 @@ class _GridPageCellState extends State<_GridPageCell> {
         final scheme = Theme.of(context).colorScheme;
         final active = candidate.isNotEmpty;
         // a 2px frame, always laid out (transparent when idle), marks the
-        // cell a drop would land on — DecoratedBox paints it over the tile
+        // cell a drop would land on - DecoratedBox paints it over the tile
         // edge without reserving space, so the tile never shifts
         return DecoratedBox(
           decoration: BoxDecoration(
@@ -1522,7 +1522,7 @@ class _DragFeedback extends StatelessWidget {
 }
 
 /// Starts a tile drag immediately for mouse pointers (the desktop
-/// expectation — a mouse drag never means scrolling) but only after a
+/// expectation - a mouse drag never means scrolling) but only after a
 /// long press for touch and stylus, so finger drags still scroll the
 /// list. Plain taps are unaffected either way: both recognizers claim
 /// the pointer only once it moves past the slop.
@@ -1538,7 +1538,7 @@ class _ReorderDragStartListener extends ReorderableDragStartListener {
     return Listener(
       onPointerDown: (event) {
         // a right- or middle-click is for the context menu, not a reorder
-        // drag — let the tile's secondary-tap recognizer have the pointer
+        // drag - let the tile's secondary-tap recognizer have the pointer
         if (event.kind == PointerDeviceKind.mouse &&
             event.buttons != kPrimaryButton) {
           return;
@@ -1590,7 +1590,7 @@ class _PageTile extends StatefulWidget {
   final PdfRenderWorker? renderWorker;
 
   /// Whether a shift-click on this tile would add it to the selection
-  /// right now — painted as a faint preview of the selection chip while
+  /// right now - painted as a faint preview of the selection chip while
   /// the strip's Shift hover is live. Ignored when already [selected].
   final bool inRangePreview;
 
@@ -1602,7 +1602,7 @@ class _PageTile extends StatefulWidget {
   /// Overrides what a plain tap does after selecting the page. The strip
   /// leaves this null and just scrolls the viewer to the page; the
   /// full-area grid passes a handler for double-click activation. Shift/⌘
-  /// clicks are unaffected — they only extend the multi-selection, never
+  /// clicks are unaffected - they only extend the multi-selection, never
   /// navigate.
   final void Function(int pageIndex)? onActivatePage;
 
@@ -1647,7 +1647,7 @@ class _PageTileState extends State<_PageTile> {
 
   /// Tapping a tile selects it for the strip's multi-select and (for a
   /// plain tap) navigates there. Shift extends a range from the anchor;
-  /// ⌘/Ctrl toggles the tile in the selection — neither navigates, so the
+  /// ⌘/Ctrl toggles the tile in the selection - neither navigates, so the
   /// reader can build a selection without the viewport jumping around.
   void _onTap() {
     onFocusPage?.call(pageIndex);
@@ -1699,7 +1699,7 @@ class _PageTileState extends State<_PageTile> {
       behavior: HitTestBehavior.opaque,
       onTap: _onTap,
       // a right-click (or control-click on macOS) opens the page context
-      // menu — rotate / duplicate / insert / export / delete — operating
+      // menu - rotate / duplicate / insert / export / delete - operating
       // on the strip's selection when this tile belongs to it
       onSecondaryTapUp: (details) {
         onFocusPage?.call(pageIndex);
@@ -1715,7 +1715,7 @@ class _PageTileState extends State<_PageTile> {
       // a selected tile reads as a primary-framed, tinted chip behind the
       // thumbnail. The 1.5px frame is always laid out (transparent when
       // unselected) and paid back out of the padding, so selecting a tile
-      // never nudges its contents — per-tile layout, _tileWidth's -26, and
+      // never nudges its contents - per-tile layout, _tileWidth's -26, and
       // _estimateOffset all still hold (each side still totals 12/4px).
       child: Container(
         // a stable key (never toggles, so it doesn't churn the thumbnail
@@ -1801,7 +1801,7 @@ class _PageTileState extends State<_PageTile> {
                 // No Tooltip on these buttons: a Tooltip is an OverlayPortal,
                 // and an OverlayPortal inside a ReorderableListView item
                 // crashes when the item is reactivated during a layout pass
-                // (the strip's bottom-sheet LayoutBuilder, or a reorder) — it
+                // (the strip's bottom-sheet LayoutBuilder, or a reorder) - it
                 // mutates the overlay's RenderObject mid-layout. A Semantics
                 // label keeps the buttons accessible without one.
                 if (allowPageEditing)
@@ -1869,7 +1869,7 @@ enum _PageTileAction {
 /// action ran.
 ///
 /// [allowPageEditing] gates the structural entries (rotate, duplicate,
-/// insert, delete); [onExportPages] gates Export — each is omitted when
+/// insert, delete); [onExportPages] gates Export - each is omitted when
 /// unavailable, so a read-only strip with no export handler never opens a
 /// menu at all.
 Future<void> _showPageTileMenu({
@@ -1890,7 +1890,7 @@ Future<void> _showPageTileMenu({
   final multi = targets.length > 1;
   final pageCount = controller.document.pageCount;
 
-  // "Duplicate page" / "Export 3 pages" — the verb's object reflects how
+  // "Duplicate page" / "Export 3 pages" - the verb's object reflects how
   // many pages the action spans
   String forPages(String verb) =>
       multi ? '$verb ${targets.length} pages' : '$verb page';
@@ -1913,8 +1913,8 @@ Future<void> _showPageTileMenu({
           tileKey: 'pdf-thumbnail-menu-duplicate',
           icon: Icons.copy_all_outlined,
           label: forPages('Duplicate')),
-      // insert is relative to the right-clicked page — a single insertion
-      // point — so it stays singular even under a multi-selection
+      // insert is relative to the right-clicked page - a single insertion
+      // point - so it stays singular even under a multi-selection
       _pageMenuRow(context, _PageTileAction.insertBefore,
           tileKey: 'pdf-thumbnail-menu-insert-before',
           icon: Icons.vertical_align_top,
@@ -1998,7 +1998,7 @@ PopupMenuItem<_PageTileAction> _pageMenuRow(
     );
 
 /// Renders a page to a tile-resolution bitmap, served from the session's
-/// shared [PdfThumbnailCache] and keyed by the page's render stamp — an
+/// shared [PdfThumbnailCache] and keyed by the page's render stamp - an
 /// edit elsewhere reuses the raster, and a tile already drawn by the strip
 /// or grid (or the background warm) shows instantly. While a fresh raster
 /// is still rendering it paints the viewer's matching low-res preview as a
@@ -2041,7 +2041,7 @@ class _PageThumbnailState extends State<_PageThumbnail> {
   void didUpdateWidget(_PageThumbnail old) {
     super.didUpdateWidget(old);
     // a different edit session: render stamps restart at zero, so the
-    // new document's keys collide with the shown image's — drop it, and
+    // new document's keys collide with the shown image's - drop it, and
     // withdraw any pending render against the old shared cache
     if (!identical(old.controller, widget.controller)) {
       old.cache.cancel(this);
@@ -2056,7 +2056,7 @@ class _PageThumbnailState extends State<_PageThumbnail> {
 
   @override
   void dispose() {
-    // withdraw this tile's pending render from the shared queue — it scrolled
+    // withdraw this tile's pending render from the shared queue - it scrolled
     // out of the lazy strip, or its panel went away
     widget.cache.cancel(this);
     _pendingKey = null;
@@ -2076,10 +2076,10 @@ class _PageThumbnailState extends State<_PageThumbnail> {
     final cache = widget.cache;
     final worker = widget.renderWorker;
     cache.request(this, pageIndex, () async {
-      // superseded (newer revision, resize) or already landed — skip
+      // superseded (newer revision, resize) or already landed - skip
       if (!mounted || _pendingKey != key) return;
       // another surface (the grid, the warm prerender) may have rendered
-      // this exact raster while we waited our turn — adopt it, no re-render
+      // this exact raster while we waited our turn - adopt it, no re-render
       if (cache.contains(key)) {
         setState(() {
           _pendingKey = null;
@@ -2090,7 +2090,7 @@ class _PageThumbnailState extends State<_PageThumbnail> {
         return;
       }
       // nothing may escape: a single failing page must neither poison the
-      // queue nor surface — it just keeps its placeholder
+      // queue nor surface - it just keeps its placeholder
       try {
         final image = await rasterizeThumbnail(
           controller: controller,
@@ -2099,7 +2099,7 @@ class _PageThumbnailState extends State<_PageThumbnail> {
           annotations: annotations,
           pixelWidth: pixelWidth,
           worker: worker,
-          // only persist/read disk for pages untouched this session — the
+          // only persist/read disk for pages untouched this session - the
           // disk key is content-derived and render stamps reset per session
           disk: controller.pageRenderStamp(pageIndex) == 0 ? cache.disk : null,
         );
@@ -2178,7 +2178,7 @@ String thumbnailKey(PdfEditingController controller, int pageIndex,
 int _thumbnailBucket(double px) => ((px / 64).ceil() * 64).clamp(64, 1024);
 
 /// The page index nearest the scroll viewport, used as the shared cache's
-/// render focus. A coarse estimate from the scroll fraction — enough to
+/// render focus. A coarse estimate from the scroll fraction - enough to
 /// order "render what's on screen first" without per-tile layout math.
 int _thumbnailFocusFromScroll(ScrollController scroll, int pageCount) {
   if (!scroll.hasClients || pageCount <= 1) return 0;
@@ -2195,8 +2195,8 @@ int _thumbnailFocusFromScroll(ScrollController scroll, int pageCount) {
 /// [priority] orders the worker's queue (lower served first): on-screen
 /// tiles use 2, the background warm a lower 3, so a tile the user is looking
 /// at preempts an in-flight warm render. When [skipIfWorkerDeclines] is true
-/// (the warm pass) a page the worker won't offload — or whose render the
-/// worker preempted for a higher-priority tile — returns null instead of
+/// (the warm pass) a page the worker won't offload - or whose render the
+/// worker preempted for a higher-priority tile - returns null instead of
 /// falling back to a heavy UI-thread interpret, so warming never blocks a
 /// frame.
 Future<ui.Image?> rasterizeThumbnail({
@@ -2215,7 +2215,7 @@ Future<ui.Image?> rasterizeThumbnail({
   final size = PdfPageRenderer.pageSize(page);
   if (size.width <= 0 || size.height <= 0) return null;
   final ratio = pixelWidth / size.width;
-  // an unedited page reopened in a later session can come straight off disk —
+  // an unedited page reopened in a later session can come straight off disk -
   // no interpret at all. [disk] is supplied already gated to such pages (its
   // key is content-derived, and render stamps reset per session), so loading
   // it back is always for the right pixels.
@@ -2230,7 +2230,7 @@ Future<ui.Image?> rasterizeThumbnail({
   }
   // a DevTools-timeline span for the whole thumbnail render (free when no
   // trace is recording; appears when you capture one), split into its phases
-  // so a trace shows where the time actually goes — and matching gated
+  // so a trace shows where the time actually goes - and matching gated
   // PdfPerfLog console lines for `--dart-define=PDF_PERF_LOG=true` / `?perf=1`.
   final trace = TimelineTask()
     ..start('thumbnail', arguments: {

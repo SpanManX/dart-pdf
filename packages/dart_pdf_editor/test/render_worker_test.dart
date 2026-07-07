@@ -28,8 +28,8 @@ PdfImageRequest? _firstImage(List<PdfRenderCommand> commands) {
 
 /// A synchronous in-process [PdfRenderWorker] for widget tests: it records the
 /// page on the test isolate (no background isolate to spawn or await), so
-/// PdfPageView's worker render path — including the progressive vector-first
-/// pass — runs deterministically under pump(). Honors [decodeImages] exactly
+/// PdfPageView's worker render path - including the progressive vector-first
+/// pass - runs deterministically under pump(). Honors [decodeImages] exactly
 /// like the real backends.
 class _SyncWorker implements PdfRenderWorker {
   _SyncWorker(this._bytes);
@@ -166,7 +166,7 @@ void main() {
       (tester) async {
     await tester.runAsync(() async {
       // A PNG with alpha embeds as a Flate RGB XObject plus an indirect /SMask
-      // stream — so inlining must descend into and decrypt the nested stream,
+      // stream - so inlining must descend into and decrypt the nested stream,
       // and the decoder must rebuild the alpha. Compare worker vs local pixels.
       final bytes = PdfImageDocument.fromImageBytes([_alphaPng()]);
       final doc = PdfDocument.open(bytes);
@@ -179,7 +179,7 @@ void main() {
       expect(commands, isNotNull,
           reason: 'the image XObject and its /SMask serialize together');
       // A Flate RGB base under a soft mask is purely decodable, so the worker
-      // decodes it off-thread and ships premultiplied pixels — the offload.
+      // decodes it off-thread and ships premultiplied pixels - the offload.
       final decoded = _firstImage(commands!)?.decoded;
       expect(decoded, isNotNull,
           reason: 'a Flate+SMask image decodes off-thread');
@@ -243,7 +243,7 @@ void main() {
           reason: 'the image draw command is still in the buffer');
 
       // includeImages:false replays the vector/text and skips the image, so the
-      // picture builds without decoding anything — the fast first paint.
+      // picture builds without decoding anything - the fast first paint.
       final vector = await PdfPageRenderer.pictureFromCommands(page, fast,
           includeImages: false);
       addTearDown(vector.dispose);
@@ -413,7 +413,7 @@ void main() {
   testWidgets('an inline image still declines (null → local render)',
       (tester) async {
     await tester.runAsync(() async {
-      // A 4x4 inline image (BI .. ID .. EI) — declined because its /CS can name
+      // A 4x4 inline image (BI .. ID .. EI) - declined because its /CS can name
       // a page-resource colour space unreachable from the stream alone.
       final bytes = _inlineImagePdf();
       final worker = PdfRenderWorker.start(bytes);
@@ -471,7 +471,7 @@ void main() {
       await worker.record(0); // warm up: the isolate is now spawned and idle
 
       // Fire six prefetch records (priority 1) then one on-screen record
-      // (priority 0), all synchronously — so the first prefetch is in flight
+      // (priority 0), all synchronously - so the first prefetch is in flight
       // and the rest queue behind it. The high-priority request must be served
       // next, ahead of the five still queued: completion order is
       // [low0, HIGH, low1, ...]. Deterministic because record() enqueues
@@ -520,7 +520,7 @@ void main() {
       final inFlight = worker.record(0, priority: 1);
       final stale = worker.record(1, priority: 1);
       final wanted = worker.record(2, priority: 1);
-      // Page 1 "scrolled away" before its turn — drop it from the queue.
+      // Page 1 "scrolled away" before its turn - drop it from the queue.
       worker.cancel(1, priority: 1);
 
       expect(await stale, isNull,
@@ -573,7 +573,7 @@ void main() {
       addTearDown(worker.dispose);
       await worker.record(0); // warm up: the isolate is spawned and idle
 
-      // Start a low-priority prefetch — it goes in flight.
+      // Start a low-priority prefetch - it goes in flight.
       final prefetch = worker.record(0, priority: 1);
       // The prefetch is now executing on the isolate. Queue a high-priority
       // on-screen request: _pump sees the higher priority and sends a cancel
@@ -605,7 +605,7 @@ void main() {
         () async {
       final inner = _CountingWorker();
       final worker = PdfCachingRenderWorker(inner);
-      // Both fire before the first resolves — the second must share, not
+      // Both fire before the first resolves - the second must share, not
       // start a second decode (the fast-scroll re-grant storm).
       final f1 = worker.record(3, imagePixelRatio: 2.0);
       final f2 = worker.record(3, imagePixelRatio: 2.0);
@@ -729,7 +729,7 @@ void main() {
     test('weight-0 buffers survive eviction of heavy pages', () async {
       // Budget holds one heavy (256-byte) page. The vector-first pass
       // (decodeImages: false) weighs nothing, so blowing the budget with heavy
-      // full-image pages must not discard it — it would only be re-decoded.
+      // full-image pages must not discard it - it would only be re-decoded.
       final inner = _CountingWorker(decodedPixels: 64);
       final worker = PdfCachingRenderWorker(inner, budgetBytes: 300);
       await worker.record(0, imagePixelRatio: 2.0, decodeImages: false); // 0 B
@@ -875,7 +875,7 @@ void main() {
 }
 
 /// A [PdfRenderWorker] that records each [record] call and returns a synthetic
-/// buffer of a chosen decoded weight — for exercising [PdfCachingRenderWorker]
+/// buffer of a chosen decoded weight - for exercising [PdfCachingRenderWorker]
 /// without a real isolate or document.
 class _CountingWorker implements PdfRenderWorker {
   _CountingWorker({this.decodedPixels = 0, this.returnNull = false});
@@ -905,7 +905,7 @@ class _CountingWorker implements PdfRenderWorker {
     commandLimits.add(commandLimit);
     if (returnNull || !active) return null;
     // A vector-first pass (decodeImages: false) ships no decoded pixels, so its
-    // cached buffer weighs nothing — mirror that so the cache's weight-aware
+    // cached buffer weighs nothing - mirror that so the cache's weight-aware
     // eviction can be exercised.
     if (decodedPixels == 0 || !decodeImages) {
       return const [PdfSaveCommand(), PdfRestoreCommand()];

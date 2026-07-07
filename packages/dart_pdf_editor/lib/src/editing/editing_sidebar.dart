@@ -22,7 +22,7 @@ import 'editing_preferences.dart';
 /// multi-select: checkboxes replace the icons, tapping toggles, and the
 /// header's delete removes everything checked as one undo step. The
 /// list rebuilds on every revision, so it always reflects the current
-/// state — including undo and redo.
+/// state - including undo and redo.
 ///
 /// The inner edge is draggable ([resizable]); the chosen width persists
 /// via [PdfEditingPreferences.annotationSidebarWidth].
@@ -57,7 +57,7 @@ class PdfAnnotationSidebar extends StatefulWidget {
   /// The viewer to navigate when a tile is tapped.
   final PdfViewerController viewerController;
 
-  /// The default width — a user-dragged width, persisted in
+  /// The default width - a user-dragged width, persisted in
   /// [PdfEditingPreferences.annotationSidebarWidth], wins over it.
   final double width;
 
@@ -77,7 +77,7 @@ class PdfAnnotationSidebar extends StatefulWidget {
   /// than as a fixed-width docked column.
   final bool bottomSheet;
 
-  /// Closes the docked panel — the host turns its visibility preference
+  /// Closes the docked panel - the host turns its visibility preference
   /// off. When given (and not a [bottomSheet]) a close (×) button appears
   /// beside the filter field. Null leaves the panel with no close button
   /// (a bottom sheet supplies its own).
@@ -101,7 +101,7 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
   final ScrollController _scroll = ScrollController();
 
   /// The filter text; tiles whose title or subtitle don't contain it
-  /// (case-insensitive) are hidden. Survives revisions — a search isn't
+  /// (case-insensitive) are hidden. Survives revisions - a search isn't
   /// invalidated by an edit.
   final TextEditingController _search = TextEditingController();
 
@@ -118,7 +118,7 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
   PdfDocument? _builtFor;
 
   /// Extracted page text for link tiles ("the text under the link"),
-  /// per page, for the current revision only — extraction interprets
+  /// per page, for the current revision only - extraction interprets
   /// the page, so it runs once per page that actually lists a link and
   /// the cache dies with [_builtFor]. Null entries are failed or
   /// text-free extractions.
@@ -228,8 +228,8 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
     return _pageTexts[page] = text;
   }
 
-  /// The tile subtitle: author — contents for markup, name — value for
-  /// form fields, link text — target for links.
+  /// The tile subtitle: author - contents for markup, name - value for
+  /// form fields, link text - target for links.
   String _detail(int pageIndex, PdfAnnotation annotation) {
     if (annotation is PdfWidgetAnnotation) {
       final value = annotation.fieldValue;
@@ -237,29 +237,29 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
         if (annotation.fieldName != null && annotation.fieldName!.isNotEmpty)
           annotation.fieldName!,
         if (value != null && value.isNotEmpty) value,
-      ].join(' — ');
+      ].join(' - ');
     }
     if (annotation.subtype == 'Link') {
       final text = _pageText(pageIndex)?.textIn(annotation.rect);
       return [
         if (text != null && text.isNotEmpty) text,
         if (_actionLabel(annotation.action) case final target?) target,
-      ].join(' — ');
+      ].join(' - ');
     }
-    // on widgets /T is the field name, not an author — handled above
+    // on widgets /T is the field name, not an author - handled above
     final author = annotation.author;
     final contents = annotation.contents;
     return [
       if (author != null && author.isNotEmpty) author,
       if (contents != null && contents.isNotEmpty) contents,
-    ].join(' — ');
+    ].join(' - ');
   }
 
   void _toggle((int, int) slot) => setState(() {
         if (!_checked.add(slot)) _checked.remove(slot);
       });
 
-  /// The tile's title, as shown — what the search matches besides the
+  /// The tile's title, as shown - what the search matches besides the
   /// subtitle.
   String _title(PdfAnnotation annotation) => annotation is PdfWidgetAnnotation
       ? _fieldLabel(annotation.fieldType)
@@ -585,7 +585,7 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
         builder: (context, _) {
           final document = widget.controller.document;
           if (!identical(document, _builtFor)) {
-            // already rebuilding — adjust the state in place
+            // already rebuilding - adjust the state in place
             _builtFor = document;
             _checked.clear();
             _selecting = false;
@@ -610,7 +610,7 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
               final annotation = annotations[i];
               if (_unlisted.contains(annotation.subtype)) continue;
               // replies and review-state annotations are thread
-              // content — shown nested under their root, not as their
+              // content - shown nested under their root, not as their
               // own top-level rows
               if (annotation.isReply || annotation.isStateAnnotation) {
                 continue;

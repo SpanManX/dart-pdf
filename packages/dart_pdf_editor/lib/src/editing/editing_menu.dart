@@ -40,7 +40,7 @@ class PdfAnnotationMenuRequest {
   /// The selected annotations, in [slots] order.
   final List<PdfAnnotation> annotations;
 
-  /// The primary selected annotation — the one right-clicked, when the
+  /// The primary selected annotation - the one right-clicked, when the
   /// click started a fresh selection.
   PdfAnnotation? get primary => annotations.isEmpty ? null : annotations.last;
 }
@@ -80,7 +80,7 @@ typedef PdfAnnotationMenuBuilder = List<PdfAnnotationMenuItem> Function(
 /// front, send to back, delete, then whatever [customActions] adds.
 /// Resolves when the menu closes, after the picked action ran.
 ///
-/// [pagePoint] is where on the page the menu was opened (page space) —
+/// [pagePoint] is where on the page the menu was opened (page space) -
 /// Paste centers the clipboard there; without it the paste falls back
 /// to [PdfEditingController.pasteAnnotations]' cascade. With nothing
 /// selected the menu still opens when the clipboard has content (the

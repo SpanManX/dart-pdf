@@ -10,7 +10,7 @@ import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // The drop-in shells: PdfReader (view-only) and PdfEditorView (the full
-// workbench). The pieces they compose have their own suites — these
+// workbench). The pieces they compose have their own suites - these
 // tests cover the wiring: features toggling chrome, panel toggles,
 // session ownership, and the save/changed callbacks.
 void main() {
@@ -612,7 +612,7 @@ void main() {
 
     testWidgets('color controls are present by default', (tester) async {
       await pump(tester, PdfEditorView(bytes: buildMultiPagePdf(1)));
-      // the colour controls live in a group's strip — open one
+      // the colour controls live in a group's strip - open one
       await tester.tap(find.byKey(const ValueKey('pdf-group-shapes')));
       await tester.pump();
       final moreColors = find.byKey(const ValueKey('pdf-more-colors'));
@@ -1045,7 +1045,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('pdf-thumbnail-page-actions')),
           kind: PointerDeviceKind.mouse);
       await tester.pumpAndSettle();
-      // insert needs page editing — hidden; export stands alone
+      // insert needs page editing - hidden; export stands alone
       expect(
           find.byKey(const ValueKey('pdf-thumbnail-insert-pdf')), findsNothing);
       expect(find.byKey(const ValueKey('pdf-thumbnail-export-pages')),
@@ -1211,7 +1211,7 @@ void main() {
       expect(before, lessThan(800 * 0.55));
       expect(after, greaterThan(800 * 0.6));
       expect(after, lessThanOrEqualTo(800 * 0.9 + 1));
-      // a resize is not a dismiss — the panel is still open
+      // a resize is not a dismiss - the panel is still open
       expect(panel, findsOneWidget);
     });
 
@@ -1237,7 +1237,7 @@ void main() {
       addTearDown(prefs.dispose);
       // the default 800x600 test surface is above the compact width, so
       // panels dock to the side and carry their own little × (the sheet
-      // variants — and their close buttons — are not mounted here)
+      // variants - and their close buttons - are not mounted here)
       await pump(tester,
           PdfEditorView(bytes: buildMultiPagePdf(2), preferences: prefs));
 
@@ -1351,7 +1351,7 @@ void main() {
         'compact: dragging the empty margin of the thumbnail sheet '
         'scrolls it', (tester) async {
       // Regression: the tile column was a narrow centered SizedBox, so the
-      // scroll viewport only covered the tiles — a drag on the wide sheet's
+      // scroll viewport only covered the tiles - a drag on the wide sheet's
       // empty side margins hit nothing and never scrolled. The list now
       // fills the sheet and centers the column via its own inset.
       final prefs = PdfEditingPreferences();
@@ -1376,7 +1376,7 @@ void main() {
       expect(position.maxScrollExtent, greaterThan(0),
           reason: 'the strip should overflow with 12 pages');
 
-      // drag UP from near the sheet's left edge — the empty margin beside
+      // drag UP from near the sheet's left edge - the empty margin beside
       // the centered tile column, not on a tile; check the offset while the
       // gesture is held (the raster loop never settles, so no pumpAndSettle)
       final sheetRect = tester.getRect(sheet);
@@ -1447,7 +1447,7 @@ void main() {
 
     testWidgets('wide: the editing toolbar floats over the viewer',
         (tester) async {
-      // Above the breakpoint the toolbar is transparent floating cards —
+      // Above the breakpoint the toolbar is transparent floating cards -
       // it sits over the bottom of the page (Acrobat/Bluebeam-style).
       await pump(tester, PdfEditorView(bytes: buildMultiPagePdf(2)));
 
