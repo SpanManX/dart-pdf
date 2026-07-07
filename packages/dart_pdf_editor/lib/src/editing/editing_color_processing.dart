@@ -50,6 +50,7 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
   var _fill = true;
   var _stroke = true;
   var _replaceTransparent = false;
+  var _applying = false;
 
   @override
   void initState() {
@@ -225,8 +226,11 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
     });
   }
 
-  void _apply() {
-    final count = widget.controller.replaceDocumentColors(
+  Future<void> _apply() async {
+    if (_applying) return;
+    setState(() => _applying = true);
+    await SchedulerBinding.instance.endOfFrame;
+    final count = await widget.controller.replaceDocumentColorsAsync(
       pages: _targetPages,
       findColors: _findColors,
       replace: _replaceTransparent ? null : _replace,
@@ -235,135 +239,158 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
       stroke: _stroke,
       transparent: _replaceTransparent,
     );
+    if (!mounted) return;
     Navigator.of(context).pop(count);
   }
 
   @override
   Widget build(BuildContext context) {
     final selectedCount = widget.controller.selectedPageCount;
-    final canApply = (_fill || _stroke) && !_documentColorsLoading;
-    return AlertDialog(
-      title: const Text('Color processing'),
-      content: SizedBox(
-        width: 360,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _ColorRow(
-                key: const ValueKey('pdf-color-process-find'),
-                label: 'Find',
-                color: _find,
-                valueText: _findValueText,
-                pickerKey: const ValueKey('pdf-color-process-find-picker'),
-                onTap: _pickFind,
-              ),
-              const SizedBox(height: 10),
-              _DocumentColors(
-                colors: _documentColors,
-                selectedRgbs: _selectedDocumentColorRgbs,
-                loading: _documentColorsLoading,
-                progress: _documentColorProgress,
-                total: _documentColorTotal,
-                onSelected: _toggleDocumentColor,
-              ),
-              const SizedBox(height: 8),
-              _ColorRow(
-                key: const ValueKey('pdf-color-process-replace'),
-                label: 'Replace',
-                color: _replace,
-                transparent: _replaceTransparent,
-                enabled: !_replaceTransparent,
-                pickerKey: const ValueKey('pdf-color-process-replace-picker'),
-                onTap: _pickReplace,
-              ),
-              CheckboxListTile(
-                key: const ValueKey('pdf-color-process-transparent'),
-                value: _replaceTransparent,
-                onChanged: (value) =>
-                    setState(() => _replaceTransparent = value ?? false),
-                title: const Text('Replace with transparent'),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  const Expanded(child: Text('Tolerance')),
-                  Text('$_tolerance'),
-                ],
-              ),
-              Slider(
-                key: const ValueKey('pdf-color-process-tolerance'),
-                min: 0,
-                max: 255,
-                divisions: 255,
-                value: _tolerance.toDouble(),
-                label: '$_tolerance',
-                onChanged: (value) =>
-                    setState(() => _tolerance = value.round()),
-              ),
-              const SizedBox(height: 4),
-              RadioGroup<bool>(
-                groupValue: _selectedPages,
-                onChanged: (value) {
-                  if (value == null) return;
-                  _setSelectedPages(value);
-                },
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+    final canApply =
+        (_fill || _stroke) && !_documentColorsLoading && !_applying;
+    return PopScope(
+      canPop: !_applying,
+      child: AlertDialog(
+        title: const Text('Color processing'),
+        content: SizedBox(
+          width: 360,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ColorRow(
+                  key: const ValueKey('pdf-color-process-find'),
+                  label: 'Find',
+                  color: _find,
+                  valueText: _findValueText,
+                  pickerKey: const ValueKey('pdf-color-process-find-picker'),
+                  onTap: _pickFind,
+                  enabled: !_applying,
+                ),
+                const SizedBox(height: 10),
+                _DocumentColors(
+                  colors: _documentColors,
+                  selectedRgbs: _selectedDocumentColorRgbs,
+                  loading: _documentColorsLoading,
+                  progress: _documentColorProgress,
+                  total: _documentColorTotal,
+                  onSelected: _applying ? (_) {} : _toggleDocumentColor,
+                ),
+                const SizedBox(height: 8),
+                _ColorRow(
+                  key: const ValueKey('pdf-color-process-replace'),
+                  label: 'Replace',
+                  color: _replace,
+                  transparent: _replaceTransparent,
+                  enabled: !_replaceTransparent && !_applying,
+                  pickerKey: const ValueKey('pdf-color-process-replace-picker'),
+                  onTap: _pickReplace,
+                ),
+                CheckboxListTile(
+                  key: const ValueKey('pdf-color-process-transparent'),
+                  value: _replaceTransparent,
+                  onChanged: _applying
+                      ? null
+                      : (value) =>
+                          setState(() => _replaceTransparent = value ?? false),
+                  title: const Text('Replace with transparent'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 18),
+                Row(
                   children: [
-                    RadioListTile<bool>(
-                      key: const ValueKey('pdf-color-process-selected-pages'),
-                      value: true,
-                      enabled: selectedCount > 0,
-                      title: Text('Selected pages ($selectedCount)'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    const RadioListTile<bool>(
-                      key: ValueKey('pdf-color-process-whole-document'),
-                      value: false,
-                      title: Text('Whole document'),
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
+                    const Expanded(child: Text('Tolerance')),
+                    Text('$_tolerance'),
                   ],
                 ),
-              ),
-              const SizedBox(height: 4),
-              CheckboxListTile(
-                key: const ValueKey('pdf-color-process-fill'),
-                value: _fill,
-                onChanged: (value) => _setFill(value ?? false),
-                title: const Text('Fill colors'),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-              CheckboxListTile(
-                key: const ValueKey('pdf-color-process-stroke'),
-                value: _stroke,
-                onChanged: (value) => _setStroke(value ?? false),
-                title: const Text('Stroke colors'),
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ],
+                Slider(
+                  key: const ValueKey('pdf-color-process-tolerance'),
+                  min: 0,
+                  max: 255,
+                  divisions: 255,
+                  value: _tolerance.toDouble(),
+                  label: '$_tolerance',
+                  onChanged: _applying
+                      ? null
+                      : (value) => setState(() => _tolerance = value.round()),
+                ),
+                const SizedBox(height: 4),
+                RadioGroup<bool>(
+                  groupValue: _selectedPages,
+                  onChanged: (value) {
+                    if (_applying || value == null) return;
+                    _setSelectedPages(value);
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      RadioListTile<bool>(
+                        key: const ValueKey('pdf-color-process-selected-pages'),
+                        value: true,
+                        enabled: selectedCount > 0 && !_applying,
+                        title: Text('Selected pages ($selectedCount)'),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      RadioListTile<bool>(
+                        key: const ValueKey('pdf-color-process-whole-document'),
+                        value: false,
+                        enabled: !_applying,
+                        title: const Text('Whole document'),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                CheckboxListTile(
+                  key: const ValueKey('pdf-color-process-fill'),
+                  value: _fill,
+                  onChanged:
+                      _applying ? null : (value) => _setFill(value ?? false),
+                  title: const Text('Fill colors'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                CheckboxListTile(
+                  key: const ValueKey('pdf-color-process-stroke'),
+                  value: _stroke,
+                  onChanged:
+                      _applying ? null : (value) => _setStroke(value ?? false),
+                  title: const Text('Stroke colors'),
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+                if (_applying) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(
+                    key: ValueKey('pdf-color-process-apply-progress'),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Applying color changes…',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _applying ? null : () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('pdf-color-process-apply'),
+            onPressed: canApply ? () => unawaited(_apply()) : null,
+            child: const Text('Apply'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          key: const ValueKey('pdf-color-process-apply'),
-          onPressed: canApply ? _apply : null,
-          child: const Text('Apply'),
-        ),
-      ],
     );
   }
 }

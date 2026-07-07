@@ -470,6 +470,45 @@ void main() {
       await tester.pump(const Duration(seconds: 2)); // drain tile renders
     });
 
+    testWidgets('hover page controls do not shift thumbnail strip tiles',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final editing = PdfEditingController(buildMultiPagePdf(5));
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Row(children: [
+            PdfThumbnailSidebar(controller: editing, viewerController: viewer),
+            const Expanded(child: SizedBox()),
+          ]),
+        ),
+      ));
+      await tester.pump();
+
+      final firstTile = find.byKey(const ValueKey('pdf-thumbnail-tile-chip-0'));
+      final secondTile =
+          find.byKey(const ValueKey('pdf-thumbnail-tile-chip-1'));
+      final beforeFirstHeight = tester.getSize(firstTile).height;
+      final beforeSecondTop = tester.getTopLeft(secondTile).dy;
+
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(firstTile));
+      await tester.pump();
+
+      expect(
+          find.byKey(const ValueKey('pdf-thumbnail-rotate-0')), findsOneWidget);
+      expect(tester.getSize(firstTile).height, beforeFirstHeight);
+      expect(tester.getTopLeft(secondTile).dy, beforeSecondTop);
+      await tester.pump(const Duration(seconds: 2)); // drain tile renders
+    });
+
     testWidgets('arrow keys navigate the thumbnail strip selection',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1400);

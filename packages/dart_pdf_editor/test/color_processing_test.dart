@@ -42,6 +42,19 @@ Uint8List _pdf(List<String> pageContents) {
 String _content(PdfEditingController controller, int page) =>
     latin1.decode(controller.document.page(page).contentBytes());
 
+Future<void> _waitForColorProcessing(
+  WidgetTester tester,
+  bool Function() isDone,
+) async {
+  await tester.runAsync(() async {
+    for (var i = 0; i < 100; i++) {
+      if (isDone()) return;
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+  });
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -108,6 +121,27 @@ void main() {
     expect(content, isNot(contains('0 1 0 rg')));
   });
 
+  test('replaceDocumentColorsAsync commits one undoable revision', () async {
+    final controller = PdfEditingController(_pdf([
+      '1 0 0 rg 0 0 10 10 re f',
+      '1 0 0 rg 0 0 10 10 re f',
+    ]));
+    addTearDown(controller.dispose);
+
+    final count = await controller.replaceDocumentColorsAsync(
+      find: const Color(0xFFFF0000),
+      replace: const Color(0xFF0000FF),
+    );
+
+    expect(count, 2);
+    expect(_content(controller, 0), contains('0 0 1 rg'));
+    expect(_content(controller, 1), contains('0 0 1 rg'));
+
+    controller.undo();
+    expect(_content(controller, 0), contains('1 0 0 rg'));
+    expect(_content(controller, 1), contains('1 0 0 rg'));
+  });
+
   testWidgets('PdfEditorView exposes the color processing dialog',
       (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
@@ -148,7 +182,11 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('pdf-color-process-apply')),
         kind: PointerDeviceKind.mouse);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await _waitForColorProcessing(
+      tester,
+      () => _content(controller, 0).contains('0 0 1 rg'),
+    );
 
     expect(_content(controller, 0), contains('0 0 1 rg'));
 
@@ -201,7 +239,11 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('pdf-color-process-apply')),
         kind: PointerDeviceKind.mouse);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await _waitForColorProcessing(
+      tester,
+      () => RegExp(r'0 0 1 rg').allMatches(_content(controller, 0)).length == 3,
+    );
 
     final content = _content(controller, 0);
     expect(RegExp(r'0 0 1 rg').allMatches(content), hasLength(3));
@@ -309,7 +351,11 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('pdf-color-process-apply')),
         kind: PointerDeviceKind.mouse);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await _waitForColorProcessing(
+      tester,
+      () => _content(controller, 0).contains('n\n'),
+    );
 
     expect(_content(controller, 0), contains('n\n'));
 

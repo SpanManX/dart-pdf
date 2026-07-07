@@ -20,6 +20,31 @@ import 'thumbnail_cache.dart';
 PdfEmbeddableImage _decodeEmbeddableImage(Uint8List bytes) =>
     PdfEmbeddableImage.decode(bytes);
 
+Map<String, Object?> _replaceDocumentColorsOnWorker(
+    Map<String, Object?> message) {
+  final document = PdfDocument.open(
+    message['bytes']! as Uint8List,
+    password: message['password']! as String,
+  );
+  final editor = PdfEditor(document);
+  final count = editor.replaceColorsOnPages(
+    (message['pages']! as List).cast<int>(),
+    finds: (message['finds']! as List).cast<int>(),
+    replace: message['replace']! as int,
+    tolerance: message['tolerance']! as int,
+    fill: message['fill']! as bool,
+    stroke: message['stroke']! as bool,
+    transparent: message['transparent']! as bool,
+  );
+  if (count == 0 || !editor.hasChanges) {
+    return const {'count': 0};
+  }
+  return {
+    'count': count,
+    'bytes': editor.save(),
+  };
+}
+
 Map<String, String> _normalizeStampTemplateValues(Map<String, String> values) {
   final normalized = <String, String>{};
   for (final entry in values.entries) {
@@ -445,6 +470,21 @@ class PdfEditingController extends ChangeNotifier {
     if (!editor.hasChanges) return false;
     final saved = editor.save();
     final beforeLength = _revisions[_cursor];
+    _commitSavedRevision(
+      saved,
+      beforeLength: beforeLength,
+      pages: pages,
+      contentPages: contentPages,
+    );
+    return true;
+  }
+
+  void _commitSavedRevision(
+    Uint8List saved, {
+    required int beforeLength,
+    Iterable<int>? pages,
+    Iterable<int>? contentPages,
+  }) {
     final touched = pages == null ? null : Set<int>.unmodifiable(pages);
     final contentTouched =
         contentPages == null ? touched : Set<int>.unmodifiable(contentPages);
@@ -472,7 +512,6 @@ class PdfEditingController extends ChangeNotifier {
     _invalidateElements();
     _emitAnnotationChanges(beforeLength, touched);
     notifyListeners();
-    return true;
   }
 
   // ---------------------------------------------------------------------
@@ -2807,6 +2846,70 @@ class PdfEditingController extends ChangeNotifier {
       );
     }, pages: targets);
     return changed ? count : 0;
+  }
+
+  /// Background version of [replaceDocumentColors].
+  ///
+  /// The replacement work runs against a reopened copy of the current bytes in
+  /// a background worker where Flutter supports one, then commits the returned
+  /// file as one undoable revision. This keeps large whole-document jobs from
+  /// blocking pointer/paint events in the UI isolate on desktop/mobile. If
+  /// another edit lands before the worker returns, the stale result is ignored
+  /// and zero is returned.
+  Future<int> replaceDocumentColorsAsync({
+    Color? find,
+    Iterable<Color>? findColors,
+    Color? replace,
+    Iterable<int>? pages,
+    int tolerance = 0,
+    bool fill = true,
+    bool stroke = true,
+    bool transparent = false,
+  }) async {
+    final targets = (pages ??
+            Iterable<int>.generate(_document.pageCount, (index) => index))
+        .where((index) => index >= 0 && index < _document.pageCount)
+        .toSet()
+        .toList()
+      ..sort();
+    if (targets.isEmpty || (!fill && !stroke)) return 0;
+    final finds = {
+      if (find != null) find.toARGB32() & 0xFFFFFF,
+      if (findColors != null)
+        for (final color in findColors) color.toARGB32() & 0xFFFFFF,
+    }.toList()
+      ..sort();
+    if (finds.isEmpty) return 0;
+    if (!transparent && replace == null) {
+      throw ArgumentError.notNull('replace');
+    }
+
+    final beforeCursor = _cursor;
+    final beforeLength = _revisions[_cursor];
+    final result = await compute<Map<String, Object?>, Map<String, Object?>>(
+      _replaceDocumentColorsOnWorker,
+      {
+        'bytes': bytes,
+        'password': _password,
+        'pages': targets,
+        'finds': finds,
+        'replace': replace?.toARGB32() ?? 0,
+        'tolerance': tolerance,
+        'fill': fill,
+        'stroke': stroke,
+        'transparent': transparent,
+      },
+      debugLabel: 'PDF color processing',
+    );
+    final count = result['count'] as int? ?? 0;
+    final saved = result['bytes'] as Uint8List?;
+    if (count == 0 || saved == null) return 0;
+    if (_cursor != beforeCursor || _revisions[_cursor] != beforeLength) {
+      return 0;
+    }
+
+    _commitSavedRevision(saved, beforeLength: beforeLength, pages: targets);
+    return count;
   }
 
   /// Replaces colors on the thumbnail-strip page selection. Returns zero

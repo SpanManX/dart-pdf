@@ -424,6 +424,9 @@ class _PdfSearchResultsPanelState extends State<PdfSearchResultsPanel> {
     final onLeftEdge =
         !widget.bottomSheet && widget.side == PdfSidebarSide.left;
     final barInset = showGrip && onLeftEdge;
+    final dividerStartIndent =
+        showGrip && !onLeftEdge ? PdfSidebarResizeGrip.width : 0.0;
+    final dividerEndIndent = barInset ? PdfSidebarResizeGrip.width : 0.0;
     final content = Material(
       color: Theme.of(context).colorScheme.surfaceContainerLow,
       child: ListenableBuilder(
@@ -456,7 +459,11 @@ class _PdfSearchResultsPanelState extends State<PdfSearchResultsPanel> {
                     controller: controller, preferences: widget.preferences),
               ),
             ),
-            const Divider(height: 1),
+            Divider(
+              height: 1,
+              indent: dividerStartIndent,
+              endIndent: dividerEndIndent,
+            ),
           ],
           Expanded(child: _body(context, barInset: barInset)),
         ]),

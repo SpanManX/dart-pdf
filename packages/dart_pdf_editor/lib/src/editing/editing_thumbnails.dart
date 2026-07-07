@@ -1804,62 +1804,66 @@ class _PageTileState extends State<_PageTile> {
                 );
               },
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  // the label echoes the selection so the cue carries into
-                  // the footer row, below the framed thumbnail
-                  child: Text('Page ${pageIndex + 1}',
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: selected ? scheme.primary : null,
-                            fontWeight: selected ? FontWeight.w600 : null,
-                          )),
-                ),
-                // No Tooltip on these buttons: a Tooltip is an OverlayPortal,
-                // and an OverlayPortal inside a ReorderableListView item
-                // crashes when the item is reactivated during a layout pass
-                // (the strip's bottom-sheet LayoutBuilder, or a reorder) - it
-                // mutates the overlay's RenderObject mid-layout. A Semantics
-                // label keeps the buttons accessible without one.
-                if (allowPageEditing)
-                  Visibility(
-                    visible: showPageActions,
-                    child: Semantics(
-                      label: 'Rotate page right',
-                      button: true,
-                      child: IconButton(
-                        key: ValueKey('pdf-thumbnail-rotate-$pageIndex'),
-                        icon: const Icon(Icons.rotate_right, size: 16),
-                        style: IconButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: const Size(28, 28),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            SizedBox(
+              height: 28,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    // the label echoes the selection so the cue carries into
+                    // the footer row, below the framed thumbnail
+                    child: Text('Page ${pageIndex + 1}',
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: selected ? scheme.primary : null,
+                                  fontWeight: selected ? FontWeight.w600 : null,
+                                )),
+                  ),
+                  // No Tooltip on these buttons: a Tooltip is an OverlayPortal,
+                  // and an OverlayPortal inside a ReorderableListView item
+                  // crashes when the item is reactivated during a layout pass
+                  // (the strip's bottom-sheet LayoutBuilder, or a reorder) - it
+                  // mutates the overlay's RenderObject mid-layout. A Semantics
+                  // label keeps the buttons accessible without one.
+                  if (allowPageEditing)
+                    Visibility(
+                      visible: showPageActions,
+                      child: Semantics(
+                        label: 'Rotate page right',
+                        button: true,
+                        child: IconButton(
+                          key: ValueKey('pdf-thumbnail-rotate-$pageIndex'),
+                          icon: const Icon(Icons.rotate_right, size: 16),
+                          style: IconButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(28, 28),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () =>
+                              controller.rotatePages([pageIndex], 90),
                         ),
-                        onPressed: () =>
-                            controller.rotatePages([pageIndex], 90),
                       ),
                     ),
-                  ),
-                if (allowPageEditing && document.pageCount > 1)
-                  Visibility(
-                    visible: showPageActions,
-                    child: Semantics(
-                      label: 'Delete page',
-                      button: true,
-                      child: IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 16),
-                        style: IconButton.styleFrom(
-                          padding: EdgeInsets.zero,
-                          minimumSize: const Size(28, 28),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  if (allowPageEditing && document.pageCount > 1)
+                    Visibility(
+                      visible: showPageActions,
+                      child: Semantics(
+                        label: 'Delete page',
+                        button: true,
+                        child: IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 16),
+                          style: IconButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(28, 28),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          onPressed: () => controller.removePage(pageIndex),
                         ),
-                        onPressed: () => controller.removePage(pageIndex),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
