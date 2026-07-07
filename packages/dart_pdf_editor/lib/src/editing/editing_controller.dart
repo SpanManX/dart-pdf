@@ -6,12 +6,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf_document/pdf_document.dart';
 
+import '../page_geometry.dart';
 import '../renderer.dart';
 import 'editing_measure.dart';
 import 'editing_preferences.dart';
 import 'line_style.dart';
 import 'editing_signature.dart';
 import 'editing_stamps.dart';
+import 'text_prompt.dart';
 import 'thumbnail_cache.dart';
 
 PdfEmbeddableImage _decodeEmbeddableImage(Uint8List bytes) =>
@@ -2574,6 +2576,55 @@ class PdfEditingController extends ChangeNotifier {
     ];
   }
 
+  /// Asynchronously scans page-content colors, yielding between pages.
+  ///
+  /// This is intended for UI previews over large documents: [yieldAfterPage]
+  /// gives the caller a chance to paint progress between pages, [onProgress]
+  /// reports completed pages, and [isCancelled] lets newer scans supersede
+  /// older ones.
+  Future<List<Color>> documentContentColorsAsync({
+    Iterable<int>? pages,
+    bool fill = true,
+    bool stroke = true,
+    bool Function()? isCancelled,
+    void Function(int completed, int total)? onProgress,
+    Future<void> Function()? yieldAfterPage,
+  }) async {
+    final targets = (pages ??
+            Iterable<int>.generate(_document.pageCount, (index) => index))
+        .where((index) => index >= 0 && index < _document.pageCount)
+        .toSet()
+        .toList()
+      ..sort();
+    if (targets.isEmpty || (!fill && !stroke)) return const [];
+    final editor = PdfEditor(_document);
+    final uses = <int, List<int>>{};
+    for (var i = 0; i < targets.length; i++) {
+      if (isCancelled?.call() ?? false) return const [];
+      final pageColors =
+          editor.contentColors(targets[i], fill: fill, stroke: stroke);
+      for (final color in pageColors) {
+        final counts = uses.putIfAbsent(color.rgb, () => [0, 0]);
+        counts[0] += color.fillUses;
+        counts[1] += color.strokeUses;
+      }
+      onProgress?.call(i + 1, targets.length);
+      if (i < targets.length - 1 && yieldAfterPage != null) {
+        await yieldAfterPage();
+      }
+    }
+    final entries = uses.entries.toList()
+      ..sort((a, b) {
+        final aUses = a.value[0] + a.value[1];
+        final bUses = b.value[0] + b.value[1];
+        final byUses = bUses.compareTo(aUses);
+        return byUses != 0 ? byUses : a.key.compareTo(b.key);
+      });
+    return [
+      for (final entry in entries) Color(0xFF000000 | entry.key),
+    ];
+  }
+
   /// Replaces matching page-content colors across [pages], or the whole
   /// document when [pages] is null. Returns the number of color-setting
   /// operators rewritten, or the number of paint sides suppressed when
@@ -4325,6 +4376,11 @@ class PdfEditingController extends ChangeNotifier {
     return _isReplaceableImageElement(selectedElement);
   }
 
+  /// Whether the selected content element can be exported as a PNG image.
+  bool get canExportSelectedElementImage {
+    return _isReplaceableImageElement(selectedElement);
+  }
+
   bool _isReplaceableImageElement(PdfContentElement? element) {
     return element?.bounds != null &&
         (element?.kind == PdfElementKind.image ||
@@ -4468,6 +4524,87 @@ class PdfEditingController extends ChangeNotifier {
               pageRotation: _page(selected.$1).rotation,
               author: author),
         pages: [selected.$1]);
+  }
+
+  /// Renders the selected page-content image element to a standalone PNG.
+  ///
+  /// This exports the selected element's page bounds as they render in the
+  /// document. Image pixels are sampled from the clean page content only:
+  /// annotations are omitted. Returns null when the current selection is not an
+  /// image-like content element or the crop is degenerate.
+  Future<PdfSelectedContentImage?> exportSelectedElementImage({
+    double dpi = 150,
+    Color pageColor = const Color(0xFFFFFFFF),
+  }) async {
+    if (dpi <= 0) throw ArgumentError.value(dpi, 'dpi', 'must be positive');
+    final selected = _selectedElement;
+    final element = selectedElement;
+    final bounds = element?.bounds;
+    if (selected == null ||
+        element == null ||
+        bounds == null ||
+        !_isReplaceableImageElement(element) ||
+        bounds.width <= 0 ||
+        bounds.height <= 0) {
+      return null;
+    }
+
+    final document = _document;
+    final page = _page(selected.$1);
+    final size = PdfPageRenderer.pageSize(page, rotation: page.rotation);
+    final geometry = PdfPageGeometry(
+      cropBox: page.cropBox,
+      rotation: page.rotation,
+      viewSize: size,
+    );
+    final pageRegion = Offset.zero & size;
+    final region = geometry.toViewRect(bounds).intersect(pageRegion);
+    if (region.width <= 0 || region.height <= 0) return null;
+
+    final nativeRatio = _nativeImagePixelRatio(element, region);
+    final requestedRatio = math.max(dpi / 72, nativeRatio);
+    final maxSideRatio = 8192 / math.max(region.width, region.height);
+    final pixelRatio =
+        requestedRatio.clamp(1.0, math.max(1.0, maxSideRatio)).toDouble();
+
+    final picture = await PdfPageRenderer.renderPicture(
+      page,
+      pageColor: pageColor,
+      annotations: false,
+      rotation: page.rotation,
+    );
+    ui.Image? image;
+    try {
+      image = await PdfPageRenderer.rasterizeRegion(
+        picture,
+        region,
+        pixelRatio,
+      );
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null ||
+          !identical(_document, document) ||
+          _selectedElement != selected) {
+        return null;
+      }
+      return PdfSelectedContentImage(
+        pageIndex: selected.$1,
+        pageRect: bounds,
+        pngBytes: Uint8List.fromList(
+            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes)),
+      );
+    } finally {
+      image?.dispose();
+      picture.dispose();
+    }
+  }
+
+  double _nativeImagePixelRatio(PdfContentElement element, Rect region) {
+    final width = element.imageWidth;
+    final height = element.imageHeight;
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return 1;
+    }
+    return math.max(width / region.width, height / region.height);
   }
 
   /// Edits the selected text element and re-flows its whole paragraph via

@@ -879,6 +879,17 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
+  Future<void> _exportSelectedContentImage(
+    BuildContext exportContext,
+    DocumentTab tab,
+    PdfSelectedContentImage image,
+  ) async {
+    final name = selectedContentImageFileName(tab.title, image.pageIndex + 1);
+    final result = await saveImageBytesAs(
+        exportContext, image.pngBytes, name, 'image/png');
+    if (mounted && result.message != null) _toast(result.message!);
+  }
+
   Future<void> _exportCustomStamps(
     BuildContext exportContext,
     List<PdfCustomStamp> stamps,
@@ -1121,6 +1132,8 @@ class _EditorScreenState extends State<EditorScreen>
       imagePicker: (context) => pickImageBytes(),
       systemImagePasteProvider: (context) =>
           (widget.imageClipboardReader ?? readImageFromClipboard)(),
+      onExportSelectedContentImage: (context, image) =>
+          _exportSelectedContentImage(context, tab, image),
       onExportCustomStamps: _exportCustomStamps,
       onImportCustomStamps: _importCustomStamps,
       // The Snapshot tool keeps a vector copy on the in-app clipboard for

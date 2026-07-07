@@ -87,6 +87,7 @@ class PdfEditingToolbar extends StatefulWidget {
     this.onSave,
     this.textPrompt = showPdfTextPrompt,
     this.imagePicker,
+    this.onExportSelectedContentImage,
     this.fontPicker,
     this.onExportCustomStamps,
     this.onImportCustomStamps,
@@ -119,6 +120,10 @@ class PdfEditingToolbar extends StatefulWidget {
 
   /// How selected page-content images are replaced from the element strip.
   final PdfImagePicker? imagePicker;
+
+  /// How selected page-content images are exported from the element strip.
+  /// When null, the Save image button is hidden.
+  final PdfSelectedContentImageHandler? onExportSelectedContentImage;
 
   /// How the font menu's "Load font…" entry obtains a custom `.ttf`/`.otf`
   /// file. When null, only the standard families and bundled fonts are
@@ -260,6 +265,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   double? _dragOpacity;
 
   bool _replacingElementImage = false;
+  bool _exportingElementImage = false;
 
   bool get _showColorProcessingAction =>
       widget.showColorProcessing &&
@@ -618,6 +624,19 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
       }
     } finally {
       if (mounted) setState(() => _replacingElementImage = false);
+    }
+  }
+
+  Future<void> _exportElementImage(BuildContext context) async {
+    final handler = widget.onExportSelectedContentImage;
+    if (handler == null || _exportingElementImage) return;
+    setState(() => _exportingElementImage = true);
+    try {
+      final image = await controller.exportSelectedElementImage();
+      if (!context.mounted || image == null) return;
+      await handler(context, image);
+    } finally {
+      if (mounted) setState(() => _exportingElementImage = false);
     }
   }
 
@@ -1324,6 +1343,21 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         ),
       ],
       if (controller.canReplaceSelectedElementImage &&
+          widget.onExportSelectedContentImage != null)
+        IconButton(
+          key: const ValueKey('pdf-save-element-image'),
+          icon: _exportingElementImage
+              ? const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.download_outlined),
+          tooltip: 'Save image',
+          onPressed: _exportingElementImage
+              ? null
+              : () => _exportElementImage(context),
+        ),
+      if (controller.canReplaceSelectedElementImage &&
           widget.imagePicker != null)
         IconButton(
           key: const ValueKey('pdf-replace-element-image'),
@@ -1772,6 +1806,22 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
             onPressed: () => _reflowElementText(context),
           ),
         ],
+        if (controller.canReplaceSelectedElementImage &&
+            widget.onExportSelectedContentImage != null)
+          IconButton(
+            key: const ValueKey('pdf-save-element-image'),
+            icon: _exportingElementImage
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download_outlined),
+            tooltip: 'Save image',
+            visualDensity: VisualDensity.compact,
+            onPressed: _exportingElementImage
+                ? null
+                : () => _exportElementImage(context),
+          ),
         if (controller.canReplaceSelectedElementImage &&
             widget.imagePicker != null)
           IconButton(

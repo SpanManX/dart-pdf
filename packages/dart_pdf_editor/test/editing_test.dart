@@ -346,6 +346,26 @@ void main() {
       expect(editing.elementsOn(0).elements.single.kind, PdfElementKind.image);
     });
 
+    testWidgets('exportSelectedElementImage renders the image as PNG',
+        (tester) async {
+      final editing = PdfEditingController(PdfImageDocument.fromImageBytes(
+        [_tinyPng],
+        pageSize: const PdfPageSize(100, 100),
+        fit: PdfImageFit.fill,
+      ));
+      addTearDown(editing.dispose);
+
+      expect(editing.selectElementAt(0, 50, 50), isTrue);
+      final exported = await tester
+          .runAsync(() => editing.exportSelectedElementImage(dpi: 72));
+
+      expect(exported, isNotNull);
+      expect(exported!.pageIndex, 0);
+      expect(exported.pageRect.left, closeTo(0, 0.01));
+      expect(exported.pageRect.right, closeTo(100, 0.01));
+      expect(exported.pngBytes.take(8), [137, 80, 78, 71, 13, 10, 26, 10]);
+    });
+
     test('replaceSelectedElementImageAsync uses the worker-backed path',
         () async {
       final editing = PdfEditingController(PdfImageDocument.fromImageBytes(
@@ -359,6 +379,41 @@ void main() {
       expect(await editing.replaceSelectedElementImageAsync(_tinyPng), isTrue);
       expect(editing.elementsOn(0).elements, isEmpty);
       expect(editing.document.page(0).annotations.single.subtype, 'Stamp');
+    });
+
+    testWidgets('content toolbar exposes save for a selected image',
+        (tester) async {
+      final editing = PdfEditingController(PdfImageDocument.fromImageBytes(
+        [_tinyPng],
+        pageSize: const PdfPageSize(100, 100),
+        fit: PdfImageFit.fill,
+      ));
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+      editing
+        ..tool = PdfEditTool.content
+        ..selectElementAt(0, 50, 50);
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          bottomNavigationBar: PdfEditingToolbar(
+            controller: editing,
+            viewerController: viewer,
+            onExportSelectedContentImage: (context, image) async {},
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      expect(
+          find.byKey(const ValueKey('pdf-save-element-image')), findsOneWidget);
+      expect(
+          tester
+              .widget<IconButton>(
+                  find.byKey(const ValueKey('pdf-save-element-image')))
+              .onPressed,
+          isNotNull);
     });
 
     test('replaceSelectedElementText rewrites the run in place', () {

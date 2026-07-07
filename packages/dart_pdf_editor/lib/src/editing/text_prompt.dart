@@ -21,8 +21,33 @@ typedef PdfImagePicker = Future<Uint8List?> Function(BuildContext context);
 typedef PdfSystemImagePasteProvider = Future<Uint8List?> Function(
     BuildContext context);
 
+/// A selected page-content image exported by the Content tool.
+class PdfSelectedContentImage {
+  const PdfSelectedContentImage({
+    required this.pageIndex,
+    required this.pageRect,
+    required this.pngBytes,
+  });
+
+  /// The page the selected content image lives on.
+  final int pageIndex;
+
+  /// The selected image's page-space bounds (points, origin bottom-left).
+  final PdfRect pageRect;
+
+  /// The selected image rendered as a complete PNG file.
+  final Uint8List pngBytes;
+}
+
+/// Receives a selected content image from the Content tool — typically to
+/// save, share, or download it. Return when the host export is complete.
+typedef PdfSelectedContentImageHandler = Future<void> Function(
+  BuildContext context,
+  PdfSelectedContentImage image,
+);
+
 /// Supplies a TrueType (`.ttf`) or OpenType (`.otf`) font file the font
-/// menu's "Load font…" entry embeds for new text - typically a file
+/// menu's "Load font…" entry embeds for new text — typically a file
 /// picker. Return null to cancel ([PdfEditingController.setCustomFont]).
 typedef PdfFontPicker = Future<Uint8List?> Function(BuildContext context);
 
