@@ -402,8 +402,12 @@ class _ColorRow extends StatelessWidget {
             SizedBox(width: 68, child: Text(label)),
             _SwatchBox(color: color, transparent: transparent),
             const SizedBox(width: 10),
-            Text(valueText ?? (transparent ? 'Transparent' : hex)),
-            const Spacer(),
+            Expanded(
+              child: Text(
+                valueText ?? (transparent ? 'Transparent' : hex),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             IconButton(
               key: pickerKey,
               onPressed: enabled ? onTap : null,
