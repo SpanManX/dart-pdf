@@ -410,7 +410,11 @@ void main() {
       expect(find.byKey(const ValueKey('pdf-search-field')), findsNothing);
       expect(find.byKey(const ValueKey('pdf-shell-zoom-menu')), findsNothing);
 
-      // tapping a page in the grid returns to the page view
+      // single click selects; the second click opens the page and returns to
+      // the page view
+      await tester.tap(find.text('Page 2'));
+      await tester.pump();
+      expect(prefs.showThumbnailView, isTrue);
       await tester.tap(find.text('Page 2'));
       await tester.pump();
       expect(prefs.showThumbnailView, isFalse);
