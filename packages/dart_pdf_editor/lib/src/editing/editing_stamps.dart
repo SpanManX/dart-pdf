@@ -482,7 +482,7 @@ class _PdfStampEditorDialogState extends State<PdfStampEditorDialog> {
   void _setTemplateSize({double? width, double? height}) {
     final nextWidth = (width ?? _templateWidth).clamp(80.0, 640.0).toDouble();
     final nextHeight =
-        (height ?? _templateHeight).clamp(32.0, 360.0).toDouble();
+        (height ?? _templateHeight).clamp(32.0, 640.0).toDouble();
     if (nextWidth == _templateWidth && nextHeight == _templateHeight) return;
     final sx = nextWidth / _templateWidth;
     final sy = nextHeight / _templateHeight;
@@ -960,10 +960,14 @@ class PdfStampPreview extends StatelessWidget {
                 pdfResolveStampTemplateText(stamp.text, templateValues),
                 stamp.color))
         .resolveText(templateValues);
-    final width = math.min(220.0, math.max(80.0, template.width));
+    const maxWidth = 220.0;
+    const maxHeight = 120.0;
+    final scale =
+        math.min(maxWidth / template.width, maxHeight / template.height);
+    final width = template.width * scale;
     return SizedBox(
       width: width,
-      height: width * template.height / template.width,
+      height: template.height * scale,
       child: _StampTemplateSurface(
         templateSize: Size(template.width, template.height),
         components: template.components,
@@ -1097,23 +1101,30 @@ class _StampTemplateCanvasState extends State<_StampTemplateCanvas> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    const width = 340.0;
+    const maxWidth = 340.0;
+    const maxHeight = 360.0;
+    final scale = math.min(maxWidth / widget.templateSize.width,
+        maxHeight / widget.templateSize.height);
     final size = Size(
-        width, width * widget.templateSize.height / widget.templateSize.width);
-    return SizedBox(
-      width: size.width,
-      height: size.height,
-      child: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: (event) => _start(event.localPosition, size),
-        onPointerMove: (event) => _update(event.localPosition, size),
-        onPointerUp: (_) => _end(),
-        onPointerCancel: (_) => _end(),
-        child: _StampTemplateSurface(
-          templateSize: widget.templateSize,
-          components: widget.components,
-          selectedIndex: widget.selectedIndex,
-          scheme: scheme,
+      widget.templateSize.width * scale,
+      widget.templateSize.height * scale,
+    );
+    return Align(
+      child: SizedBox(
+        width: size.width,
+        height: size.height,
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (event) => _start(event.localPosition, size),
+          onPointerMove: (event) => _update(event.localPosition, size),
+          onPointerUp: (_) => _end(),
+          onPointerCancel: (_) => _end(),
+          child: _StampTemplateSurface(
+            templateSize: widget.templateSize,
+            components: widget.components,
+            selectedIndex: widget.selectedIndex,
+            scheme: scheme,
+          ),
         ),
       ),
     );

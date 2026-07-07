@@ -2156,11 +2156,13 @@ class PdfEditingController extends ChangeNotifier {
     ];
   }
 
-  /// Places [activeStamp] centered on ([x], [y]) in page space,
-  /// [height] points tall and auto-sized from its caption (clamped,
-  /// with the center, so the whole stamp stays on the page). Returns
-  /// false when no stamp is active.
-  bool placeStamp(int pageIndex, double x, double y, {double height = 40}) {
+  /// Places [activeStamp] centered on ([x], [y]) in page space. Text-only
+  /// stamps default to 40 points tall and auto-size from their caption;
+  /// template stamps default to the template's own width/height. Passing
+  /// [height] keeps the old explicit-height behavior for either kind. The
+  /// result is clamped with the center so the whole stamp stays on the page.
+  /// Returns false when no stamp is active.
+  bool placeStamp(int pageIndex, double x, double y, {double? height}) {
     final stamp = _activeStamp;
     if (stamp == null) return false;
     final template = stamp.template;
@@ -2182,7 +2184,7 @@ class PdfEditingController extends ChangeNotifier {
       }, pages: [pageIndex], contentPages: const <int>[]);
     }
     return placeTextStamp(pageIndex, x, y, _resolveStampText(stamp.text),
-        height: height,
+        height: height ?? 40,
         color: stamp.color,
         stampType: stamp.type,
         stampTags: stamp.tags);
@@ -2190,22 +2192,22 @@ class PdfEditingController extends ChangeNotifier {
 
   /// The page-space rect [placeStamp] would use for the current
   /// [activeStamp]. Null when no stamp is active or its template is invalid.
-  PdfRect? stampPlacement(int pageIndex, double x, double y,
-      {double height = 40}) {
+  PdfRect? stampPlacement(int pageIndex, double x, double y, {double? height}) {
     final stamp = _activeStamp;
     if (stamp == null) return null;
     final template = stamp.template;
     return template == null
         ? textStampPlacement(pageIndex, x, y, _resolveStampText(stamp.text),
-            height: height)
+            height: height ?? 40)
         : _stampTemplatePlacement(pageIndex, x, y, template, height: height);
   }
 
   PdfRect? _stampTemplatePlacement(
       int pageIndex, double x, double y, PdfStampTemplate template,
-      {required double height}) {
+      {double? height}) {
     if (!template.isValid) return null;
-    final h = height.clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
+    final h = (height ?? template.height)
+        .clamp(8.0, _visualPageHeight(pageIndex) * 0.9);
     final aspect = template.width / template.height;
     var w = h * aspect;
     final maxW = _visualPageWidth(pageIndex) * 0.9;

@@ -712,6 +712,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// click, centered on the mouse and clamped the same way the commit is.
   Offset? _countCursor;
 
+  /// The stamp tool's hover preview position: the active custom stamp that a
+  /// click will place, centered and clamped exactly like the tap commit.
+  Offset? _stampPreview;
+
   /// The rotate knob's cursor position (hover over the knob, or live
   /// through a rotate drag): Flutter has no rotation cursor, so the
   /// system cursor is hidden here and a small curved-arrow glyph is
@@ -2506,6 +2510,9 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _commitTextEdit();
       return;
     }
+    if (_stampPreview != null) {
+      setState(() => _stampPreview = null);
+    }
     if (_selectMode) {
       _selectPanStart(details);
       return;
@@ -3594,6 +3601,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
           // an active custom stamp drops at its auto-size on tap
           final preview = _activeStampAfterimageAt(details.localPosition);
           if (preview == null) return;
+          if (_stampPreview != null) setState(() => _stampPreview = null);
           await _commitStampWithAfterimage(
               preview, () => _controller.placeStamp(widget.pageIndex, x, y));
         } else {
@@ -3709,6 +3717,19 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         setState(() => _countCursor = event.localPosition);
       }
       cursor = SystemMouseCursors.none;
+    } else if (_tool == PdfEditTool.stamp) {
+      // active custom stamps can be placed by a plain click. Show the
+      // exact auto-sized placement before committing it; when the tool is
+      // in its prompt-for-text fallback there is no text to preview yet.
+      final preview = _controller.activeStamp == null
+          ? null
+          : _activeStampAfterimageAt(event.localPosition);
+      if (preview == null) {
+        if (_stampPreview != null) setState(() => _stampPreview = null);
+      } else if (_stampPreview != event.localPosition) {
+        setState(() => _stampPreview = event.localPosition);
+      }
+      cursor = SystemMouseCursors.precise;
     } else if (_tool == PdfEditTool.signature) {
       // the live preview rides the mouse; a click commits it
       if (_controller.signature != null &&
@@ -3758,6 +3779,9 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     }
     if (_tool != PdfEditTool.count && _countCursor != null) {
       setState(() => _countCursor = null);
+    }
+    if (_tool != PdfEditTool.stamp && _stampPreview != null) {
+      setState(() => _stampPreview = null);
     }
     if (cursor != _cursor) setState(() => _cursor = cursor);
   }
@@ -4425,6 +4449,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                 (_eraserCursor == null || _erasePath.isNotEmpty) &&
                 _penCursor == null &&
                 _countCursor == null &&
+                _stampPreview == null &&
                 (_rotateCursor == null || _rotateStartAngle != null) &&
                 _polyHover == null) {
               return;
@@ -4436,6 +4461,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
               if (_erasePath.isEmpty) _eraserCursor = null;
               _penCursor = null;
               _countCursor = null;
+              _stampPreview = null;
               if (_rotateStartAngle == null) _rotateCursor = null;
               _polyHover = null;
             });
@@ -4549,6 +4575,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                         _tool == PdfEditTool.count && _countCursor != null
                             ? _countPreviewAt(_countCursor!)
                             : null,
+                    stampPreview: _tool == PdfEditTool.stamp &&
+                            _dragStart == null &&
+                            _stampPreview != null
+                        ? _activeStampAfterimageAt(_stampPreview!)
+                        : null,
                     rotateCursor: _rotateCursor,
                     afterGhost: afterGhost,
                     afterShape: _afterShape,
@@ -5042,6 +5073,7 @@ class _EditingPreviewPainter extends CustomPainter {
     this.penCursor,
     this.penOpacity = 1,
     this.countPreview,
+    this.stampPreview,
     this.rotateCursor,
     required this.afterGhost,
     required this.afterShape,
@@ -5174,6 +5206,10 @@ class _EditingPreviewPainter extends CustomPainter {
   /// The count tool's hover preview: the check mark that a click will place,
   /// already clamped to the same page-space rect as the committed annotation.
   final _StampAfterimage? countPreview;
+
+  /// The stamp tool's hover preview: the active custom stamp that a click
+  /// will place, already clamped to the same rect as the committed annotation.
+  final _StampAfterimage? stampPreview;
 
   /// The rotate knob's cursor: a small curved-arrow glyph painted here
   /// (Flutter has no built-in rotation cursor, so the system cursor is
@@ -6023,6 +6059,11 @@ class _EditingPreviewPainter extends CustomPainter {
       _paintStampAfterimage(canvas, count);
     }
 
+    final stamp = stampPreview;
+    if (stamp != null) {
+      _paintStampAfterimage(canvas, stamp);
+    }
+
     // the rotate knob's cursor: a curved arrow (no system rotation cursor)
     final rotate = rotateCursor;
     if (rotate != null) {
@@ -6113,6 +6154,7 @@ class _EditingPreviewPainter extends CustomPainter {
       oldDelegate.penCursor != penCursor ||
       oldDelegate.penOpacity != penOpacity ||
       oldDelegate.countPreview != countPreview ||
+      oldDelegate.stampPreview != stampPreview ||
       oldDelegate.rotateCursor != rotateCursor ||
       oldDelegate.afterGhost != afterGhost ||
       oldDelegate.afterShape != afterShape ||

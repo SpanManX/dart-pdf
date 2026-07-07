@@ -328,10 +328,53 @@ void main() {
       final stamp = editing.document.page(0).annotations.single;
       expect(stamp.subtype, 'Stamp');
       expect(stamp.contents, 'REVIEWED');
-      expect(stamp.rect.height, moreOrLessEquals(40));
-      expect(stamp.rect.width, moreOrLessEquals(100));
+      expect(stamp.rect.height, moreOrLessEquals(96));
+      expect(stamp.rect.width, moreOrLessEquals(240));
       final content = appearanceText(editing);
       expect(content, contains('(REVIEWED) Tj'));
+    });
+
+    test('placeStamp uses a template stamp size, not just its aspect ratio',
+        () {
+      PdfStampTemplate square(double size) => PdfStampTemplate(
+            width: size,
+            height: size,
+            components: [
+              PdfStampTemplateComponent.rectangle(
+                x: 0,
+                y: 0,
+                width: size,
+                height: size,
+                color: 0x2E7D32,
+                strokeWidth: 2,
+              ),
+            ],
+          );
+
+      final small = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp = PdfCustomStamp(
+          text: 'SMALL',
+          color: 0x2E7D32,
+          template: square(220),
+        );
+      final large = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp = PdfCustomStamp(
+          text: 'LARGE',
+          color: 0x2E7D32,
+          template: square(400),
+        );
+
+      expect(small.placeStamp(0, 300, 400), isTrue);
+      expect(large.placeStamp(0, 300, 400), isTrue);
+
+      expect(small.document.page(0).annotations.single.rect.width,
+          moreOrLessEquals(220));
+      expect(small.document.page(0).annotations.single.rect.height,
+          moreOrLessEquals(220));
+      expect(large.document.page(0).annotations.single.rect.width,
+          moreOrLessEquals(400));
+      expect(large.document.page(0).annotations.single.rect.height,
+          moreOrLessEquals(400));
     });
 
     test('placeStamp compiles circle components into the appearance', () {
@@ -515,8 +558,8 @@ void main() {
       final appearance = appearanceText(editing);
       expect(appearance, contains('0.102 0.243 0.549 RG'));
       expect(appearance, contains('1 J'));
-      expect(appearance, contains('1.05 w'));
-      expect(appearance, contains('1.95 w'));
+      expect(appearance, contains('2.1 w'));
+      expect(appearance, contains('3.9 w'));
       expect(appearance, contains(' c'));
       expect(editing.document.page(0).annotations.single.contents, 'Signed');
     });
@@ -814,6 +857,64 @@ void main() {
       expect(editing.document.page(0).annotations.single.contents, 'APPROVED');
     });
 
+    testWidgets('stamp hover previews the active stamp without committing',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final template = PdfStampTemplate.text('PAID', 0x2E7D32);
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..activeStamp =
+            PdfCustomStamp(text: 'PAID', color: 0x2E7D32, template: template)
+        ..tool = PdfEditTool.stamp;
+      addTearDown(editing.dispose);
+
+      final page = editing.document.page(0);
+      final geometry = PdfPageGeometry(
+        cropBox: page.cropBox,
+        rotation: 0,
+        viewSize: const Size(306, 396),
+      );
+      Offset local(double x, double y) => Offset(x * 0.5, (792 - y) * 0.5);
+      await tester.pumpWidget(MaterialApp(
+        home: Material(
+          child: Center(
+            child: SizedBox(
+              width: geometry.viewSize.width,
+              height: geometry.viewSize.height,
+              child: EditingPageOverlay(
+                controller: editing,
+                pageIndex: 0,
+                geometry: geometry,
+                textPrompt: showPdfTextPrompt,
+                rasterCurrent: false,
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final origin = tester.getTopLeft(find.byType(EditingPageOverlay));
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: origin + local(250, 430));
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(origin + local(300, 400));
+      await tester.pump();
+
+      expect(editing.document.page(0).annotations, isEmpty);
+      final preview = overlayPainter(tester).stampPreview;
+      expect(preview, isNotNull);
+      expect(preview.text, 'PAID');
+      expect(preview.template, isNotNull);
+      expect(preview.rect.center.dx, moreOrLessEquals(local(300, 400).dx));
+      expect(preview.rect.center.dy, moreOrLessEquals(local(300, 400).dy));
+      expect(preview.rect.width, moreOrLessEquals(template.width * 0.5));
+      expect(preview.rect.height, moreOrLessEquals(template.height * 0.5));
+
+      await mouse.moveTo(origin + const Offset(-20, -20));
+      await tester.pump();
+      expect(overlayPainter(tester).stampPreview, isNull);
+    });
+
     testWidgets('adding a stamp keeps existing annotations painted',
         (tester) async {
       SharedPreferences.setMockInitialValues({});
@@ -951,10 +1052,18 @@ void main() {
 
       final preview = find.byKey(const ValueKey('pdf-stamp-template-canvas'));
       final textField = find.byKey(const ValueKey('pdf-stamp-text'));
+      final widthField = find.byKey(const ValueKey('pdf-stamp-width'));
+      final heightField = find.byKey(const ValueKey('pdf-stamp-height'));
       expect(preview, findsOneWidget);
       expect(tester.getBottomLeft(preview).dy,
           lessThan(tester.getTopLeft(textField).dy));
 
+      await tester.enterText(widthField, '400');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
+      await tester.enterText(heightField, '400');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pump();
       await tester.enterText(textField, 'PAID');
       await tester.pump();
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
@@ -963,6 +1072,8 @@ void main() {
       expect(saved, isNotNull);
       expect(saved!.text, 'PAID');
       expect(saved!.template, isNotNull);
+      expect(saved!.template!.width, 400);
+      expect(saved!.template!.height, 400);
       expect(
           saved!.template!.components
               .where((c) =>
