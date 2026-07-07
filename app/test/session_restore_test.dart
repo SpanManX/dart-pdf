@@ -68,7 +68,7 @@ void main() {
       );
 
   // The editor never settles (it keeps rasterizing), and restore performs real
-  // file I/O — which only progresses under runAsync. Pump a handful of real
+  // file I/O - which only progresses under runAsync. Pump a handful of real
   // frames so each read can complete and swap its loading placeholder.
   Future<void> pumpEditor(WidgetTester tester) async {
     await tester.runAsync(() async {
@@ -99,7 +99,7 @@ void main() {
 
     await pumpEditor(tester);
 
-    // Nothing opened — we land back on the welcome screen, no error placeholder.
+    // Nothing opened - we land back on the welcome screen, no error placeholder.
     expect(tabTitle('missing.pdf'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Open a PDF'), findsOneWidget);
   });

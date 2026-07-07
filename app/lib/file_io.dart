@@ -12,7 +12,7 @@ const _macosFileAccessChannel =
     MethodChannel('dev.milanko.dartpdf/file_access');
 
 /// One filter, every platform: desktop and web match on the extension,
-/// Android on the MIME type, iOS/macOS on the uniform type identifier —
+/// Android on the MIME type, iOS/macOS on the uniform type identifier -
 /// a type group missing the field a platform filters by throws there.
 const pdfTypeGroup = XTypeGroup(
   label: 'PDF documents',
@@ -65,7 +65,7 @@ Future<List<XFile>> pickPdfFiles() =>
     openFiles(acceptedTypeGroups: const [pdfTypeGroup]);
 
 /// Opens the system file picker and reads the chosen PDF. Returns null when
-/// the user cancels. Throws if the file can't be read — callers surface that.
+/// the user cancels. Throws if the file can't be read - callers surface that.
 Future<PickedPdf?> pickPdf() async {
   final file = await pickPdfFile();
   if (file == null) return null;
@@ -107,14 +107,14 @@ Future<String?> securityBookmarkForPath(String? path) async {
   }
 }
 
-/// Picks a PDF and returns just its bytes (null when cancelled) — the source
+/// Picks a PDF and returns just its bytes (null when cancelled) - the source
 /// for "Insert PDF…" and document comparison.
 Future<Uint8List?> pickPdfBytes() async {
   final file = await openFile(acceptedTypeGroups: const [pdfTypeGroup]);
   return file?.readAsBytes();
 }
 
-/// Picks an image and returns its bytes — used by the form image picker and
+/// Picks an image and returns its bytes - used by the form image picker and
 /// the insert-image tool.
 Future<Uint8List?> pickImageBytes() async {
   final file = await openFile(acceptedTypeGroups: const [imageTypeGroup]);
@@ -176,7 +176,7 @@ String ensurePdfName(String name) {
 
 /// Appends `.pdf` to [path] unless it already ends with it (case-insensitive).
 /// The desktop save dialog lets the user clear or change the extension, so the
-/// path it hands back can lack one — exported and saved files must still open
+/// path it hands back can lack one - exported and saved files must still open
 /// as PDFs.
 String ensurePdfExtension(String path) =>
     path.toLowerCase().endsWith('.pdf') ? path : '$path.pdf';
@@ -198,7 +198,7 @@ class SaveResult {
   /// save dialog). Null for downloads / share-sheet / cancellation.
   final String? path;
 
-  /// True when the document was actually written somewhere — the caller uses
+  /// True when the document was actually written somewhere - the caller uses
   /// this to clear the dirty state and record a recent file.
   final bool succeeded;
 
@@ -212,7 +212,7 @@ class SaveResult {
       SaveResult._('Save failed: $error');
 }
 
-/// Reads a PDF straight from a known on-disk [path] — used to reopen a recent
+/// Reads a PDF straight from a known on-disk [path] - used to reopen a recent
 /// file. Throws if it can't be read (caller drops the stale recent entry).
 ///
 /// On macOS, [bookmark] reactivates the user's original security-scoped access
@@ -353,7 +353,7 @@ Future<SaveResult> saveBytesAs(
         acceptedTypeGroups: const [pdfTypeGroup],
       );
       if (location == null) return SaveResult.cancelled;
-      // The dialog returns the path verbatim — if the user cleared or changed
+      // The dialog returns the path verbatim - if the user cleared or changed
       // the extension, force `.pdf` so the file still opens as a PDF.
       final path = ensurePdfExtension(location.path);
       try {

@@ -23,7 +23,7 @@ class RecentFile {
   /// macOS security-scoped bookmark for [path], when available.
   final String? bookmark;
 
-  /// Epoch milliseconds of the most recent open — drives ordering.
+  /// Epoch milliseconds of the most recent open - drives ordering.
   final int openedAt;
 
   /// Stable identity: the path when present (so the same file dedupes across
@@ -81,7 +81,7 @@ class RecentsStore extends ChangeNotifier {
       _sort();
       notifyListeners();
     } catch (_) {
-      // No storage (tests) — keep the in-memory list.
+      // No storage (tests) - keep the in-memory list.
     }
   }
 
@@ -121,7 +121,7 @@ class RecentsStore extends ChangeNotifier {
       await prefs.setString(
           _key, jsonEncode(_items.map((e) => e.toJson()).toList()));
     } catch (_) {
-      // No storage — nothing to persist.
+      // No storage - nothing to persist.
     }
   }
 }

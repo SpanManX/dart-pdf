@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'editing_color_picker.dart';
 import 'editing_controller.dart';
@@ -37,7 +40,11 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
   Color _find = const Color(0xFF000000);
   late Color _replace;
   late bool _selectedPages;
-  late List<Color> _documentColors;
+  List<Color> _documentColors = const [];
+  var _documentColorScan = 0;
+  var _documentColorProgress = 0;
+  var _documentColorTotal = 0;
+  var _documentColorsLoading = false;
   var _tolerance = 0;
   var _fill = true;
   var _stroke = true;
@@ -49,6 +56,12 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
     _replace = widget.controller.color;
     _selectedPages = widget.controller.selectedPageCount > 0;
     _refreshDocumentColors(preferFirst: true);
+  }
+
+  @override
+  void dispose() {
+    _documentColorScan++;
+    super.dispose();
   }
 
   Future<void> _pickFind() => _pickColor(_find, (value) => _find = value);
@@ -70,14 +83,80 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
   Iterable<int>? get _targetPages =>
       _selectedPages ? widget.controller.selectedPages : null;
 
+  List<int> get _targetPageList {
+    final pageCount = widget.controller.document.pageCount;
+    return (_targetPages ?? Iterable<int>.generate(pageCount))
+        .where((index) => index >= 0 && index < pageCount)
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
   void _refreshDocumentColors({bool preferFirst = false}) {
-    _documentColors = widget.controller.documentContentColors(
-      pages: _targetPages,
-      fill: _fill,
-      stroke: _stroke,
+    final generation = ++_documentColorScan;
+    final pages = _targetPageList;
+    final fill = _fill;
+    final stroke = _stroke;
+    _documentColors = const [];
+    _documentColorProgress = 0;
+    _documentColorTotal = pages.length;
+    _documentColorsLoading = pages.isNotEmpty && (fill || stroke);
+    if (!_documentColorsLoading) return;
+    SchedulerBinding.instance.addPostFrameCallback(
+      (_) => unawaited(_scanDocumentColors(
+        generation,
+        pages,
+        fill: fill,
+        stroke: stroke,
+        preferFirst: preferFirst,
+      )),
     );
-    if (preferFirst && _documentColors.isNotEmpty) {
-      _find = _documentColors.first;
+    SchedulerBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _scanDocumentColors(
+    int generation,
+    List<int> pages, {
+    required bool fill,
+    required bool stroke,
+    required bool preferFirst,
+  }) async {
+    if (!mounted || generation != _documentColorScan) return;
+    final colors = await widget.controller.documentContentColorsAsync(
+      pages: pages,
+      fill: fill,
+      stroke: stroke,
+      isCancelled: () => !mounted || generation != _documentColorScan,
+      onProgress: (completed, total) {
+        if (!mounted || generation != _documentColorScan) return;
+        setState(() {
+          _documentColorProgress = completed;
+          _documentColorTotal = total;
+        });
+      },
+      yieldAfterPage: () => SchedulerBinding.instance.endOfFrame,
+    );
+    if (!mounted || generation != _documentColorScan) return;
+    setState(() {
+      _documentColors = colors;
+      _documentColorsLoading = false;
+      if (preferFirst && colors.isNotEmpty) _find = colors.first;
+    });
+  }
+
+  void _cancelDocumentColorScan() {
+    _documentColorScan++;
+    _documentColorsLoading = false;
+    _documentColorProgress = 0;
+    _documentColorTotal = 0;
+    _documentColors = const [];
+  }
+
+  void _restartDocumentColorScan({bool preferFirst = false}) {
+    if (!_fill && !_stroke) {
+      _cancelDocumentColorScan();
+    } else {
+      _refreshDocumentColors(preferFirst: preferFirst);
     }
   }
 
@@ -85,21 +164,21 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
     if (value && widget.controller.selectedPageCount == 0) return;
     setState(() {
       _selectedPages = value;
-      _refreshDocumentColors();
+      _restartDocumentColorScan();
     });
   }
 
   void _setFill(bool value) {
     setState(() {
       _fill = value;
-      _refreshDocumentColors();
+      _restartDocumentColorScan();
     });
   }
 
   void _setStroke(bool value) {
     setState(() {
       _stroke = value;
-      _refreshDocumentColors();
+      _restartDocumentColorScan();
     });
   }
 
@@ -119,7 +198,7 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
   @override
   Widget build(BuildContext context) {
     final selectedCount = widget.controller.selectedPageCount;
-    final canApply = _fill || _stroke;
+    final canApply = (_fill || _stroke) && !_documentColorsLoading;
     return AlertDialog(
       title: const Text('Color processing'),
       content: SizedBox(
@@ -140,6 +219,9 @@ class _ColorProcessingDialogState extends State<_ColorProcessingDialog> {
               _DocumentColors(
                 colors: _documentColors,
                 selected: _find,
+                loading: _documentColorsLoading,
+                progress: _documentColorProgress,
+                total: _documentColorTotal,
                 onSelected: (color) => setState(() => _find = color),
               ),
               const SizedBox(height: 8),
@@ -293,40 +375,72 @@ class _DocumentColors extends StatelessWidget {
   const _DocumentColors({
     required this.colors,
     required this.selected,
+    required this.loading,
+    required this.progress,
+    required this.total,
     required this.onSelected,
   });
 
   final List<Color> colors;
   final Color selected;
+  final bool loading;
+  final int progress;
+  final int total;
   final ValueChanged<Color> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    if (colors.isEmpty) {
+    final theme = Theme.of(context);
+    if (colors.isEmpty && !loading) {
       return Text(
         'No page-content colors found',
-        style: Theme.of(context).textTheme.bodySmall,
+        style: theme.textTheme.bodySmall,
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Document colors', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
-        Wrap(
-          key: const ValueKey('pdf-color-process-document-colors'),
-          spacing: 8,
-          runSpacing: 8,
+        Row(
           children: [
-            for (final color in colors)
-              _ColorOption(
-                color: color,
-                selected: (color.toARGB32() & 0xFFFFFF) ==
-                    (selected.toARGB32() & 0xFFFFFF),
-                onTap: () => onSelected(color),
+            Text('Document colors', style: theme.textTheme.labelLarge),
+            if (loading) ...[
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  total <= 0 ? 'Scanning…' : 'Scanning $progress / $total',
+                  key: const ValueKey('pdf-color-process-scan-progress'),
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
+            ],
           ],
         ),
+        if (loading) ...[
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            key: const ValueKey('pdf-color-process-scan-bar'),
+            value: total <= 0 ? null : progress / total,
+          ),
+        ],
+        const SizedBox(height: 8),
+        if (colors.isEmpty)
+          Text('No colors found yet', style: theme.textTheme.bodySmall)
+        else
+          Wrap(
+            key: const ValueKey('pdf-color-process-document-colors'),
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final color in colors)
+                _ColorOption(
+                  color: color,
+                  selected: (color.toARGB32() & 0xFFFFFF) ==
+                      (selected.toARGB32() & 0xFFFFFF),
+                  onTap: () => onSelected(color),
+                ),
+            ],
+          ),
       ],
     );
   }

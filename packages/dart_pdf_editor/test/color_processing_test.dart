@@ -134,6 +134,67 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('color processing rescans whole-document colors incrementally',
+      (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = PdfEditingController(_pdf([
+      '1 0 0 rg 0 0 10 10 re f',
+      '0 0 1 rg 0 0 10 10 re f',
+      '0 1 0 rg 0 0 10 10 re f',
+    ]))
+      ..selectPage(0);
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => FilledButton(
+          onPressed: () => showPdfColorProcessingDialog(
+            context,
+            controller: controller,
+            preferences: controller.preferences,
+          ),
+          child: const Text('open'),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'), kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pdf-color-process-color-16711680')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pdf-color-process-color-255')),
+        findsNothing);
+
+    await tester.tap(
+        find.byKey(const ValueKey('pdf-color-process-whole-document')),
+        kind: PointerDeviceKind.mouse);
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('pdf-color-process-scan-progress')),
+        findsOneWidget);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.byKey(const ValueKey('pdf-color-process-apply')))
+            .onPressed,
+        isNull);
+
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('pdf-color-process-color-255')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pdf-color-process-color-65280')),
+        findsOneWidget);
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.byKey(const ValueKey('pdf-color-process-apply')))
+            .onPressed,
+        isNotNull);
+  });
+
   testWidgets(
       'color processing dialog can replace a document swatch with '
       'transparent output', (tester) async {

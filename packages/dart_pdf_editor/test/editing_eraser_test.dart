@@ -261,7 +261,7 @@ void main() {
           scrollable: find.byType(Scrollable).first);
       await tester.tap(find.byTooltip('Eraser size'));
       await tester.pumpAndSettle();
-      // only the eraser slider shows — the paint-only controls are gone
+      // only the eraser slider shows - the paint-only controls are gone
       expect(find.byKey(const ValueKey('pdf-eraser-size')), findsOneWidget);
       expect(find.byType(Slider), findsOneWidget);
       expect(find.text('Stroke width'), findsNothing);

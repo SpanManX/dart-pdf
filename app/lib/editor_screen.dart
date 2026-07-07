@@ -50,7 +50,7 @@ class EditorScreen extends StatefulWidget {
 
   final PdfEditingPreferences prefs;
 
-  /// Desktop launch arguments — a `.pdf` path here opens at startup.
+  /// Desktop launch arguments - a `.pdf` path here opens at startup.
   final List<String> launchArgs;
 
   /// An in-memory document opened in a tab at startup, regardless of
@@ -58,13 +58,13 @@ class EditorScreen extends StatefulWidget {
   /// tests) to land directly in the editor without a file picker.
   final ({Uint8List bytes, String title})? initialDocument;
 
-  /// An update checker to use instead of the one the screen builds itself —
+  /// An update checker to use instead of the one the screen builds itself -
   /// the seam tests use to inject a fake without real network.
   final UpdateService? updateService;
 
   /// Whether to check for a newer release on startup (and show a banner if one
   /// is found). The host (production) sets this true; it defaults to false so
-  /// plain widget tests stay hermetic — no startup network traffic. The
+  /// plain widget tests stay hermetic - no startup network traffic. The
   /// Settings panel can still check on demand regardless.
   final bool autoCheckUpdates;
 
@@ -194,7 +194,7 @@ class _EditorScreenState extends State<EditorScreen>
     ));
   }
 
-  /// Opens a `.pdf` passed on the command line — how Windows and Linux deliver
+  /// Opens a `.pdf` passed on the command line - how Windows and Linux deliver
   /// a file association / "open with" at cold start (macOS and mobile use the
   /// channel instead).
   void _openLaunchArgs() {
@@ -429,9 +429,9 @@ class _EditorScreenState extends State<EditorScreen>
   /// Opens a file the OS handed us (association, share, launch arg).
   ///
   /// If a tab already holds this exact path, focus it instead of opening a
-  /// duplicate. The same launch file can arrive twice — once via the
+  /// duplicate. The same launch file can arrive twice - once via the
   /// command-line launch args and once via the native `getInitialFile`
-  /// channel (Windows delivers both) — and re-opening an already-open
+  /// channel (Windows delivers both) - and re-opening an already-open
   /// document from the OS should surface the existing tab, not stack copies.
   Future<void> _openIncoming(IncomingFile file) async {
     final path = file.path;
@@ -454,7 +454,7 @@ class _EditorScreenState extends State<EditorScreen>
 
   /// Handles PDFs dropped onto the window (desktop and web). Non-PDFs are
   /// ignored. With an editable document already open, the drop offers a
-  /// choice — open each PDF in its own tab, or insert their pages into the
+  /// choice - open each PDF in its own tab, or insert their pages into the
   /// current document; with nothing open (or in read-only mode) each PDF
   /// just opens in its own tab.
   Future<void> _onFilesDropped(List<DropItem> items) async {
@@ -631,7 +631,7 @@ class _EditorScreenState extends State<EditorScreen>
       _toast('Open a document before running OCR');
       return;
     }
-    // Snapshot the title now — the source tab may be closed before OCR ends.
+    // Snapshot the title now - the source tab may be closed before OCR ends.
     final title = tab.title;
     await _ocr.start(
       context,
@@ -733,7 +733,7 @@ class _EditorScreenState extends State<EditorScreen>
       ],
     );
     if (selected == null || !mounted) return;
-    // Re-resolve the tab's current position — nothing reorders while the modal
+    // Re-resolve the tab's current position - nothing reorders while the modal
     // menu is up, but indexing by identity is robust regardless.
     final i = _tabs.indexOf(tab);
     if (i < 0) return;
@@ -792,7 +792,7 @@ class _EditorScreenState extends State<EditorScreen>
         : await saveBytesAs(context, bytes, tab.title);
     if (!mounted) return;
     if (inPlace && !result.succeeded) {
-      // The origin couldn't be written (moved, read-only) — offer save-as.
+      // The origin couldn't be written (moved, read-only) - offer save-as.
       result = await saveBytesAs(context, bytes, tab.title);
       if (!mounted) return;
     }
@@ -814,7 +814,7 @@ class _EditorScreenState extends State<EditorScreen>
       if (path != null) {
         _recents.add(
             title: tab.title, path: path, bookmark: tab.originBookmark);
-        // A Save As gave the tab a reusable origin — remember it for next time.
+        // A Save As gave the tab a reusable origin - remember it for next time.
         unawaited(_persistSession());
       }
     }
@@ -823,7 +823,7 @@ class _EditorScreenState extends State<EditorScreen>
 
   // --- printing ------------------------------------------------------------
 
-  /// Hands the active document to the OS print dialog (the `printing` plugin —
+  /// Hands the active document to the OS print dialog (the `printing` plugin -
   /// native dialog on desktop/mobile, browser print on the web). The current
   /// revision is printed, so unsaved edits are included. A failed or
   /// unavailable backend surfaces as a toast rather than throwing.
@@ -840,7 +840,7 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
-  /// Prints the active document, if one is open — bound to ⌘P / Ctrl+P.
+  /// Prints the active document, if one is open - bound to ⌘P / Ctrl+P.
   void _printActive() {
     final tab = _active;
     if (tab?.session != null) unawaited(_print(tab!));
@@ -916,7 +916,7 @@ class _EditorScreenState extends State<EditorScreen>
       case PdfUnknownAction(:final type):
         _toast('Unsupported action: $type');
       case PdfGoToAction():
-        break; // unreachable — handled by the viewer
+        break; // unreachable - handled by the viewer
     }
   }
 
@@ -1140,7 +1140,7 @@ class _EditorScreenState extends State<EditorScreen>
   List<Widget> _buildActions(DocumentTab? tab) {
     final compact = _isCompactWidth(context);
     return [
-      // Background OCR progress (when a job is running) — non-blocking, so the
+      // Background OCR progress (when a job is running) - non-blocking, so the
       // user keeps using the PDF while hundreds of pages are recognized.
       ValueListenableBuilder<OcrJobStatus?>(
         valueListenable: _ocr.status,
@@ -1510,7 +1510,7 @@ class _OpeningDocument extends StatelessWidget {
 /// The actions offered by a tab's right-click context menu.
 enum _TabMenuAction { openFolder, close, closeOthers, closeRight, closeAll }
 
-/// Starts a tab drag immediately for mouse pointers (the desktop expectation —
+/// Starts a tab drag immediately for mouse pointers (the desktop expectation -
 /// a mouse drag never means scrolling the strip) but only after a long press
 /// for touch and stylus, so finger drags still scroll the tab strip. Plain
 /// taps are unaffected: both recognizers claim the pointer only once it moves
@@ -1526,7 +1526,7 @@ class _TabDragStartListener extends ReorderableDragStartListener {
   Widget build(BuildContext context) {
     return Listener(
       onPointerDown: (event) {
-        // A right-click opens the tab context menu — never a drag-reorder.
+        // A right-click opens the tab context menu - never a drag-reorder.
         if (event.buttons == kSecondaryButton) return;
         SliverReorderableList.maybeOf(context)?.startItemDragReorder(
           index: index,
@@ -1551,7 +1551,7 @@ class _DropOverlay extends StatelessWidget {
   const _DropOverlay({this.canInsert = false});
 
   /// Whether the drop can be inserted into the open document (vs. only
-  /// opened in a new tab) — drives the hint text.
+  /// opened in a new tab) - drives the hint text.
   final bool canInsert;
 
   @override

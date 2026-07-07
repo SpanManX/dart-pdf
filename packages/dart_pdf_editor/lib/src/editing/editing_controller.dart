@@ -2574,6 +2574,55 @@ class PdfEditingController extends ChangeNotifier {
     ];
   }
 
+  /// Asynchronously scans page-content colors, yielding between pages.
+  ///
+  /// This is intended for UI previews over large documents: [yieldAfterPage]
+  /// gives the caller a chance to paint progress between pages, [onProgress]
+  /// reports completed pages, and [isCancelled] lets newer scans supersede
+  /// older ones.
+  Future<List<Color>> documentContentColorsAsync({
+    Iterable<int>? pages,
+    bool fill = true,
+    bool stroke = true,
+    bool Function()? isCancelled,
+    void Function(int completed, int total)? onProgress,
+    Future<void> Function()? yieldAfterPage,
+  }) async {
+    final targets = (pages ??
+            Iterable<int>.generate(_document.pageCount, (index) => index))
+        .where((index) => index >= 0 && index < _document.pageCount)
+        .toSet()
+        .toList()
+      ..sort();
+    if (targets.isEmpty || (!fill && !stroke)) return const [];
+    final editor = PdfEditor(_document);
+    final uses = <int, List<int>>{};
+    for (var i = 0; i < targets.length; i++) {
+      if (isCancelled?.call() ?? false) return const [];
+      final pageColors =
+          editor.contentColors(targets[i], fill: fill, stroke: stroke);
+      for (final color in pageColors) {
+        final counts = uses.putIfAbsent(color.rgb, () => [0, 0]);
+        counts[0] += color.fillUses;
+        counts[1] += color.strokeUses;
+      }
+      onProgress?.call(i + 1, targets.length);
+      if (i < targets.length - 1 && yieldAfterPage != null) {
+        await yieldAfterPage();
+      }
+    }
+    final entries = uses.entries.toList()
+      ..sort((a, b) {
+        final aUses = a.value[0] + a.value[1];
+        final bUses = b.value[0] + b.value[1];
+        final byUses = bUses.compareTo(aUses);
+        return byUses != 0 ? byUses : a.key.compareTo(b.key);
+      });
+    return [
+      for (final entry in entries) Color(0xFF000000 | entry.key),
+    ];
+  }
+
   /// Replaces matching page-content colors across [pages], or the whole
   /// document when [pages] is null. Returns the number of color-setting
   /// operators rewritten, or the number of paint sides suppressed when

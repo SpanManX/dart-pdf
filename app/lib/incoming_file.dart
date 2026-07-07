@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-/// A PDF handed to the app by the operating system — an "open with", a share,
+/// A PDF handed to the app by the operating system - an "open with", a share,
 /// a file association, or a launch argument.
 @immutable
 class IncomingFile {

@@ -1,7 +1,7 @@
 // The Snapshot tool copies the captured region to the system clipboard as a
 // PNG (on top of keeping a vector copy for in-app paste-back). Flutter's
 // built-in Clipboard is text-only, so the app routes the PNG through its own
-// platform channel — behind the ImageClipboardWriter seam these tests fake.
+// platform channel - behind the ImageClipboardWriter seam these tests fake.
 
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 import 'package:flutter/material.dart';
@@ -200,7 +200,7 @@ void main() {
         await gesture.moveTo(view(150, 720));
         await gesture.moveTo(view(220, 700));
         await gesture.up();
-        // captureSnapshot rasterizes + PNG-encodes (toImage) — let it finish.
+        // captureSnapshot rasterizes + PNG-encodes (toImage) - let it finish.
         for (var i = 0; i < 50 && written == null; i++) {
           await tester.pump(const Duration(milliseconds: 20));
           await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -209,7 +209,7 @@ void main() {
 
       expect(reported, isTrue);
       expect(written, isNotNull);
-      // PNG magic number — the captured raster reached the clipboard writer.
+      // PNG magic number - the captured raster reached the clipboard writer.
       expect(written!.sublist(0, 4), [0x89, 0x50, 0x4E, 0x47]);
       // the vector half still lands on the in-app clipboard for paste-back.
       expect(editing.hasSnapshotClipboard, isTrue);

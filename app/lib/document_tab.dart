@@ -69,7 +69,7 @@ class DocumentTab {
   String? originBookmark;
 
   /// Byte length of the last-saved revision. Revisions are byte prefixes of one
-  /// buffer, so length uniquely identifies a revision — the document is dirty
+  /// buffer, so length uniquely identifies a revision - the document is dirty
   /// when the current [PdfEditingController.bytes] length differs from this.
   int savedLength;
 
