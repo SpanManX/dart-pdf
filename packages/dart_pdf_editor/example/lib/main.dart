@@ -324,23 +324,64 @@ class _ViewerScreenState extends State<ViewerScreen> {
         ThemeMode.dark => 'Theme: dark - switch to system',
       };
 
+  bool get _usesAppleShortcuts =>
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  String _menuShortcut(String key, {bool shift = false}) => _usesAppleShortcuts
+      ? '${shift ? '⇧' : ''}⌘$key'
+      : 'Ctrl+${shift ? 'Shift+' : ''}$key';
+
+  Widget _appMenuTile({
+    required IconData icon,
+    required String title,
+    String? shortcut,
+    Widget? trailing,
+  }) =>
+      ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        trailing: trailing ??
+            (shortcut == null
+                ? null
+                : Text(
+                    shortcut,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  )),
+        contentPadding: EdgeInsets.zero,
+      );
+
   List<PopupMenuEntry<VoidCallback>> _appMenuItems(
           BuildContext menuContext, _DocumentTab? tab) =>
       [
         PopupMenuItem(
+          value: () {
+            final bytes = tab?.session?.bytes;
+            if (bytes != null) unawaited(_saveAs(bytes));
+          },
+          enabled: tab?.session != null,
+          child: _appMenuTile(
+            icon: Icons.save_as_outlined,
+            title: 'Save as…',
+            shortcut: _menuShortcut('S'),
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
           value: () => unawaited(_pickFile()),
-          child: const ListTile(
-            leading: Icon(Icons.folder_open),
-            title: Text('Open a PDF…'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.folder_open,
+            title: 'Open a PDF…',
+            shortcut: _menuShortcut('O'),
           ),
         ),
         PopupMenuItem(
           value: _openDemo,
-          child: const ListTile(
-            leading: Icon(Icons.auto_awesome),
-            title: Text('Open the interactive demo'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.auto_awesome,
+            title: 'Open the interactive demo',
           ),
         ),
         ..._recentMenuItems(menuContext),
@@ -348,92 +389,93 @@ class _ViewerScreenState extends State<ViewerScreen> {
         PopupMenuItem(
           value: () => unawaited(_runOcr()),
           enabled: tab?.session != null,
-          child: const ListTile(
-            leading: Icon(Icons.document_scanner_outlined),
-            title: Text('OCR…'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.document_scanner_outlined,
+            title: 'OCR…',
           ),
         ),
         PopupMenuItem(
           value: _compareWith,
           enabled: tab?.session != null,
-          child: const ListTile(
-            leading: Icon(Icons.compare_arrows),
-            title: Text('Compare with another PDF…'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.compare_arrows,
+            title: 'Compare with another PDF…',
           ),
         ),
         PopupMenuItem(
           value: () => setState(() => _readOnly = !_readOnly),
           enabled: tab?.session != null,
-          child: ListTile(
-            leading: Icon(_readOnly ? Icons.edit : Icons.edit_off),
-            title:
-                Text(_readOnly ? 'Switch to edit mode' : 'Switch to read-only'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: _readOnly ? Icons.edit : Icons.edit_off,
+            title: _readOnly ? 'Switch to edit mode' : 'Switch to read-only',
           ),
         ),
         PopupMenuItem(
           value: () => unawaited(_exportImage()),
           enabled: tab?.session != null,
-          child: const ListTile(
-            leading: Icon(Icons.image_outlined),
-            title: Text('Export page as image…'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.image_outlined,
+            title: 'Export page as image…',
           ),
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: _cycleTheme,
-          child: ListTile(
-            leading: const Icon(Icons.dark_mode),
-            title: Text(_nextThemeLabel),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.dark_mode,
+            title: _nextThemeLabel,
           ),
         ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: () => _openLink(_githubUrl),
-          child: const ListTile(
-            leading: Icon(Icons.code),
-            title: Text('View source on GitHub'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.code,
+            title: 'View source on GitHub',
           ),
         ),
         PopupMenuItem(
           value: () => _openLink(_pubDevUrl),
-          child: const ListTile(
-            leading: Icon(Icons.inventory_2_outlined),
-            title: Text('dart_pdf_editor on pub.dev'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.inventory_2_outlined,
+            title: 'dart_pdf_editor on pub.dev',
           ),
         ),
       ];
 
-  /// The "Open recent" entry of the app menu: a single "Recent files" row
+  /// The "Open Recent" entry of the app menu: a single row
   /// that expands into a submenu listing remembered files (newest first)
   /// plus a clear action. Files already open in a tab are left out - there's
-  /// no point offering a shortcut to reopen them - so the row is hidden
-  /// entirely until there's at least one closed file to show.
+  /// no point offering a shortcut to reopen them. The row stays visible
+  /// even when empty, so users can discover where recents will appear.
   List<PopupMenuEntry<VoidCallback>> _recentMenuItems(
       BuildContext menuContext) {
-    final openTitles = {for (final tab in _tabs) tab.title};
-    final recents = [
-      for (final entry in _recents.entries)
-        if (!openTitles.contains(entry.title)) entry,
-    ].take(_maxRecentMenuItems).toList();
-    if (recents.isEmpty) return const [];
+    final recents = _recentMenuEntries();
+    final trailing = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _menuShortcut('O', shift: true),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(width: 12),
+        const Icon(Icons.arrow_right),
+      ],
+    );
     return [
-      const PopupMenuDivider(),
       PopupMenuItem<VoidCallback>(
         // A no-op: the nested button below owns the row's taps (opening the
         // submenu). This only guards a stray tap on the row from invoking a
         // null action.
         value: () {},
+        enabled: recents.isNotEmpty,
         padding: EdgeInsets.zero,
         child: PopupMenuButton<VoidCallback>(
-          key: const ValueKey('recent-files-submenu'),
-          tooltip: 'Recent files',
+          key: const ValueKey('open-recent-submenu'),
+          tooltip: 'Open Recent',
+          enabled: recents.isNotEmpty,
           // Run the chosen submenu action, then dismiss the parent menu,
           // which stays open behind the submenu otherwise.
           onSelected: (action) {
@@ -443,36 +485,64 @@ class _ViewerScreenState extends State<ViewerScreen> {
             }
           },
           itemBuilder: (_) => [
-            for (final entry in recents)
-              PopupMenuItem<VoidCallback>(
-                value: () => unawaited(_openRecent(entry)),
+            if (recents.isEmpty)
+              const PopupMenuItem<VoidCallback>(
+                enabled: false,
                 child: ListTile(
-                  leading: const Icon(Icons.picture_as_pdf_outlined),
-                  title: Text(
-                    entry.title.isEmpty ? 'Untitled' : entry.title,
-                    overflow: TextOverflow.ellipsis,
+                  leading: Icon(Icons.history_toggle_off),
+                  title: Text('No recent files'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              )
+            else ...[
+              for (final entry in recents)
+                PopupMenuItem<VoidCallback>(
+                  value: () => unawaited(_openRecent(entry)),
+                  child: ListTile(
+                    leading: const Icon(Icons.picture_as_pdf_outlined),
+                    title: Text(
+                      entry.title.isEmpty ? 'Untitled' : entry.title,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    contentPadding: EdgeInsets.zero,
                   ),
+                ),
+              const PopupMenuDivider(),
+              PopupMenuItem<VoidCallback>(
+                value: () => unawaited(_recents.clear()),
+                child: const ListTile(
+                  leading: Icon(Icons.clear_all),
+                  title: Text('Clear recent files'),
                   contentPadding: EdgeInsets.zero,
                 ),
               ),
-            const PopupMenuDivider(),
-            PopupMenuItem<VoidCallback>(
-              value: () => unawaited(_recents.clear()),
-              child: const ListTile(
-                leading: Icon(Icons.clear_all),
-                title: Text('Clear recent files'),
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
+            ],
           ],
-          child: const ListTile(
-            leading: Icon(Icons.history),
-            title: Text('Recent files'),
-            trailing: Icon(Icons.arrow_right),
+          child: _appMenuTile(
+            icon: Icons.history,
+            title: 'Open Recent',
+            trailing: trailing,
           ),
         ),
       ),
     ];
+  }
+
+  List<RecentFile> _recentMenuEntries() {
+    final openTitles = {for (final tab in _tabs) tab.title};
+    return [
+      for (final entry in _recents.entries)
+        if (!openTitles.contains(entry.title)) entry,
+    ].take(_maxRecentMenuItems).toList();
+  }
+
+  void _openMostRecent() {
+    final recents = _recentMenuEntries();
+    if (recents.isEmpty) {
+      _toast('No recent files');
+      return;
+    }
+    unawaited(_openRecent(recents.first));
   }
 
   void _toast(String message) {
@@ -1068,125 +1138,145 @@ class _ViewerScreenState extends State<ViewerScreen> {
   @override
   Widget build(BuildContext context) {
     final tab = _active;
-    return Scaffold(
-      appBar: AppBar(
-        leading: _buildAppMenu(tab),
-        leadingWidth: _appMenuLeadingWidth,
-        centerTitle: false,
-        title: _tabs.isEmpty ? const Text('dart-pdf viewer') : _buildTabStrip(),
-        titleSpacing: _tabs.isEmpty ? null : 8,
-        actions: [
-          if (tab?.session != null && !tab!.isComparison)
-            PopupMenuButton<int>(
-              key: const ValueKey('dartpdf-worker-pool-menu'),
-              tooltip: _workerPoolTooltip,
-              icon: Icon(
-                  _workerPoolEnabled ? Icons.memory : Icons.memory_outlined),
-              onSelected: _setWorkerPoolSize,
-              itemBuilder: (context) => [
-                CheckedPopupMenuItem<int>(
-                  key: const ValueKey('dartpdf-worker-pool-off'),
-                  value: 1,
-                  checked: !_workerPoolEnabled,
-                  child: const Text('Worker pool off'),
-                ),
-                const PopupMenuDivider(),
-                for (final size in const [2, 3, 4, 6])
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyO, meta: true): () =>
+            unawaited(_pickFile()),
+        const SingleActivator(LogicalKeyboardKey.keyO, control: true): () =>
+            unawaited(_pickFile()),
+        const SingleActivator(LogicalKeyboardKey.keyO, meta: true, shift: true):
+            _openMostRecent,
+        const SingleActivator(LogicalKeyboardKey.keyO,
+            control: true, shift: true): _openMostRecent,
+        if (tab?.session != null) ...{
+          const SingleActivator(LogicalKeyboardKey.keyS, meta: true): () =>
+              unawaited(_saveAs(tab!.session!.bytes)),
+          const SingleActivator(LogicalKeyboardKey.keyS, control: true): () =>
+              unawaited(_saveAs(tab!.session!.bytes)),
+        },
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: _buildAppMenu(tab),
+          leadingWidth: _appMenuLeadingWidth,
+          centerTitle: false,
+          title:
+              _tabs.isEmpty ? const Text('dart-pdf viewer') : _buildTabStrip(),
+          titleSpacing: _tabs.isEmpty ? null : 8,
+          actions: [
+            if (tab?.session != null && !tab!.isComparison)
+              PopupMenuButton<int>(
+                key: const ValueKey('dartpdf-worker-pool-menu'),
+                tooltip: _workerPoolTooltip,
+                icon: Icon(
+                    _workerPoolEnabled ? Icons.memory : Icons.memory_outlined),
+                onSelected: _setWorkerPoolSize,
+                itemBuilder: (context) => [
                   CheckedPopupMenuItem<int>(
-                    key: ValueKey('dartpdf-worker-pool-$size'),
-                    value: size,
-                    checked: _workerPoolEnabled && _workerPoolSize == size,
-                    child: Text('$size workers'),
+                    key: const ValueKey('dartpdf-worker-pool-off'),
+                    value: 1,
+                    checked: !_workerPoolEnabled,
+                    child: const Text('Worker pool off'),
                   ),
-              ],
-            ),
-          if (tab?.viewer != null)
-            ListenableBuilder(
-              listenable: tab!.viewer!,
-              builder: (context, _) => !tab.viewer!.hasSelection
-                  ? const SizedBox.shrink()
-                  : IconButton(
-                      icon: const Icon(Icons.copy),
-                      tooltip: 'Copy selected text (⌘C)',
-                      onPressed: () async {
-                        await tab.viewer!.copySelection();
-                        if (!context.mounted) return;
-                        _toast('Copied to clipboard');
-                      },
+                  const PopupMenuDivider(),
+                  for (final size in const [2, 3, 4, 6])
+                    CheckedPopupMenuItem<int>(
+                      key: ValueKey('dartpdf-worker-pool-$size'),
+                      value: size,
+                      checked: _workerPoolEnabled && _workerPoolSize == size,
+                      child: Text('$size workers'),
                     ),
-            ),
-        ],
-      ),
-      // each tab is keyed so switching rebuilds against its own
-      // controllers (which keep the edits and scroll position alive);
-      // only the active tab is mounted, so there's one viewer at a time
-      body: tab == null
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FilledButton.icon(
-                    onPressed: _pickFile,
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Open a PDF'),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.tonalIcon(
-                    onPressed: _openDemo,
-                    icon: const Icon(Icons.auto_awesome),
-                    label: const Text('Try the interactive demo'),
-                  ),
                 ],
               ),
-            )
-          : tab.isLoading
-              ? _OpeningDocument(title: tab.title)
-              : tab.error != null
-                  ? Center(child: Text(tab.error!, textAlign: TextAlign.center))
-                  : tab.isComparison
-                      ? PdfComparisonView(
-                          key: ValueKey(tab),
-                          before: tab.compareBefore!,
-                          after: tab.compareAfter!,
-                        )
-                      // the two drop-in widgets carry all the PDF chrome (search,
-                      // page number, panels, toolbar) - the app supplies the edit
-                      // session, its file handling, and the demo's app-side wiring
-                      : _readOnly
-                          ? PdfReader(
-                              key: _pdfShellKey(tab, 'reader'),
-                              bytes: tab.session!.bytes,
-                              // a stable id per document so reopening it (across
-                              // app restarts) restores its scroll position and zoom
-                              documentId: tab.title,
-                              controller: tab.viewer,
-                              preferences: _prefs,
-                              rasterCache: _rasterCache,
-                              textCache: _textCache,
-                              onAction: _onAction,
-                              pageOverlayBuilder:
-                                  tab.isDemo ? _demoOverlays : null,
-                            )
-                          : PdfEditorView(
-                              key: _pdfShellKey(tab, 'editor'),
-                              documentId: tab.title,
-                              controller: tab.session,
-                              viewerController: tab.viewer,
-                              rasterCache: _rasterCache,
-                              textCache: _textCache,
-                              onSave: (saved) => unawaited(_saveAs(saved)),
-                              onPickPdfToInsert: _pickPdfBytes,
-                              onExportPages: (bytes) =>
-                                  unawaited(_saveAs(bytes)),
-                              onAction: _onAction,
-                              pageOverlayBuilder:
-                                  tab.isDemo ? _demoOverlays : null,
-                              annotationMenuBuilder: _annotationMenuActions,
-                              formImagePicker: _pickFormImage,
-                              imagePicker: _pickImage,
-                              fontPicker: _pickFont,
-                              onSnapshot: _saveSnapshot,
-                            ),
+            if (tab?.viewer != null)
+              ListenableBuilder(
+                listenable: tab!.viewer!,
+                builder: (context, _) => !tab.viewer!.hasSelection
+                    ? const SizedBox.shrink()
+                    : IconButton(
+                        icon: const Icon(Icons.copy),
+                        tooltip: 'Copy selected text (⌘C)',
+                        onPressed: () async {
+                          await tab.viewer!.copySelection();
+                          if (!context.mounted) return;
+                          _toast('Copied to clipboard');
+                        },
+                      ),
+              ),
+          ],
+        ),
+        // each tab is keyed so switching rebuilds against its own
+        // controllers (which keep the edits and scroll position alive);
+        // only the active tab is mounted, so there's one viewer at a time
+        body: tab == null
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: _pickFile,
+                      icon: const Icon(Icons.folder_open),
+                      label: const Text('Open a PDF'),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.tonalIcon(
+                      onPressed: _openDemo,
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('Try the interactive demo'),
+                    ),
+                  ],
+                ),
+              )
+            : tab.isLoading
+                ? _OpeningDocument(title: tab.title)
+                : tab.error != null
+                    ? Center(
+                        child: Text(tab.error!, textAlign: TextAlign.center))
+                    : tab.isComparison
+                        ? PdfComparisonView(
+                            key: ValueKey(tab),
+                            before: tab.compareBefore!,
+                            after: tab.compareAfter!,
+                          )
+                        // the two drop-in widgets carry all the PDF chrome (search,
+                        // page number, panels, toolbar) - the app supplies the edit
+                        // session, its file handling, and the demo's app-side wiring
+                        : _readOnly
+                            ? PdfReader(
+                                key: _pdfShellKey(tab, 'reader'),
+                                bytes: tab.session!.bytes,
+                                // a stable id per document so reopening it (across
+                                // app restarts) restores its scroll position and zoom
+                                documentId: tab.title,
+                                controller: tab.viewer,
+                                preferences: _prefs,
+                                rasterCache: _rasterCache,
+                                textCache: _textCache,
+                                onAction: _onAction,
+                                pageOverlayBuilder:
+                                    tab.isDemo ? _demoOverlays : null,
+                              )
+                            : PdfEditorView(
+                                key: _pdfShellKey(tab, 'editor'),
+                                documentId: tab.title,
+                                controller: tab.session,
+                                viewerController: tab.viewer,
+                                rasterCache: _rasterCache,
+                                textCache: _textCache,
+                                onSave: (saved) => unawaited(_saveAs(saved)),
+                                onPickPdfToInsert: _pickPdfBytes,
+                                onExportPages: (bytes) =>
+                                    unawaited(_saveAs(bytes)),
+                                onAction: _onAction,
+                                pageOverlayBuilder:
+                                    tab.isDemo ? _demoOverlays : null,
+                                annotationMenuBuilder: _annotationMenuActions,
+                                formImagePicker: _pickFormImage,
+                                imagePicker: _pickImage,
+                                fontPicker: _pickFont,
+                                onSnapshot: _saveSnapshot,
+                              ),
+      ),
     );
   }
 
