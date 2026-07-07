@@ -478,6 +478,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
       _ownedSession = PdfEditingController(widget.bytes!, preferences: prefs);
     }
     _session.providedCustomStamps = widget.customStamps;
+    _syncFeatureLocks();
     _reportedLength = _session.bytes.length;
     _session.addListener(_onSessionChanged);
     _attachPencil();
@@ -518,6 +519,10 @@ class _PdfEditorViewState extends State<PdfEditorView> {
     _workerDoc = _session.document;
   }
 
+  void _syncFeatureLocks() {
+    _session.colorLocked = !widget.features.colorControls;
+  }
+
   void _onSessionChanged() {
     // the merged ListenableBuilder rebuilds the viewer on this same notify,
     // so swapping the worker here is enough - no setState needed
@@ -545,6 +550,9 @@ class _PdfEditorViewState extends State<PdfEditorView> {
       if (key != null) _viewportMemory?.rekey(key);
     } else if (!listEquals(widget.customStamps, oldWidget.customStamps)) {
       _session.providedCustomStamps = widget.customStamps;
+    }
+    if (widget.features.colorControls != oldWidget.features.colorControls) {
+      _syncFeatureLocks();
     }
   }
 

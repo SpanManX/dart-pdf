@@ -613,13 +613,16 @@ class PdfEditingController extends ChangeNotifier {
   // tool state
 
   PdfEditTool? _tool;
+  bool _colorLocked = false;
+
+  static const Set<String> _colorLockedFields = {'color'};
 
   /// The armed tool, or null when the viewer behaves as a plain reader.
   PdfEditTool? get tool => _tool;
 
   set tool(PdfEditTool? value) {
     if (value == _tool) return;
-    preferences.snapshotActiveStyleScope();
+    preferences.snapshotActiveStyleScope(lockedFields: _lockedStyleFields);
     // leaving an ink-like tool commits the drawing, like lifting the pen.
     //
     // Switching directly from ink to the eraser is the latency-sensitive
@@ -645,9 +648,31 @@ class PdfEditingController extends ChangeNotifier {
     // arming one restores its saved style and routes further style changes
     // back into its slot (see [PdfEditingPreferences.beginStyleScope])
     preferences.beginStyleScope(_styleScopeKey(value), _styleScopeFields(value),
-        defaults: _styleScopeDefaults(value));
+        defaults: _styleScopeDefaults(value), lockedFields: _lockedStyleFields);
     notifyListeners();
     if (deferInkCommit) Timer.run(finishInk);
+  }
+
+  Set<String> get _lockedStyleFields =>
+      _colorLocked ? _colorLockedFields : const {};
+
+  /// Whether tool style scopes are allowed to change [color].
+  ///
+  /// Hosts use this for color-locked sessions: the current creation color is
+  /// still usable and can be changed programmatically, but arming another
+  /// tool does not restore that tool's saved color. Stroke width, opacity,
+  /// font, fill, and the other style fields keep their normal per-tool memory.
+  bool get colorLocked => _colorLocked;
+
+  set colorLocked(bool value) {
+    if (value == _colorLocked) return;
+    preferences.snapshotActiveStyleScope(lockedFields: _lockedStyleFields);
+    _colorLocked = value;
+    preferences.beginStyleScope(_styleScopeKey(_tool), _styleScopeFields(_tool),
+        defaults: _styleScopeDefaults(_tool),
+        lockedFields: _lockedStyleFields,
+        forceRestore: true);
+    notifyListeners();
   }
 
   // Apple Pencil double-tap eraser toggle: the tool that was armed when the
@@ -786,7 +811,8 @@ class PdfEditingController extends ChangeNotifier {
   /// markup its own remembered colour and opacity (the classic yellow
   /// highlighter that stays yellow). See [preferences].
   void useMarkupStyleScope() =>
-      preferences.beginStyleScope('markup', const {'color', 'opacity'});
+      preferences.beginStyleScope('markup', const {'color', 'opacity'},
+          lockedFields: _lockedStyleFields);
 
   /// Whether the armed [tool] creates annotations that carry a colour the
   /// toolbar can offer - i.e. the tool's style scope remembers `color`.
@@ -799,7 +825,7 @@ class PdfEditingController extends ChangeNotifier {
   Color get color => preferences.color;
 
   set color(Color value) {
-    preferences.color = value;
+    preferences.setColor(value, recordStyleScope: !_colorLocked);
     if (_tool == PdfEditTool.stamp) _recolorActiveStamp(value);
   }
 

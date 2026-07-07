@@ -365,7 +365,9 @@ class PdfEditingPreferences extends ChangeNotifier {
   /// across sessions. A null [scope] (select mode, or restyling a
   /// selection) writes only the shared defaults.
   void beginStyleScope(String? scope, Set<String> fields,
-      {Map<String, Object?> defaults = const {}}) {
+      {Map<String, Object?> defaults = const {},
+      Set<String> lockedFields = const {},
+      bool forceRestore = false}) {
     var seeded = false;
     if (scope != null &&
         defaults.isNotEmpty &&
@@ -381,22 +383,26 @@ class PdfEditingPreferences extends ChangeNotifier {
       }
     }
     if (scope == _styleScope && setEquals(fields, _styleScopeFields)) {
-      if (seeded && scope != null) _restoreScope(scope);
+      if ((seeded || forceRestore) && scope != null) {
+        _restoreScope(scope, lockedFields: lockedFields);
+      }
       return;
     }
     _styleScope = scope;
     _styleScopeFields = fields;
-    if (scope != null) _restoreScope(scope);
+    if (scope != null) _restoreScope(scope, lockedFields: lockedFields);
   }
 
-  void _restoreScope(String scope) {
+  void _restoreScope(String scope, {Set<String> lockedFields = const {}}) {
     final slot = _toolStyles[scope];
     if (slot == null || slot.isEmpty) return;
     // drive the public setters (they update the live value and the shared
     // default), guarding the re-record so this load doesn't rewrite the slot
     _restoringScope = true;
     try {
-      if (slot['color'] case final int v) color = Color(v);
+      if (!lockedFields.contains('color')) {
+        if (slot['color'] case final int v) color = Color(v);
+      }
       if (slot['strokeWidth'] case final num v) strokeWidth = v.toDouble();
       if (slot['eraserRadius'] case final num v) eraserRadius = v.toDouble();
       if (slot['opacity'] case final num v) opacity = v.toDouble();
@@ -444,7 +450,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   /// changes a value. A tool still needs to remember the style it inherited
   /// on first activation, otherwise switching to another tool with seeded
   /// defaults can leak that other tool's style back into it.
-  void snapshotActiveStyleScope() {
+  void snapshotActiveStyleScope({Set<String> lockedFields = const {}}) {
     final scope = _styleScope;
     if (scope == null || _styleScopeFields.isEmpty) return;
     final slot = _toolStyles[scope] ??= <String, Object?>{};
@@ -452,6 +458,7 @@ class PdfEditingPreferences extends ChangeNotifier {
 
     void put(String field, Object? value) {
       if (!_styleScopeFields.contains(field)) return;
+      if (lockedFields.contains(field)) return;
       if (slot[field] == value && slot.containsKey(field)) return;
       slot[field] = value;
       changed = true;
@@ -486,11 +493,13 @@ class PdfEditingPreferences extends ChangeNotifier {
   /// The color new annotations are created with.
   Color get color => _color;
 
-  set color(Color value) {
+  set color(Color value) => setColor(value);
+
+  void setColor(Color value, {bool recordStyleScope = true}) {
     if (value == _color) return;
     _color = value;
     _write((s) => s.setInt('${_prefix}color', value.toARGB32()));
-    _recordScoped('color', value.toARGB32());
+    if (recordStyleScope) _recordScoped('color', value.toARGB32());
     notifyListeners();
   }
 

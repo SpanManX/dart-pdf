@@ -610,6 +610,33 @@ void main() {
       expect(find.byType(Slider), findsWidgets);
     });
 
+    testWidgets('colorControls locks the freehand highlight color',
+        (tester) async {
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+      editing.color = const Color(0xFF123456);
+
+      await pump(
+        tester,
+        PdfEditorView(
+          controller: editing,
+          features: const PdfEditorFeatures(colorControls: false),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('pdf-group-draw')));
+      await tester.pump();
+      expect(editing.tool, PdfEditTool.ink);
+      expect(editing.color, const Color(0xFF123456));
+
+      await tester.tap(find.byTooltip('Highlight - draw freehand'));
+      await tester.pump();
+      expect(editing.tool, PdfEditTool.highlight);
+      expect(editing.color, const Color(0xFF123456));
+      expect(editing.strokeWidth, 12);
+      expect(editing.opacity, 0.45);
+    });
+
     testWidgets('color controls are present by default', (tester) async {
       await pump(tester, PdfEditorView(bytes: buildMultiPagePdf(1)));
       // the colour controls live in a group's strip - open one
