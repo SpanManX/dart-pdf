@@ -44,7 +44,7 @@
 ## 1.2.3
 
 - Free text: align a text box left, center, or right. The alignment buttons
-  sit in the text style popup and the annotation properties panel — they
+  sit in the text style popup and the annotation properties panel - they
   apply to the selected box and set the default for new boxes (remembered
   per the text tool). New boxes still follow the text direction until you
   pick an alignment.
@@ -90,7 +90,7 @@
 
 - Full font selection for text boxes: a font menu (in the style popup and
   the properties panel) offers the standard families, a set of bundled
-  full-Unicode fonts (DejaVu Sans/Serif/Mono), and "Load font…" — a
+  full-Unicode fonts (DejaVu Sans/Serif/Mono), and "Load font…" - a
   host-provided `PdfFontPicker` for any `.ttf`/`.otf` file. The chosen
   font embeds into the document so the text renders and prints
   identically everywhere. `PdfEditingController.activeFont`/`setCustomFont`

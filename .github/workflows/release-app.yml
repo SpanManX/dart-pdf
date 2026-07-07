@@ -2,7 +2,7 @@ name: Release app
 
 # Builds installable artifacts for the standalone DartPDF app on every
 # `app-v*` tag (and on demand) and attaches them to a draft GitHub Release.
-# Store upload and code signing stay manual — see app/RELEASING.md.
+# Store upload and code signing stay manual - see app/RELEASING.md.
 
 on:
   push:

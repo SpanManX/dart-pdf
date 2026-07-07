@@ -45,7 +45,7 @@ dev_dependencies:
 flutter:
   # Bundled fonts offered by the font menu. DejaVu is a permissive
   # Bitstream Vera / Arev licence; Fira Sans, Spectral and Lobster are
-  # SIL Open Font Licence — see the *-LICENSE.txt files in assets/fonts/.
+  # SIL Open Font Licence - see the *-LICENSE.txt files in assets/fonts/.
   assets:
     - assets/fonts/DejaVuSans.ttf
     - assets/fonts/DejaVuSerif.ttf

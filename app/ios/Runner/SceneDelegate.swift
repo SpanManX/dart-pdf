@@ -1,8 +1,8 @@
 import Flutter
 import UIKit
 
-/// Receives PDFs opened in the app — "Open in…", the share sheet, the Files
-/// browser — and forwards them to the Dart `IncomingFileService`. The iOS
+/// Receives PDFs opened in the app - "Open in…", the share sheet, the Files
+/// browser - and forwards them to the Dart `IncomingFileService`. The iOS
 /// template is scene-based, so file URLs arrive here rather than in the
 /// AppDelegate.
 class SceneDelegate: FlutterSceneDelegate {
@@ -83,8 +83,8 @@ class SceneDelegate: FlutterSceneDelegate {
   /// exposes no event for it, so we register a `UIPencilInteraction` on the
   /// Flutter view and forward each gesture over the shared method channel;
   /// the editor toggles its eraser (see `PdfPencilInteraction` in
-  /// dart_pdf_editor). This template is scene-based, so — like the file
-  /// channel above — the gesture is installed here, not in the AppDelegate
+  /// dart_pdf_editor). This template is scene-based, so - like the file
+  /// channel above - the gesture is installed here, not in the AppDelegate
   /// (whose `applicationDidBecomeActive` is never called under the scene
   /// lifecycle).
   private func setupPencilInteraction() {

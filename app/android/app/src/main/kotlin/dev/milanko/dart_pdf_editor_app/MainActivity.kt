@@ -11,8 +11,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
-/// Forwards PDFs the OS opens in the app — a Files "open", a download tap, or a
-/// share — to the Dart `IncomingFileService` over a single method channel.
+/// Forwards PDFs the OS opens in the app - a Files "open", a download tap, or a
+/// share - to the Dart `IncomingFileService` over a single method channel.
 class MainActivity : FlutterActivity() {
     private val channelName = "dev.milanko.dartpdf/incoming"
     private val imageClipboardChannelName = "dev.milanko.dartpdf/image_clipboard"

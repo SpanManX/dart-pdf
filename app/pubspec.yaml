@@ -1,5 +1,5 @@
 name: dart_pdf_editor_app
-description: "DartPDF — a fully native Flutter PDF editor"
+description: "DartPDF - a fully native Flutter PDF editor"
 publish_to: 'none'
 resolution: workspace
 
@@ -20,7 +20,7 @@ dependencies:
   dart_pdf_editor: ^1.3.2
   pdf_document: ^1.3.2
 
-  # On-device, downloadable OCR — adds a selectable text layer over scans
+  # On-device, downloadable OCR - adds a selectable text layer over scans
   # without leaving the device (native platforms only).
   pdf_ocr_ondevice: ^1.3.2
 
@@ -30,7 +30,7 @@ dependencies:
   url_launcher: ^6.3.0
   # Hands a finished PDF to the OS print dialog (iOS, Android, macOS, Windows,
   # Linux, and the web). The engine here only renders pages, so the document
-  # bytes are printed verbatim — no re-layout.
+  # bytes are printed verbatim - no re-layout.
   printing: ^5.13.0
   shared_preferences: ^2.3.0
   desktop_drop: ^0.7.0

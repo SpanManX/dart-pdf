@@ -127,7 +127,7 @@ void main() {
       editing.startColorPick();
       editing.finishColorPick(const Color(0x8000A040));
       expect(editing.isPickingColor, isFalse);
-      // the sample is adopted opaque — annotation alpha is [opacity]'s job
+      // the sample is adopted opaque - annotation alpha is [opacity]'s job
       expect(editing.color, const Color(0xFF00A040));
     });
 
@@ -801,7 +801,7 @@ void main() {
       expect(editing.selectedAnnotation, isNotNull);
 
       // hold Shift across a bottom-right corner drag that only pushes the
-      // width out — the aspect lock must grow the height to match
+      // width out - the aspect lock must grow the height to match
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
       const from = Offset(250, 650), to = Offset(330, 650);
       final gesture = await tester.startGesture(view(from.dx, from.dy));
@@ -992,7 +992,7 @@ void main() {
       final highlightButton = tester.widget<IconButton>(
           find.widgetWithIcon(IconButton, Icons.border_color));
       expect(highlightButton.onPressed, isNotNull);
-      await tester.tap(find.byTooltip('Highlight — draw freehand'));
+      await tester.tap(find.byTooltip('Highlight - draw freehand'));
       await tester.pump();
       expect(editing.tool, PdfEditTool.highlight);
       expect(viewer.hasSelection, isFalse);
@@ -1159,7 +1159,7 @@ void main() {
           scrollable: find.byType(Scrollable).first);
       await tester.tap(find.byTooltip('Stroke, opacity, font'));
       await tester.pumpAndSettle();
-      // scope to the popup's sliders — the strip also has an inline opacity
+      // scope to the popup's sliders - the strip also has an inline opacity
       final menuSliders = find.descendant(
           of: find.byType(MenuAnchor), matching: find.byType(Slider));
       // the shapes popup carries stroke width + opacity (font is irrelevant
@@ -1386,7 +1386,7 @@ void main() {
       await switchFormat(tester, 'RGB');
       final before = channelText(tester, 0);
 
-      // middle of the hue slider ≈ 180° — far from red, every channel moves
+      // middle of the hue slider ≈ 180° - far from red, every channel moves
       final origin = tester.getTopLeft(find.byType(PdfColorPicker));
       await tester.tapAt(origin + const Offset(130, 160 + 12 + 10));
       await tester.pump();
