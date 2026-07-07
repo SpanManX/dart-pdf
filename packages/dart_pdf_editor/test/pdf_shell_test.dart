@@ -40,6 +40,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Visibility actionVisibility(WidgetTester tester, Finder action) =>
+      tester.widget<Visibility>(
+        find.ancestor(of: action, matching: find.byType(Visibility)).first,
+      );
+
+  Future<TestGesture> hoverAt(WidgetTester tester, Offset target) async {
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(799, 599));
+    addTearDown(mouse.removePointer);
+    await tester.pump();
+    await mouse.moveTo(target);
+    await tester.pump();
+    return mouse;
+  }
+
   group('PdfReader', () {
     testWidgets('stock chrome: search, page number, view options, thumbnails',
         (tester) async {
@@ -588,6 +603,71 @@ void main() {
       await tester.pump();
       expect(editing.outline.items, isEmpty);
     });
+
+    testWidgets(
+        'desktop bookmark controls reveal on hover without reserved space',
+        (tester) async {
+      final editing = PdfEditingController(buildMultiPagePdf(2));
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+      editing
+        ..addBookmark('Chapter 1', pageIndex: 0)
+        ..preferences.showBookmarkSidebar = true;
+
+      await pump(
+          tester, PdfEditorView(controller: editing, viewerController: viewer));
+
+      final edit = find.byKey(const ValueKey('pdf-bookmark-edit-0'));
+      expect(edit, findsNothing);
+
+      await hoverAt(tester,
+          tester.getCenter(find.byKey(const ValueKey('pdf-bookmark-tile-0'))));
+
+      expect(edit, findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets(
+        'desktop thumbnail controls reveal on hover without reserved space',
+        (tester) async {
+      await pump(tester, PdfEditorView(bytes: buildMultiPagePdf(2)));
+
+      final rotate = find.byKey(const ValueKey('pdf-thumbnail-rotate-0'));
+      expect(rotate, findsNothing);
+
+      await hoverAt(
+          tester,
+          tester.getCenter(
+              find.byKey(const ValueKey('pdf-thumbnail-tile-chip-0'))));
+
+      expect(rotate, findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
+
+    testWidgets('desktop annotation controls reveal on hover without shifting',
+        (tester) async {
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..addRectangle(0, const PdfRect(100, 550, 180, 610));
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+
+      await pump(
+        tester,
+        Row(children: [
+          PdfAnnotationSidebar(controller: editing, viewerController: viewer),
+          const Expanded(child: SizedBox()),
+        ]),
+      );
+
+      final delete = find.byKey(const ValueKey('pdf-annotation-delete-0-0'));
+      expect(actionVisibility(tester, delete).visible, isFalse);
+      final before = tester.getRect(delete);
+
+      await hoverAt(tester, tester.getCenter(find.text('Square')));
+
+      expect(actionVisibility(tester, delete).visible, isTrue);
+      expect(tester.getRect(delete), before);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
     testWidgets('features can strip the chrome down to the viewer',
         (tester) async {

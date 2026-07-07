@@ -1,8 +1,25 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 /// Which side of the viewer a sidebar panel is docked on. Its resize
 /// grip rides the opposite (inner) edge - the one facing the viewer.
 enum PdfSidebarSide { left, right }
+
+/// Whether panel row controls should be revealed by mouse hover.
+///
+/// Desktop targets have reliable hover and benefit from quieter panels.
+/// Touch-first targets keep controls visible so the actions stay discoverable.
+bool pdfPanelControlsRevealOnHover() => switch (defaultTargetPlatform) {
+      TargetPlatform.linux ||
+      TargetPlatform.macOS ||
+      TargetPlatform.windows =>
+        true,
+      TargetPlatform.android ||
+      TargetPlatform.fuchsia ||
+      TargetPlatform.iOS =>
+        false,
+    };
 
 /// A compact close (×) button for a docked sidebar panel's header - the
 /// desktop counterpart of the bottom sheet's close button (which the

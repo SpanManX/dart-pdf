@@ -202,13 +202,15 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
   }
 
   /// A tile's mouse enter/exit. The field always updates; a rebuild only
-  /// happens while Shift is held, where the preview is actually visible -
-  /// plain hovering never churns the list.
+  /// happens while Shift is held or desktop hover-revealed controls are
+  /// enabled.
   void _setHover(int index, bool hovering) {
     final next = hovering ? index : (_hoverPage == index ? null : _hoverPage);
     if (next == _hoverPage) return;
     _hoverPage = next;
-    if (_shiftHeld && mounted) setState(() {});
+    if ((_shiftHeld || pdfPanelControlsRevealOnHover()) && mounted) {
+      setState(() {});
+    }
   }
 
   void _focusPage(int index) {
@@ -560,6 +562,9 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
                               tileWidth: _tileWidth,
                               renderWorker: widget.renderWorker,
                               inRangePreview: rangePreview.contains(index),
+                              showPageActions:
+                                  !pdfPanelControlsRevealOnHover() ||
+                                      _hoverPage == index,
                               onHover: (hovering) => _setHover(index, hovering),
                               onFocusPage: _focusPage,
                             );
@@ -1048,7 +1053,9 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
     final next = hovering ? index : (_hoverPage == index ? null : _hoverPage);
     if (next == _hoverPage) return;
     _hoverPage = next;
-    if (_shiftHeld && mounted) setState(() {});
+    if ((_shiftHeld || pdfPanelControlsRevealOnHover()) && mounted) {
+      setState(() {});
+    }
   }
 
   void _focusPage(int index) {
@@ -1268,6 +1275,9 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
                                             onActivatePage: _openPage,
                                             inRangePreview:
                                                 rangePreview.contains(i),
+                                            showPageActions:
+                                                !pdfPanelControlsRevealOnHover() ||
+                                                    _hoverPage == i,
                                             onHover: (hovering) =>
                                                 _setHover(i, hovering),
                                             onFocusPage: _focusPage,
@@ -1373,6 +1383,7 @@ class _GridPageCell extends StatefulWidget {
     required this.renderWorker,
     required this.onActivatePage,
     this.inRangePreview = false,
+    this.showPageActions = true,
     this.onHover,
     this.onFocusPage,
   });
@@ -1389,6 +1400,7 @@ class _GridPageCell extends StatefulWidget {
   final PdfRenderWorker? renderWorker;
   final void Function(int pageIndex) onActivatePage;
   final bool inRangePreview;
+  final bool showPageActions;
   final void Function(bool hovering)? onHover;
   final void Function(int pageIndex)? onFocusPage;
 
@@ -1416,6 +1428,7 @@ class _GridPageCellState extends State<_GridPageCell> {
         onActivatePage: widget.onActivatePage,
         activateOnTap: false,
         inRangePreview: widget.inRangePreview,
+        showPageActions: widget.showPageActions,
         onHover: widget.onHover,
         onFocusPage: widget.onFocusPage,
       );
@@ -1574,6 +1587,7 @@ class _PageTile extends StatefulWidget {
     this.onActivatePage,
     this.activateOnTap = true,
     this.inRangePreview = false,
+    this.showPageActions = true,
     this.onHover,
     this.onFocusPage,
   });
@@ -1611,6 +1625,10 @@ class _PageTile extends StatefulWidget {
   /// single click selects and a double-click opens.
   final bool activateOnTap;
 
+  /// Whether per-page action buttons should be visible. Hidden actions
+  /// retain their layout space to avoid row shifts on hover.
+  final bool showPageActions;
+
   /// Notifies the owning strip/grid that this page was interacted with,
   /// so its keyboard focus and arrow-navigation anchor follow the tile.
   final void Function(int pageIndex)? onFocusPage;
@@ -1636,6 +1654,7 @@ class _PageTileState extends State<_PageTile> {
   void Function(bool hovering)? get onHover => widget.onHover;
   void Function(int pageIndex)? get onActivatePage => widget.onActivatePage;
   bool get activateOnTap => widget.activateOnTap;
+  bool get showPageActions => widget.showPageActions;
   void Function(int pageIndex)? get onFocusPage => widget.onFocusPage;
 
   /// WCAG-style contrast ratio between two opaque colors.
@@ -1805,32 +1824,39 @@ class _PageTileState extends State<_PageTile> {
                 // mutates the overlay's RenderObject mid-layout. A Semantics
                 // label keeps the buttons accessible without one.
                 if (allowPageEditing)
-                  Semantics(
-                    label: 'Rotate page right',
-                    button: true,
-                    child: IconButton(
-                      key: ValueKey('pdf-thumbnail-rotate-$pageIndex'),
-                      icon: const Icon(Icons.rotate_right, size: 16),
-                      style: IconButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(28, 28),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  Visibility(
+                    visible: showPageActions,
+                    child: Semantics(
+                      label: 'Rotate page right',
+                      button: true,
+                      child: IconButton(
+                        key: ValueKey('pdf-thumbnail-rotate-$pageIndex'),
+                        icon: const Icon(Icons.rotate_right, size: 16),
+                        style: IconButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(28, 28),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () =>
+                            controller.rotatePages([pageIndex], 90),
                       ),
-                      onPressed: () => controller.rotatePages([pageIndex], 90),
                     ),
                   ),
                 if (allowPageEditing && document.pageCount > 1)
-                  Semantics(
-                    label: 'Delete page',
-                    button: true,
-                    child: IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 16),
-                      style: IconButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(28, 28),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  Visibility(
+                    visible: showPageActions,
+                    child: Semantics(
+                      label: 'Delete page',
+                      button: true,
+                      child: IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 16),
+                        style: IconButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(28, 28),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () => controller.removePage(pageIndex),
                       ),
-                      onPressed: () => controller.removePage(pageIndex),
                     ),
                   ),
               ],

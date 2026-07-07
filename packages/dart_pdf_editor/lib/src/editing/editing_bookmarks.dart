@@ -44,6 +44,7 @@ class PdfBookmarkSidebar extends StatefulWidget {
 class _PdfBookmarkSidebarState extends State<PdfBookmarkSidebar> {
   final ScrollController _scroll = ScrollController();
   final Map<String, bool> _expanded = {};
+  String? _hoveredPath;
   double? _dragWidth;
 
   PdfEditingController get controller => widget.controller;
@@ -62,6 +63,14 @@ class _PdfBookmarkSidebarState extends State<PdfBookmarkSidebar> {
   bool _expandedFor(List<int> path, PdfOutlineItem item) {
     final key = _keyFor(path);
     return _expanded.putIfAbsent(key, () => item.open);
+  }
+
+  void _setHover(String pathKey, bool hovering) {
+    if (!pdfPanelControlsRevealOnHover()) return;
+    final next =
+        hovering ? pathKey : (_hoveredPath == pathKey ? null : _hoveredPath);
+    if (next == _hoveredPath) return;
+    setState(() => _hoveredPath = next);
   }
 
   List<_BookmarkRow> _rows(List<PdfOutlineItem> items,
@@ -206,77 +215,94 @@ class _PdfBookmarkSidebarState extends State<PdfBookmarkSidebar> {
     final pageLabel = destination == null
         ? 'No destination'
         : 'Page ${destination.pageIndex + 1}';
+    final actionsVisible =
+        !pdfPanelControlsRevealOnHover() || _hoveredPath == pathKey;
     final titleStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
           color: textColor,
           fontWeight: item.bold ? FontWeight.w700 : FontWeight.w400,
           fontStyle: item.italic ? FontStyle.italic : FontStyle.normal,
         );
 
-    return InkWell(
-      key: ValueKey('pdf-bookmark-tile-$pathKey'),
-      onTap: destination == null ? null : () => _activate(item),
-      child: Padding(
-        padding: EdgeInsets.only(left: 6 + row.depth * 16.0, right: 4),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 46),
-          child: Row(children: [
-            SizedBox(
-              width: 28,
-              child: hasChildren
-                  ? IconButton(
-                      key: ValueKey('pdf-bookmark-toggle-$pathKey'),
-                      tooltip: expanded ? 'Collapse' : 'Expand',
-                      icon: Icon(
-                          expanded ? Icons.expand_more : Icons.chevron_right),
-                      onPressed: () {
-                        setState(() => _expanded[pathKey] = !expanded);
-                      },
-                    )
-                  : const SizedBox.shrink(),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.title.isEmpty ? 'Untitled' : item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: titleStyle),
-                    const SizedBox(height: 2),
-                    Text(pageLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelSmall
-                            ?.copyWith(color: scheme.onSurfaceVariant)),
-                  ],
+    return MouseRegion(
+      onEnter: (_) => _setHover(pathKey, true),
+      onExit: (_) => _setHover(pathKey, false),
+      child: InkWell(
+        key: ValueKey('pdf-bookmark-tile-$pathKey'),
+        onTap: destination == null ? null : () => _activate(item),
+        child: Padding(
+          padding: EdgeInsets.only(left: 6 + row.depth * 16.0, right: 4),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 46),
+            child: Row(children: [
+              SizedBox(
+                width: 28,
+                child: hasChildren
+                    ? IconButton(
+                        key: ValueKey('pdf-bookmark-toggle-$pathKey'),
+                        tooltip: expanded ? 'Collapse' : 'Expand',
+                        constraints: const BoxConstraints.tightFor(
+                            width: 28, height: 28),
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        iconSize: 18,
+                        icon: Icon(
+                            expanded ? Icons.expand_more : Icons.chevron_right),
+                        onPressed: () {
+                          setState(() => _expanded[pathKey] = !expanded);
+                        },
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.title.isEmpty ? 'Untitled' : item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: titleStyle),
+                      const SizedBox(height: 2),
+                      Text(pageLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            if (widget.editable) ...[
-              IconButton(
-                key: ValueKey('pdf-bookmark-add-child-$pathKey'),
-                tooltip: 'Add child bookmark',
-                icon: const Icon(Icons.subdirectory_arrow_right, size: 19),
-                onPressed: () => _addBookmark(context, parentPath: row.path),
-              ),
-              IconButton(
-                key: ValueKey('pdf-bookmark-edit-$pathKey'),
-                tooltip: 'Edit bookmark',
-                icon: const Icon(Icons.edit_outlined, size: 19),
-                onPressed: () => _editBookmark(context, row),
-              ),
-              IconButton(
-                key: ValueKey('pdf-bookmark-delete-$pathKey'),
-                tooltip: 'Delete bookmark',
-                icon: const Icon(Icons.delete_outline, size: 19),
-                onPressed: () => _deleteBookmark(row),
-              ),
-            ],
-          ]),
+              if (widget.editable)
+                Visibility(
+                  visible: actionsVisible,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(
+                      key: ValueKey('pdf-bookmark-add-child-$pathKey'),
+                      tooltip: 'Add child bookmark',
+                      icon:
+                          const Icon(Icons.subdirectory_arrow_right, size: 19),
+                      onPressed: () =>
+                          _addBookmark(context, parentPath: row.path),
+                    ),
+                    IconButton(
+                      key: ValueKey('pdf-bookmark-edit-$pathKey'),
+                      tooltip: 'Edit bookmark',
+                      icon: const Icon(Icons.edit_outlined, size: 19),
+                      onPressed: () => _editBookmark(context, row),
+                    ),
+                    IconButton(
+                      key: ValueKey('pdf-bookmark-delete-$pathKey'),
+                      tooltip: 'Delete bookmark',
+                      icon: const Icon(Icons.delete_outline, size: 19),
+                      onPressed: () => _deleteBookmark(row),
+                    ),
+                  ]),
+                ),
+            ]),
+          ),
         ),
       ),
     );

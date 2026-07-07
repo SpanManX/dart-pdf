@@ -96,6 +96,7 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
 
   /// Checked tiles in multi-select mode, as (page, /Annots slot).
   final Set<(int, int)> _checked = {};
+  (int, int)? _hoveredSlot;
   bool _selecting = false;
 
   final ScrollController _scroll = ScrollController();
@@ -160,6 +161,13 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
 
   void _onPreferences() {
     if (mounted) setState(() {});
+  }
+
+  void _setHover((int, int) slot, bool hovering) {
+    if (!pdfPanelControlsRevealOnHover()) return;
+    final next = hovering ? slot : (_hoveredSlot == slot ? null : _hoveredSlot);
+    if (next == _hoveredSlot) return;
+    setState(() => _hoveredSlot = next);
   }
 
   void _onResizeDelta(double delta) => setState(() {
@@ -313,46 +321,59 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
     final slot = (pageIndex, index);
     final selectable = !_unselectable.contains(annotation.subtype);
     final detail = _detail(pageIndex, annotation);
-    return ListTile(
-      dense: true,
-      leading: _selecting
-          ? Checkbox(
-              value: _checked.contains(slot),
-              onChanged: selectable ? (_) => _toggle(slot) : null,
-            )
-          : Icon(_icon(annotation.subtype), size: 20),
-      title: Text(_title(annotation)),
-      subtitle: detail.isEmpty
-          ? null
-          : Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis),
-      // viewer multi-selection shows here too
-      selected: !_selecting &&
-          widget.controller.isAnnotationSelected(pageIndex, index),
-      onTap: _selecting
-          ? (selectable ? () => _toggle(slot) : null)
-          : () {
-              unawaited(
-                  widget.viewerController.showRect(pageIndex, annotation.rect));
-              if (selectable) {
-                widget.controller.selectAnnotation(pageIndex, index);
-              }
-              // pulse it on the page so the eye lands right
-              widget.controller.flashAnnotation(pageIndex, index);
-            },
-      onLongPress: selectable && !_selecting
-          ? () => setState(() {
-                _selecting = true;
-                _checked.add(slot);
-              })
-          : null,
-      trailing: _selecting || !selectable
-          ? null
-          : IconButton(
-              icon: const Icon(Icons.delete_outline, size: 20),
-              tooltip: 'Delete',
-              onPressed: () =>
-                  widget.controller.deleteAnnotation(pageIndex, index),
-            ),
+    final actionsVisible =
+        !pdfPanelControlsRevealOnHover() || _hoveredSlot == slot;
+    return MouseRegion(
+      onEnter: (_) => _setHover(slot, true),
+      onExit: (_) => _setHover(slot, false),
+      child: ListTile(
+        dense: true,
+        leading: _selecting
+            ? Checkbox(
+                value: _checked.contains(slot),
+                onChanged: selectable ? (_) => _toggle(slot) : null,
+              )
+            : Icon(_icon(annotation.subtype), size: 20),
+        title: Text(_title(annotation)),
+        subtitle: detail.isEmpty
+            ? null
+            : Text(detail, maxLines: 2, overflow: TextOverflow.ellipsis),
+        // viewer multi-selection shows here too
+        selected: !_selecting &&
+            widget.controller.isAnnotationSelected(pageIndex, index),
+        onTap: _selecting
+            ? (selectable ? () => _toggle(slot) : null)
+            : () {
+                unawaited(widget.viewerController
+                    .showRect(pageIndex, annotation.rect));
+                if (selectable) {
+                  widget.controller.selectAnnotation(pageIndex, index);
+                }
+                // pulse it on the page so the eye lands right
+                widget.controller.flashAnnotation(pageIndex, index);
+              },
+        onLongPress: selectable && !_selecting
+            ? () => setState(() {
+                  _selecting = true;
+                  _checked.add(slot);
+                })
+            : null,
+        trailing: _selecting || !selectable
+            ? null
+            : Visibility(
+                visible: actionsVisible,
+                maintainSize: true,
+                maintainAnimation: true,
+                maintainState: true,
+                child: IconButton(
+                  key: ValueKey('pdf-annotation-delete-$pageIndex-$index'),
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  tooltip: 'Delete',
+                  onPressed: () =>
+                      widget.controller.deleteAnnotation(pageIndex, index),
+                ),
+              ),
+      ),
     );
   }
 
@@ -588,6 +609,7 @@ class _PdfAnnotationSidebarState extends State<PdfAnnotationSidebar> {
             // already rebuilding - adjust the state in place
             _builtFor = document;
             _checked.clear();
+            _hoveredSlot = null;
             _selecting = false;
             _pageTexts.clear();
             // a revision closes any open reply field (the sent reply
