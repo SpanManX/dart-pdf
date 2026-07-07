@@ -30,6 +30,7 @@ const double _tabStripHeight = 42;
 const double _mobileTabsBreakpoint = 700;
 const double _appMenuLeadingWidth = 60;
 const double _appMenuIconSize = 24;
+const int _maxRecentMenuItems = 8;
 
 /// The editor's main screen: a strip of open-document tabs over the drop-in
 /// [PdfEditorView] / [PdfReader] shells, which carry all the PDF chrome
@@ -597,6 +598,29 @@ class _EditorScreenState extends State<EditorScreen>
     }
   }
 
+  List<RecentFile> _recentMenuEntries() {
+    final openIds = {
+      for (final tab in _tabs)
+        if (tab.originPath != null && tab.originPath!.isNotEmpty)
+          tab.originPath!
+        else
+          tab.title,
+    };
+    return [
+      for (final entry in _recents.items)
+        if (!openIds.contains(entry.id)) entry,
+    ].take(_maxRecentMenuItems).toList();
+  }
+
+  void _openMostRecent() {
+    final recents = _recentMenuEntries();
+    if (recents.isEmpty) {
+      _toast('No recent files');
+      return;
+    }
+    unawaited(_openRecent(recents.first));
+  }
+
   /// Opens a second PDF and compares it against the active document. The
   /// active document is the "before".
   Future<void> _compareWith() async {
@@ -964,59 +988,176 @@ class _EditorScreenState extends State<EditorScreen>
       ));
   }
 
-  List<PopupMenuEntry<VoidCallback>> _appMenuItems(DocumentTab? tab) => [
+  bool get _usesAppleShortcuts =>
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  String _menuShortcut(String key, {bool shift = false}) => _usesAppleShortcuts
+      ? '${shift ? '⇧' : ''}⌘$key'
+      : 'Ctrl+${shift ? 'Shift+' : ''}$key';
+
+  Widget _appMenuTile({
+    required IconData icon,
+    required String title,
+    String? shortcut,
+    Widget? trailing,
+  }) =>
+      ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        trailing: trailing ??
+            (shortcut == null
+                ? null
+                : Text(
+                    shortcut,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  )),
+        contentPadding: EdgeInsets.zero,
+      );
+
+  List<PopupMenuEntry<VoidCallback>> _recentMenuItems(
+      BuildContext menuContext) {
+    final recents = _recentMenuEntries();
+    final trailing = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _menuShortcut('O', shift: true),
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+        const SizedBox(width: 12),
+        const Icon(Icons.arrow_right),
+      ],
+    );
+    return [
+      PopupMenuItem<VoidCallback>(
+        value: () {},
+        padding: EdgeInsets.zero,
+        child: PopupMenuButton<VoidCallback>(
+          key: const ValueKey('open-recent-submenu'),
+          tooltip: 'Open Recent',
+          onSelected: (action) {
+            action();
+            if (Navigator.of(menuContext).canPop()) {
+              Navigator.of(menuContext).pop();
+            }
+          },
+          itemBuilder: (_) => [
+            if (recents.isEmpty)
+              const PopupMenuItem<VoidCallback>(
+                enabled: false,
+                child: ListTile(
+                  leading: Icon(Icons.history_toggle_off),
+                  title: Text('No recent files'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              )
+            else ...[
+              for (final entry in recents)
+                PopupMenuItem<VoidCallback>(
+                  value: () => unawaited(_openRecent(entry)),
+                  child: ListTile(
+                    leading: const Icon(Icons.picture_as_pdf_outlined),
+                    title: Text(
+                      entry.title.isEmpty ? 'Untitled' : entry.title,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: entry.path == null
+                        ? null
+                        : Text(
+                            entry.path!,
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              const PopupMenuDivider(),
+              PopupMenuItem<VoidCallback>(
+                value: () => unawaited(_recents.clear()),
+                child: const ListTile(
+                  leading: Icon(Icons.clear_all),
+                  title: Text('Clear recent files'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
+          ],
+          child: _appMenuTile(
+            icon: Icons.history,
+            title: 'Open Recent',
+            trailing: trailing,
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<PopupMenuEntry<VoidCallback>> _appMenuItems(
+          BuildContext menuContext, DocumentTab? tab) =>
+      [
+        PopupMenuItem(
+          key: const ValueKey('menu-open'),
+          value: () => unawaited(_pickAndOpen()),
+          child: _appMenuTile(
+            icon: Icons.folder_open,
+            title: 'Open a PDF…',
+            shortcut: _menuShortcut('O'),
+          ),
+        ),
+        ..._recentMenuItems(menuContext),
+        const PopupMenuDivider(),
         if (tab?.session != null) ...[
           PopupMenuItem(
             value: () => _save(tab!, saveAs: true),
-            child: const ListTile(
-              leading: Icon(Icons.save_as_outlined),
-              title: Text('Save as…'),
-              contentPadding: EdgeInsets.zero,
+            child: _appMenuTile(
+              icon: Icons.save_as_outlined,
+              title: 'Save as…',
+              shortcut: _menuShortcut('S', shift: true),
             ),
           ),
           PopupMenuItem(
             key: const ValueKey('menu-print'),
             value: () => unawaited(_print(tab!)),
-            child: const ListTile(
-              leading: Icon(Icons.print_outlined),
-              title: Text('Print…'),
-              contentPadding: EdgeInsets.zero,
+            child: _appMenuTile(
+              icon: Icons.print_outlined,
+              title: 'Print…',
+              shortcut: _menuShortcut('P'),
             ),
           ),
           PopupMenuItem(
             key: const ValueKey('menu-export-image'),
             value: () => unawaited(_exportImage(tab!)),
-            child: const ListTile(
-              leading: Icon(Icons.image_outlined),
-              title: Text('Export page as image…'),
-              contentPadding: EdgeInsets.zero,
+            child: _appMenuTile(
+              icon: Icons.image_outlined,
+              title: 'Export page as image…',
             ),
           ),
           PopupMenuItem(
             value: _compareWith,
-            child: const ListTile(
-              leading: Icon(Icons.compare_arrows),
-              title: Text('Compare with…'),
-              contentPadding: EdgeInsets.zero,
+            child: _appMenuTile(
+              icon: Icons.compare_arrows,
+              title: 'Compare with…',
             ),
           ),
           PopupMenuItem(
             value: () => setState(() => _readOnly = !_readOnly),
-            child: ListTile(
-              leading: Icon(_readOnly ? Icons.edit : Icons.edit_off),
-              title: Text(
-                  _readOnly ? 'Switch to edit mode' : 'Switch to read-only'),
-              contentPadding: EdgeInsets.zero,
+            child: _appMenuTile(
+              icon: _readOnly ? Icons.edit : Icons.edit_off,
+              title: _readOnly ? 'Switch to edit mode' : 'Switch to read-only',
             ),
           ),
           if (OnDeviceOcr.isSupported)
             PopupMenuItem(
               key: const ValueKey('menu-ocr'),
               value: () => unawaited(_runOcr()),
-              child: const ListTile(
-                leading: Icon(Icons.document_scanner_outlined),
-                title: Text('OCR…'),
-                contentPadding: EdgeInsets.zero,
+              child: _appMenuTile(
+                icon: Icons.document_scanner_outlined,
+                title: 'OCR…',
               ),
             ),
           const PopupMenuDivider(),
@@ -1028,10 +1169,9 @@ class _EditorScreenState extends State<EditorScreen>
             recents: _recents,
             updates: _updates,
           ),
-          child: const ListTile(
-            leading: Icon(Icons.settings_outlined),
-            title: Text('Settings'),
-            contentPadding: EdgeInsets.zero,
+          child: _appMenuTile(
+            icon: Icons.settings_outlined,
+            title: 'Settings',
           ),
         ),
       ];
@@ -1059,6 +1199,14 @@ class _EditorScreenState extends State<EditorScreen>
               _printActive,
           const SingleActivator(LogicalKeyboardKey.keyP, control: true):
               _printActive,
+          const SingleActivator(LogicalKeyboardKey.keyO, meta: true):
+              _pickAndOpen,
+          const SingleActivator(LogicalKeyboardKey.keyO, control: true):
+              _pickAndOpen,
+          const SingleActivator(LogicalKeyboardKey.keyO,
+              meta: true, shift: true): _openMostRecent,
+          const SingleActivator(LogicalKeyboardKey.keyO,
+              control: true, shift: true): _openMostRecent,
         },
         child: DropTarget(
           onDragEntered: (_) => setState(() => _dragging = true),
@@ -1206,7 +1354,7 @@ class _EditorScreenState extends State<EditorScreen>
         ),
         tooltip: 'DartPDF menu',
         onSelected: (action) => action(),
-        itemBuilder: (context) => _appMenuItems(tab),
+        itemBuilder: (context) => _appMenuItems(context, tab),
       );
 
   Widget _buildTabsTitle() {
