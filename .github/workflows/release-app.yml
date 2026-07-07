@@ -60,7 +60,10 @@ jobs:
           patch_gradle() {
             local gradle_file="$1"
             local namespace="${2:-}"
-            test -n "$gradle_file"
+            if [[ -z "$gradle_file" ]]; then
+              echo "No matching hosted Android Gradle file found; skipping patch."
+              return 0
+            fi
 
             python3 - "$gradle_file" "$namespace" <<'PY'
           import re
@@ -82,9 +85,14 @@ jobs:
           super_native_gradle="$(find "$HOME/.pub-cache" -path '*/super_native_extensions-*/android/build.gradle' -print -quit)"
           patch_gradle "$super_native_gradle" com.superlist.super_native_extensions
 
-          cargokit_gradle="$(dirname "$super_native_gradle")/../cargokit/gradle/plugin.gradle"
-          test -f "$cargokit_gradle"
-          python3 - "$cargokit_gradle" <<'PY'
+          if [[ -n "$super_native_gradle" ]]; then
+            cargokit_gradle="$(dirname "$super_native_gradle")/../cargokit/gradle/plugin.gradle"
+          else
+            cargokit_gradle=""
+          fi
+
+          if [[ -n "$cargokit_gradle" && -f "$cargokit_gradle" ]]; then
+            python3 - "$cargokit_gradle" <<'PY'
           import sys
           from pathlib import Path
 
@@ -103,6 +111,9 @@ jobs:
               raise SystemExit("CargoKit plugin patch target not found")
           path.write_text(text)
           PY
+          else
+            echo "No CargoKit Gradle plugin found; skipping patch."
+          fi
       - name: Build APK + AAB
         working-directory: app
         run: |
