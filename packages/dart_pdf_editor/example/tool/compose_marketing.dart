@@ -32,8 +32,8 @@ const _captions = <String, (String, String)>{
     'No account. No uploads. Files stay on your device.'
   ),
   'app/02-editor': (
-    'Edit the PDF in front of you',
-    'Annotate, fill forms, sign, redact, and move pages.'
+    'Mark up, sign, redact',
+    'Fill forms, add notes, and move pages.'
   ),
   'app/03-dark': (
     'Built for real documents',
