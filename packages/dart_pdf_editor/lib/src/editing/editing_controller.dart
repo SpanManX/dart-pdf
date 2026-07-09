@@ -145,6 +145,11 @@ enum PdfEditTool {
   /// Drag out a box, then type the text shown inside it (/FreeText).
   freeText,
 
+  /// Drag from the terminus you're pointing at to where the text box goes,
+  /// then type the text (a /FreeText callout with a leader line and arrow,
+  /// like Bluebeam's Callout tool).
+  callout,
+
   /// Tap to place a sticky note (/Text).
   note,
 
@@ -873,6 +878,7 @@ class PdfEditingController extends ChangeNotifier {
         PdfEditTool.measureArc => 'measureArc',
         PdfEditTool.measureVolume => 'measureVolume',
         PdfEditTool.freeText => 'freeText',
+        PdfEditTool.callout => 'callout',
         PdfEditTool.note => 'note',
         PdfEditTool.stamp => 'stamp',
         PdfEditTool.count => 'count',
@@ -922,7 +928,7 @@ class PdfEditingController extends ChangeNotifier {
         PdfEditTool.measureArc ||
         PdfEditTool.measureVolume =>
           const {'color', 'strokeWidth', 'opacity'},
-        PdfEditTool.freeText => const {
+        PdfEditTool.freeText || PdfEditTool.callout => const {
             'color',
             'fontSize',
             'fontFamily',
@@ -1944,6 +1950,27 @@ class PdfEditingController extends ChangeNotifier {
           author: author),
       pages: [pageIndex],
       contentPages: const <int>[]);
+
+  /// Places a callout: a [text] box at [rect] with a leader line pointing at
+  /// [target] on the page (both in page space). Mirrors [addFreeText] for the
+  /// box styling and points the arrow with the tool's stroke color/width.
+  void addCallout(
+          int pageIndex, PdfRect rect, String text, (double, double) target) =>
+      apply(
+          (e) => e.addCallout(pageIndex, rect, text, target,
+              fontSize: preferences.fontSize,
+              font: _activeFont ?? preferences.fontFamily,
+              align: preferences.textAlign,
+              color: _colorValue,
+              fillColor: _rgbOf(preferences.textFillColor),
+              // the box outline and leader share one stroke; fall back to the
+              // text color so the arrow always has a definite color/width
+              strokeColor: _rgbOf(preferences.textBorderColor) ?? _colorValue,
+              strokeWidth: preferences.strokeWidth,
+              pageRotation: _page(pageIndex).rotation,
+              author: author),
+          pages: [pageIndex],
+          contentPages: const <int>[]);
 
   void addFreeTextRich(
           int pageIndex, PdfRect rect, List<PdfFreeTextRun> runs) =>
@@ -4076,11 +4103,42 @@ class PdfEditingController extends ChangeNotifier {
       _resizeWidget(_selected.last, to);
       return;
     }
+    if (annotation.isCallout) {
+      // a callout's resize handles size the text box; the terminus stays
+      // put and the leader stretches (Bluebeam's model)
+      apply((e) => e.reshapeCallout(_selected.last.$1, annotation, box: to),
+          pages: [_selected.last.$1], contentPages: const <int>[]);
+      return;
+    }
     apply(
         (e) => e.resizeAnnotation(_selected.last.$1, annotation, to,
             flipX: flipX,
             flipY: flipY,
             pageRotation: _page(_selected.last.$1).rotation),
+        pages: [_selected.last.$1],
+        contentPages: const <int>[]);
+  }
+
+  /// Moves a selected callout's arrow terminus to [target] (page space),
+  /// leaving the text box where it is - the leader stretches to follow.
+  /// A no-op unless a single callout is selected.
+  void reshapeSelectedCalloutTarget((double, double) target) {
+    final annotation = selectedAnnotation;
+    if (annotation == null || !annotation.isCallout) return;
+    apply(
+        (e) => e.reshapeCallout(_selected.last.$1, annotation, target: target),
+        pages: [_selected.last.$1],
+        contentPages: const <int>[]);
+  }
+
+  /// Moves a selected callout's arrow base (where the leader meets the text
+  /// box) to [attach], snapped to the box perimeter. The box and terminus
+  /// stay put. A no-op unless a single callout is selected.
+  void reshapeSelectedCalloutBase((double, double) attach) {
+    final annotation = selectedAnnotation;
+    if (annotation == null || !annotation.isCallout) return;
+    apply(
+        (e) => e.reshapeCallout(_selected.last.$1, annotation, attach: attach),
         pages: [_selected.last.$1],
         contentPages: const <int>[]);
   }
@@ -4126,6 +4184,13 @@ class PdfEditingController extends ChangeNotifier {
     if (annotation.subtype == 'Widget') {
       // widgets never rotate, so the local frame is the rect itself
       _resizeWidget(_selected.last, localTo);
+      return;
+    }
+    if (annotation.isCallout) {
+      apply(
+          (e) => e.reshapeCallout(_selected.last.$1, annotation, box: localTo),
+          pages: [_selected.last.$1],
+          contentPages: const <int>[]);
       return;
     }
     apply(
@@ -4335,10 +4400,13 @@ class PdfEditingController extends ChangeNotifier {
     final height = math.max(18.0, lines.length * size * 1.2 + 2 * pad);
     final page = _page(_selected.last.$1);
     final bounds = page.cropBox;
-    final left = annotation.rect.left
+    // a callout autosizes its text box, not the /Rect that also spans the
+    // leader + arrow: anchor at the box's top-left so the arrow stays put
+    final anchor = annotation.calloutBox ?? annotation.rect;
+    final left = anchor.left
         .clamp(bounds.left, math.max(bounds.left, bounds.right - width))
         .toDouble();
-    final top = annotation.rect.top
+    final top = anchor.top
         .clamp(math.min(bounds.top, bounds.bottom + height), bounds.top)
         .toDouble();
     return PdfRect(left, top - height, left + width, top);
