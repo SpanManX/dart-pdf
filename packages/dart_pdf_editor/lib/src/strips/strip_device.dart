@@ -22,6 +22,7 @@
 // A strip picture is only valid at the pixel ratio it was recorded for:
 // the quads are device-pixel-aligned and the coverage was resolved at that
 // ratio (rescaling filters the strips like any raster).
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -30,6 +31,7 @@ import 'package:pdf_graphics/pdf_graphics.dart';
 import 'package:pdf_graphics/raster.dart';
 
 import '../canvas_device.dart';
+import 'slug_batch.dart';
 import 'strip_batch.dart';
 
 export 'package:pdf_graphics/raster.dart'
@@ -64,19 +66,26 @@ class StripPdfDevice extends StripBinningDevice {
     required double pixelRatio,
     Map<Object, ui.Image> images = const {},
     StripPlan? precomputed,
-  }) =>
-      StripPdfDevice._(
-        canvas,
-        usablePlan(precomputed,
-            pageToDevice: pageToDevice,
-            deviceWidth: deviceWidth,
-            deviceHeight: deviceHeight),
-        pageToDevice: pageToDevice,
-        deviceWidth: deviceWidth,
-        deviceHeight: deviceHeight,
-        pixelRatio: pixelRatio,
-        images: images,
-      );
+    double slugMinGlyphPx = 4,
+    bool? enableSlugGlyphs,
+  }) {
+    final slugEnabled = enableSlugGlyphs ?? slugGlyphs;
+    return StripPdfDevice._(
+      canvas,
+      usablePlan(precomputed,
+          pageToDevice: pageToDevice,
+          deviceWidth: deviceWidth,
+          deviceHeight: deviceHeight,
+          slugEnabled: slugEnabled),
+      pageToDevice: pageToDevice,
+      deviceWidth: deviceWidth,
+      deviceHeight: deviceHeight,
+      pixelRatio: pixelRatio,
+      images: images,
+      slugMinGlyphPx: slugMinGlyphPx,
+      slugEnabled: slugEnabled,
+    );
+  }
 
   StripPdfDevice._(
     this.canvas,
@@ -86,7 +95,10 @@ class StripPdfDevice extends StripBinningDevice {
     required super.deviceHeight,
     required super.pixelRatio,
     required this.images,
+    required this.slugMinGlyphPx,
+    required bool slugEnabled,
   })  : _deviceToPage = _invertToMatrix4(pageToDevice),
+        _slugEnabled = slugEnabled,
         super(
           // A usable plan replaces local binning entirely; the debug
           // verification mode bins locally TOO so emitBatch can compare.
@@ -116,8 +128,15 @@ class StripPdfDevice extends StripBinningDevice {
     required PdfMatrix pageToDevice,
     required int deviceWidth,
     required int deviceHeight,
+    bool slugEnabled = false,
   }) {
     if (plan == null) return null;
+    // Worker plans currently route outline text into strips. Slug changes
+    // that routing, so a caller explicitly recording a transform-time Slug
+    // picture must bin locally rather than consume a structurally different
+    // plan. The normal dense-page raster path keeps slugEnabled false and
+    // continues consuming worker plans unchanged.
+    if (slugEnabled) return null;
     if (debugDelegateAll ||
         debugDelegateFills ||
         debugDelegateStrokes ||
@@ -139,6 +158,23 @@ class StripPdfDevice extends StripBinningDevice {
     }
     return plan;
   }
+
+  /// Experimental Slug glyph rendering (B3): outline text draws as
+  /// em-space quads evaluated by shaders/pdf_slug.frag against a per-flush
+  /// curve atlas instead of strip binning; glyphs whose band lists
+  /// overflow keep the strip path. Snapshotted per device at construction.
+  static bool slugGlyphs = false;
+
+  final bool _slugEnabled;
+  final double slugMinGlyphPx;
+  SlugBatchBuilder? _slugBuilder;
+  final List<SlugBatch> _slugBatches = [];
+  int _slugQuadCount = 0;
+  int _slugFallbackOutlineRuns = 0;
+
+  /// Per-device Slug routing result, unlike the aggregate benchmark stats.
+  int get slugQuadCount => _slugQuadCount;
+  int get slugFallbackOutlineRuns => _slugFallbackOutlineRuns;
 
   final ui.Canvas canvas;
 
@@ -180,6 +216,10 @@ class StripPdfDevice extends StripBinningDevice {
   /// Pictures painted from a verified precomputed plan (no local binning).
   static int totalPlanPictures = 0;
 
+  /// Slug-mode stats: glyph quads drawn and curve-atlas texels uploaded.
+  static int totalSlugQuads = 0;
+  static int totalSlugAtlasTexels = 0;
+
   static void resetStats() {
     totalFlushes = 0;
     totalStripQuads = 0;
@@ -190,11 +230,14 @@ class StripPdfDevice extends StripBinningDevice {
     totalRouteMicros = 0;
     totalPlanMismatches = 0;
     totalPlanPictures = 0;
+    totalSlugQuads = 0;
+    totalSlugAtlasTexels = 0;
   }
 
   int get flushCount => _batches.length;
 
   static Future<ui.FragmentProgram>? _programFuture;
+  static Future<ui.FragmentProgram>? _slugProgramFuture;
 
   static Future<ui.FragmentProgram> _loadProgram() =>
       _programFuture ??= () async {
@@ -203,6 +246,16 @@ class StripPdfDevice extends StripBinningDevice {
         } catch (_) {
           return ui.FragmentProgram.fromAsset(
               'packages/dart_pdf_editor/shaders/pdf_strips.frag');
+        }
+      }();
+
+  static Future<ui.FragmentProgram> _loadSlugProgram() =>
+      _slugProgramFuture ??= () async {
+        try {
+          return await ui.FragmentProgram.fromAsset('shaders/pdf_slug.frag');
+        } catch (_) {
+          return ui.FragmentProgram.fromAsset(
+              'packages/dart_pdf_editor/shaders/pdf_slug.frag');
         }
       }();
 
@@ -332,6 +385,79 @@ class StripPdfDevice extends StripBinningDevice {
   void delegateDrawImage(PdfImageRequest request) =>
       _paint((d) => d.drawImage(request));
 
+  @override
+  void drawText(PdfTextRun run) {
+    final glyphs = run.glyphs;
+    if (!_slugEnabled ||
+        run.invisible ||
+        !stripsActive ||
+        delegateText ||
+        glyphs == null ||
+        !run.fill ||
+        run.strokeColor != null ||
+        run.gradient != null) {
+      super.drawText(run);
+      return;
+    }
+
+    // Finish strips that precede this run, then commit the complete run as one
+    // Slug batch immediately. Immediate commit is deliberately conservative
+    // while the worker-plan and glyph-layer paths are integrated: it preserves
+    // painter order without changing StripBinningDevice's flush ordinals.
+    flushPending();
+    if (!_addSlugRun(glyphs, run, stripArgbColor(run.color, 1))) {
+      _slugFallbackOutlineRuns++;
+      super.drawText(run);
+      return;
+    }
+    _flushSlug();
+  }
+
+  static const double _slugMaxVExtent = 8192;
+
+  bool _addSlugRun(List<PdfGlyphPlacement> glyphs, PdfTextRun run, int color) {
+    final deviceTransform = run.transform.concat(pageToDevice);
+    final sx = math.sqrt(deviceTransform.a * deviceTransform.a +
+        deviceTransform.b * deviceTransform.b);
+    final sy = math.sqrt(deviceTransform.c * deviceTransform.c +
+        deviceTransform.d * deviceTransform.d);
+    if (math.max(sx, sy) < slugMinGlyphPx) return false;
+
+    for (final glyph in glyphs) {
+      final outline = glyph.outline;
+      if (outline != null && SlugGlyphData.of(outline).overflow) return false;
+    }
+
+    final builder = _slugBuilder ??= SlugBatchBuilder();
+    for (final glyph in glyphs) {
+      final outline = glyph.outline;
+      if (outline == null) continue;
+      final emToPage = PdfMatrix.translation(glyph.offset, glyph.offsetY)
+          .concat(run.transform);
+      builder.addGlyph(
+        outline,
+        SlugGlyphData.of(outline),
+        emToPage,
+        sx,
+        sy,
+        color,
+      );
+    }
+    if (builder.estimatedVExtent > _slugMaxVExtent) _flushSlug();
+    return true;
+  }
+
+  void _flushSlug() {
+    final batch = _slugBuilder?.build();
+    if (batch == null) return;
+    _tape.add(batch);
+    _slugBatches.add(batch);
+    totalFlushes++;
+    totalSlugQuads += batch.quadCount;
+    _slugQuadCount += batch.quadCount;
+    totalSlugAtlasTexels += batch.atlasWidth * batch.atlasHeight;
+  }
+
   // ---- painting ---------------------------------------------------------
 
   /// Decodes every batch's alpha atlas, then replays the tape onto
@@ -342,6 +468,7 @@ class StripPdfDevice extends StripBinningDevice {
     assert(!_finished, 'StripPdfDevice.finish() called twice');
     _finished = true;
     flushPending();
+    _flushSlug();
     final plan = _plan;
     if (plan != null &&
         (flushPointCount != plan.totalFlushPoints ||
@@ -358,7 +485,11 @@ class StripPdfDevice extends StripBinningDevice {
     if (plan != null && !debugVerifyPrecomputed) totalPlanPictures++;
     final sw = Stopwatch()..start();
     final program = await _loadProgram();
-    await Future.wait([for (final b in _batches) b.decodeAtlas()]);
+    final slugProgram = _slugBatches.isEmpty ? null : await _loadSlugProgram();
+    await Future.wait([
+      for (final b in _batches) b.decodeAtlas(),
+      for (final b in _slugBatches) b.decodeAtlas(),
+    ]);
     totalAtlasDecodeMicros += sw.elapsedMicroseconds;
 
     sw.reset();
@@ -366,6 +497,8 @@ class StripPdfDevice extends StripBinningDevice {
     for (final entry in _tape) {
       if (entry is StripBatch) {
         _drawBatch(program, entry);
+      } else if (entry is SlugBatch) {
+        _drawSlugBatch(slugProgram!, entry);
       } else {
         (entry as void Function(CanvasPdfDevice))(fallback);
       }
@@ -373,11 +506,35 @@ class StripPdfDevice extends StripBinningDevice {
     totalReplayMicros += sw.elapsedMicroseconds;
   }
 
+  /// Debug: slug shader diagnostic output mode (see pdf_slug.frag uDebug).
+  static double debugSlugMode = 0;
+
+  /// Debug: mode parameter (uDebug.y - e.g. curve index for mode 3).
+  static double debugSlugParam = 0;
+
+  /// Slug quads are page-space geometry - no device->page transform.
+  void _drawSlugBatch(ui.FragmentProgram program, SlugBatch batch) {
+    final shader = program.fragmentShader()
+      ..setFloat(0, batch.atlasWidth.toDouble())
+      ..setFloat(1, batch.atlasHeight.toDouble())
+      ..setFloat(2, debugSlugMode)
+      ..setFloat(3, debugSlugParam)
+      ..setFloat(4, batch.cellHeight)
+      ..setImageSampler(0, batch.atlas!);
+    final paint = ui.Paint()..shader = shader;
+    for (final chunk in batch.chunks) {
+      canvas.drawVertices(chunk, ui.BlendMode.modulate, paint);
+    }
+  }
+
   /// Releases the decoded atlas images and vertex buffers. Call after the
   /// recording that [finish] painted into has ended (the picture keeps its
   /// own references).
   void dispose() {
     for (final b in _batches) {
+      b.dispose();
+    }
+    for (final b in _slugBatches) {
       b.dispose();
     }
   }
