@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.1
 
 - Run downloaded ONNX OCR models on a long-lived worker isolate by default.
   Page RGBA buffers transfer without a structured-message copy, and model

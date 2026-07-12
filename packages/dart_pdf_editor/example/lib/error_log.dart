@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 /// The app version reported in diagnostics. Keep in sync with the `version`
 /// field in `pubspec.yaml`; it is surfaced to feedback reviewers so a report
 /// can be matched to a build.
-const String kAppVersion = '1.4.0';
+const String kAppVersion = '1.4.1';
 
 /// Severity of a captured [AppLogEntry].
 enum AppLogLevel {
