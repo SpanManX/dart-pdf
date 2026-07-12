@@ -16,6 +16,7 @@ import '../theme.dart';
 import 'editing_color_picker.dart';
 import 'editing_controller.dart';
 import 'editing_fonts.dart';
+import 'editing_interaction.dart';
 import 'editing_measure.dart';
 import 'stroke_prediction.dart';
 import 'text_prompt.dart';
@@ -347,47 +348,6 @@ Color _inlineTextHandleColor(BuildContext context) {
       const Color(0xFF2196F3);
 }
 
-/// A single-selection move drag's floating preview: the dragged
-/// annotation's appearance, reported up to [PdfViewer] so it paints above
-/// every page.
-///
-/// A per-page overlay would clip its preview behind the page below the
-/// moment a move drag crosses a page boundary - sibling list items paint
-/// over it - so the artwork is hoisted to a viewer-level layer that sits
-/// over the whole list.
-///
-/// [from]/[to] are the reporting page overlay's local (page-view)
-/// coordinates; the viewer translates them into its list space by the
-/// page's origin.
-class PdfMoveDragPreview {
-  const PdfMoveDragPreview({
-    required this.pageIndex,
-    required this.picture,
-    required this.from,
-    required this.to,
-    required this.scale,
-  });
-
-  /// The page the dragged annotation rests on.
-  final int pageIndex;
-
-  /// The annotation's appearance, page-raster space (1 unit = 1 point).
-  final ui.Picture picture;
-
-  /// The annotation's resting view rect (overlay-local).
-  final Rect from;
-
-  /// Where the drag has moved it (overlay-local).
-  final Rect to;
-
-  /// Page-raster to view scale ([PdfPageGeometry.scale]).
-  final double scale;
-}
-
-/// Reports a single-selection move drag's floating preview to the viewer
-/// (null clears it). See [PdfMoveDragPreview].
-typedef PdfMoveDragPreviewCallback = void Function(PdfMoveDragPreview? preview);
-
 /// One page's editing layer: captures the armed tool's gestures in page
 /// space, previews them, and commits them through the controller.
 ///
@@ -404,6 +364,8 @@ class EditingPageOverlay extends StatefulWidget {
     required this.textPrompt,
     this.pageColor = const Color(0xFFFFFFFF),
     this.showAnnotations = true,
+    this.interactionHost,
+    this.interactionSession,
     this.onPanViewport,
     this.onPanViewportEnd,
     this.edgeAutoScroll,
@@ -445,24 +407,27 @@ class EditingPageOverlay extends StatefulWidget {
   /// requirement as [pageColor]: the eyedropper samples what's visible.
   final bool showAnnotations;
 
-  /// Pans the viewer by a pointer delta (this overlay's local space).
-  /// Lets a drag on empty page area scroll the document even though the
-  /// overlay's recognizers won the arena - grab panning and annotation
-  /// selection co-existing in the select tool.
+  /// Viewer-owned services used by this page's interaction session.
+  final PdfEditingInteractionHost? interactionHost;
+
+  /// Optional stable state/effect surface. When omitted the overlay owns a
+  /// private session; [PdfViewer.interactionSession] exposes one to hosts and
+  /// tests without coupling them to the preview painter.
+  final PdfEditingInteractionSession? interactionSession;
+
+  /// Legacy callback parameters retained for source compatibility. New
+  /// integrations should provide one [interactionHost].
   final void Function(Offset delta)? onPanViewport;
-
-  /// A viewport pan ended: hands the gesture's lift-off velocity to the
-  /// viewer so a finger fling keeps its momentum (the overlay's pan path
-  /// bypasses the list's scroll physics, which would otherwise carry it).
   final void Function(Velocity velocity)? onPanViewportEnd;
-
-  /// Per-frame edge auto-scroll for a region/selection drag. Given the drag
-  /// pointer's global position, returns the viewport scroll delta (this
-  /// overlay's local space, same as [onPanViewport]) to apply this frame so
-  /// the document keeps moving while the pointer rests against a viewport
-  /// edge - [Offset.zero] when the pointer is clear of every edge. With none,
-  /// dragging to the edge does not scroll the viewer.
   final Offset Function(Offset globalPosition)? edgeAutoScroll;
+  final void Function(Offset globalPosition, int pageIndex,
+      {(double, double)? pagePoint})? onShowAnnotationMenu;
+  final void Function(Offset globalPosition, String fieldName,
+      {int? widgetIndex})? onShowFormFieldMenu;
+  final (int, double, double)? Function(Offset globalPosition)?
+      onResolvePagePoint;
+  final PdfMoveDragPreviewCallback? onMoveDragPreview;
+  final VoidCallback? onTextEditClosed;
 
   /// Whether the page raster on screen already shows the controller's
   /// current revision. While false (an edit just committed and the
@@ -481,39 +446,6 @@ class EditingPageOverlay extends StatefulWidget {
   /// draws a forward-extrapolated lead so the painted line keeps up with
   /// the pen tip.
   final bool predictStrokes;
-
-  /// Opens the annotation context menu at a global position - the
-  /// selection action chip's "more" button and the touch long-press,
-  /// which give touch input the menu that mice reach by right-clicking.
-  /// The viewer supplies its menu (including the host's custom actions);
-  /// [pagePoint] anchors a paste from a press on empty page area.
-  final void Function(Offset globalPosition, int pageIndex,
-      {(double, double)? pagePoint})? onShowAnnotationMenu;
-
-  /// Opens the form-field context menu (edit/rename/convert/delete/flatten)
-  /// at a global position - the touch long-press counterpart of
-  /// right-clicking a field widget with the form tool armed.
-  final void Function(Offset globalPosition, String fieldName,
-      {int? widgetIndex})? onShowFormFieldMenu;
-
-  /// Resolves a global point to the page index and page-space coordinates
-  /// under it - lets a move drag that ends over a *different* page re-home
-  /// the dragged annotation there. Returns null off any page.
-  final (int, double, double)? Function(Offset globalPosition)?
-      onResolvePagePoint;
-
-  /// Reports a single-selection move drag's floating preview so the viewer
-  /// paints it above every page - a per-page overlay clips it behind the
-  /// page below once the drag crosses a page boundary. Null clears it.
-  final PdfMoveDragPreviewCallback? onMoveDragPreview;
-
-  /// Called when the in-place text editor closes while it still owned the
-  /// keyboard (Escape, ⌘Enter, or a commit by tapping the page) - not when
-  /// focus moved to another widget. The viewer wires this to reclaim its
-  /// own focus so its shortcuts (Escape → back out, tool keys, delete) work
-  /// again immediately; otherwise the removed field's focus node leaves
-  /// focus in limbo and the next key reaches nothing.
-  final VoidCallback? onTextEditClosed;
 
   @override
   State<EditingPageOverlay> createState() => _EditingPageOverlayState();
@@ -909,6 +841,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   MouseCursor _cursor = MouseCursor.defer;
 
+  late PdfEditingInteractionSession _interaction;
+  late bool _ownsInteraction;
+  late PdfEditingInteractionHost _host;
+  bool _rasterReadyScheduled = false;
+
   PdfEditingController get _controller => widget.controller;
   PdfPageGeometry get _geometry => widget.geometry;
 
@@ -933,7 +870,29 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   @override
   void initState() {
     super.initState();
+    _adoptInteraction();
+    _adoptHost();
     _controller.addListener(_onControllerChanged);
+  }
+
+  void _adoptInteraction() {
+    _ownsInteraction = widget.interactionSession == null;
+    _interaction =
+        widget.interactionSession ?? PdfEditingInteractionSession();
+  }
+
+  void _adoptHost() {
+    _host = widget.interactionHost ??
+        PdfEditingInteractionHost(
+          panViewport: widget.onPanViewport,
+          endViewportPan: widget.onPanViewportEnd,
+          edgeAutoScroll: widget.edgeAutoScroll,
+          showAnnotationMenu: widget.onShowAnnotationMenu,
+          showFormFieldMenu: widget.onShowFormFieldMenu,
+          resolvePagePoint: widget.onResolvePagePoint,
+          moveDragPreview: widget.onMoveDragPreview,
+          textEditClosed: widget.onTextEditClosed,
+        );
   }
 
   @override
@@ -942,6 +901,23 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (!identical(oldWidget.controller, widget.controller)) {
       oldWidget.controller.removeListener(_onControllerChanged);
       _controller.addListener(_onControllerChanged);
+    }
+    if (!identical(oldWidget.interactionSession, widget.interactionSession)) {
+      if (_interaction.isActive) _interaction.cancel();
+      if (_ownsInteraction) _interaction.dispose();
+      _adoptInteraction();
+    }
+    if (!identical(oldWidget.interactionHost, widget.interactionHost) ||
+        !identical(oldWidget.onPanViewport, widget.onPanViewport) ||
+        !identical(oldWidget.onPanViewportEnd, widget.onPanViewportEnd) ||
+        !identical(oldWidget.edgeAutoScroll, widget.edgeAutoScroll) ||
+        !identical(
+            oldWidget.onShowAnnotationMenu, widget.onShowAnnotationMenu) ||
+        !identical(oldWidget.onShowFormFieldMenu, widget.onShowFormFieldMenu) ||
+        !identical(oldWidget.onResolvePagePoint, widget.onResolvePagePoint) ||
+        !identical(oldWidget.onMoveDragPreview, widget.onMoveDragPreview) ||
+        !identical(oldWidget.onTextEditClosed, widget.onTextEditClosed)) {
+      _adoptHost();
     }
   }
 
@@ -967,7 +943,9 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// A finger should pan the viewer (not draw): the draw tool is armed
   /// but finger-drawing is off, so touch is reserved for scrolling.
   bool get _fingerPansViewport =>
-      _drawTool && !_controller.fingerDrawsInk && widget.onPanViewport != null;
+      _drawTool &&
+      !_controller.fingerDrawsInk &&
+      _host.panViewport != null;
   bool get _polyTool =>
       _tool == PdfEditTool.polyline ||
       _tool == PdfEditTool.polygon ||
@@ -1030,6 +1008,42 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     };
   }
 
+  void _beginInteraction(
+      PdfEditingInteractionIntent intent, PointerDeviceKind? pointerKind) {
+    _interaction.begin(intent,
+        pageIndex: widget.pageIndex, pointerKind: pointerKind);
+  }
+
+  void _finishInteraction(PdfDocument before, int transition,
+      {bool canceled = false}) {
+    final state = _interaction.state;
+    // The completed gesture may have opened a new interaction (a dragged
+    // FreeText box opens the text session). Never finish that successor.
+    if (state.transition != transition || !_interaction.isActive) return;
+    if (canceled) {
+      _interaction.cancel();
+    } else if (!identical(before, _controller.document)) {
+      _interaction.commit();
+    } else {
+      _interaction.complete();
+    }
+  }
+
+  void _scheduleRasterReady() {
+    if (_rasterReadyScheduled) return;
+    final state = _interaction.state;
+    if (!widget.rasterCurrent ||
+        state.phase != PdfEditingInteractionPhase.awaitingRaster ||
+        state.pageIndex != widget.pageIndex) {
+      return;
+    }
+    _rasterReadyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _rasterReadyScheduled = false;
+      if (mounted && widget.rasterCurrent) _interaction.rasterReady();
+    });
+  }
+
   /// Raw-pointer bookkeeping the pan callbacks can't see: the pressure
   /// stream, stylus detection for palm rejection, multi-touch bail, and
   /// - with ink or the eraser armed - the stroke itself.
@@ -1075,6 +1089,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       // that's what the flip is for
       _pointers.rawErasing = _tool == PdfEditTool.eraser ||
           event.kind == PointerDeviceKind.invertedStylus;
+      _beginInteraction(
+          _pointers.rawErasing
+              ? PdfEditingInteractionIntent.erase
+              : PdfEditingInteractionIntent.ink,
+          event.kind);
       if (_pointers.rawErasing) {
         _eraseAt(event.localPosition);
       } else {
@@ -1099,6 +1118,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _pointers.panLast = event.localPosition;
       _pointers.panVelocity = VelocityTracker.withKind(event.kind)
         ..addPosition(event.timeStamp, event.localPosition);
+      _beginInteraction(PdfEditingInteractionIntent.viewportPan, event.kind);
     }
   }
 
@@ -1110,15 +1130,17 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       return;
     }
     if (event.pointer == _pointers.panPointer) {
+      _interaction.sample();
       final last = _pointers.panLast;
       if (last != null) {
-        widget.onPanViewport?.call(event.localPosition - last);
+        _host.panViewport?.call(event.localPosition - last);
       }
       _pointers.panLast = event.localPosition;
       _pointers.panVelocity?.addPosition(event.timeStamp, event.localPosition);
       return;
     }
     if (event.pointer != _pointers.rawPointer) return;
+    _interaction.sample();
     if (_pointers.rawErasing) {
       _eraseAt(event.localPosition);
     } else if (_activeStroke != null) {
@@ -1136,6 +1158,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// or just a clumsy grip). Nothing commits; the rest of the gesture
   /// is dead air until every touch pointer lifts.
   void _bailActiveGesture() {
+    if (_interaction.isActive) _interaction.cancel();
     _pointers.gestureBailed = true;
     _pointers.clearRaw();
     // a second finger landed: stop panning so the viewer's pinch-zoom
@@ -1168,7 +1191,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     });
     _stopAutoScroll();
     _clearResizeClean();
-    widget.onMoveDragPreview?.call(null);
+    _host.moveDragPreview?.call(null);
     _bumpActiveStroke();
     // earlier strokes waiting in the buffer get their auto-commit back
     _controller.cancelInkStroke();
@@ -1177,6 +1200,17 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// Touch bookkeeping and the raw gesture's commit, shared by
   /// pointer-up and pointer-cancel.
   void _endRawPointer(PointerEvent event, {required bool canceled}) {
+    final tracked = event.pointer == _pointers.rawPointer ||
+        event.pointer == _pointers.panPointer;
+    final before = _controller.document;
+    final transition = _interaction.state.transition;
+    _finishRawPointer(event, canceled: canceled);
+    if (tracked) {
+      _finishInteraction(before, transition, canceled: canceled);
+    }
+  }
+
+  void _finishRawPointer(PointerEvent event, {required bool canceled}) {
     if (event.kind == PointerDeviceKind.touch) {
       _pointers.touchPointers.remove(event.pointer);
       if (_pointers.touchPointers.isEmpty) _pointers.gestureBailed = false;
@@ -1186,7 +1220,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
           ? Velocity.zero
           : (_pointers.panVelocity?.getVelocity() ?? Velocity.zero);
       _pointers.clearPan();
-      if (!canceled) widget.onPanViewportEnd?.call(velocity);
+      if (!canceled) _host.endViewportPan?.call(velocity);
       return;
     }
     if (event.pointer != _pointers.rawPointer) {
@@ -1842,7 +1876,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// layer, so no double exposure). Reports null otherwise - the ghost
   /// isn't ready, it's a resize/rotate, or it's not a single selection.
   void _reportMovePreview() {
-    final report = widget.onMoveDragPreview;
+    final report = _host.moveDragPreview;
     if (report == null) return;
     final picture = _ghost;
     final from = _selectedViewRect;
@@ -1999,7 +2033,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     // before disposing [_ghost] so a neighbour page can't paint freed
     // pixels. Guarded by _moveStart so disposing some other (off-screen)
     // page's overlay never clears a preview the dragging page still owns.
-    if (_moveStart != null) widget.onMoveDragPreview?.call(null);
+    if (_moveStart != null) _host.moveDragPreview?.call(null);
     _textEditFocus
       ..removeListener(_onTextEditFocus)
       ..dispose();
@@ -2011,6 +2045,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _flashController.dispose();
     _activeStrokeRepaint.dispose();
     _autoScrollTicker.dispose();
+    if (_interaction.isActive &&
+        _interaction.state.pageIndex == widget.pageIndex) {
+      _interaction.cancel();
+    }
+    if (_ownsInteraction) _interaction.dispose();
     super.dispose();
   }
 
@@ -2331,6 +2370,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
               : null)
           : _controller.textFillColor;
     });
+    _beginInteraction(PdfEditingInteractionIntent.text, _lastPointerKind);
     _controller.setEditingText(true);
     // the field's autofocus is ignored: the creating gesture's
     // pointer-down put primary focus on the viewer's own node, and
@@ -2435,6 +2475,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _textEditColor = const Color(0xFF000000);
       _textEditFill = null;
     });
+    _beginInteraction(PdfEditingInteractionIntent.text, _lastPointerKind);
     _controller.setEditingText(true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _textEditRect != null) _textEditFocus.requestFocus();
@@ -2445,6 +2486,14 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// selected one rewritten, or - for the form tool - the field's new
   /// value. Empty text adds nothing / changes nothing.
   void _commitTextEdit() {
+    if (_textEditRect == null) return;
+    final before = _controller.document;
+    final transition = _interaction.state.transition;
+    _finishTextEdit();
+    _finishInteraction(before, transition);
+  }
+
+  void _finishTextEdit() {
     final rect = _textEditRect;
     if (rect == null) return;
     final fieldName = _textEditFieldName;
@@ -2518,7 +2567,14 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _afterDocument = _controller.document;
   }
 
-  void _cancelTextEdit() => _closeTextEditor();
+  void _cancelTextEdit() {
+    final transition = _interaction.state.transition;
+    _closeTextEditor();
+    final state = _interaction.state;
+    if (state.transition == transition && _interaction.isActive) {
+      _interaction.cancel();
+    }
+  }
 
   /// What Escape does to the open editor. It must never destroy a box: a
   /// brand-new free-text box keeps what was typed (an empty one just adds
@@ -2579,8 +2635,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     // unfocus in hosts that supply no hook. rect is already null, so the
     // focus-loss listener's commit is a no-op.
     if (ownedFocus) {
-      if (widget.onTextEditClosed != null) {
-        widget.onTextEditClosed!();
+      if (_host.textEditClosed != null) {
+        _host.textEditClosed!();
       } else if (_textEditFocus.hasFocus) {
         _textEditFocus.unfocus();
       }
@@ -2628,9 +2684,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         break; // handled by _selectPanStart above
       case PdfEditTool.eraser:
         // mouse/trackpad erase through the arena like any drag
+        _beginInteraction(PdfEditingInteractionIntent.erase, details.kind);
         _panErasing = true;
         _eraseAt(position);
       case PdfEditTool.ink || PdfEditTool.highlight:
+        _beginInteraction(PdfEditingInteractionIntent.ink, details.kind);
         // hold the auto-commit while this stroke is on the page
         _controller.beginInkStroke();
         final pressure = _pointerPressure;
@@ -2658,6 +2716,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             PdfEditTool.image ||
             PdfEditTool.redact ||
             PdfEditTool.snapshot:
+        _beginInteraction(PdfEditingInteractionIntent.create, details.kind);
         setState(() {
           _dragStart = position;
           _dragCurrent = position;
@@ -2684,9 +2743,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             _moveStart = position;
             _moveCurrent = position;
           });
+          _beginInteraction(PdfEditingInteractionIntent.move, details.kind);
           return;
         }
         if (_controller.formFieldAt(widget.pageIndex, x, y) == null) {
+          _beginInteraction(PdfEditingInteractionIntent.create, details.kind);
           setState(() {
             _dragStart = position;
             _dragCurrent = position;
@@ -2696,6 +2757,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         // press-drag-release placement: the preview rides the pointer
         // (touch has no hover), release commits where it landed
         if (_controller.signature != null) {
+          _beginInteraction(
+              PdfEditingInteractionIntent.signature, details.kind);
           setState(() {
             _signatureDrag = true;
             _signaturePreview = position;
@@ -2729,6 +2792,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       final vertex =
           vertexPoints == null ? null : _vertexHandleAt(vertexPoints, position);
       if (vertex != null) {
+        _beginInteraction(PdfEditingInteractionIntent.reshape, details.kind);
         setState(() {
           _vertexHandle = vertex;
           _vertexPoints = List<Offset>.of(vertexPoints!);
@@ -2745,6 +2809,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
               : _handleAt(chrome.$1,
                   _rotatePoint(position, chrome.$1.center, -resting));
       if (handle != null) {
+        _beginInteraction(PdfEditingInteractionIntent.resize, details.kind);
         setState(() {
           _resizeHandle = handle;
           _resizeFrom = resting == 0 ? selected : chrome!.$1;
@@ -2765,6 +2830,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         return;
       }
       if (chrome != null && _hitsRotateHandle(chrome.$1, resting, position)) {
+        _beginInteraction(PdfEditingInteractionIntent.rotate, details.kind);
         setState(() {
           _rotateStartAngle = (position - selected.center).direction;
           _rotateResting = resting;
@@ -2779,6 +2845,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     // dragging any selected annotation moves the whole selection
     for (final rect in _selectedViewRects) {
       if (rect.contains(position)) {
+        _beginInteraction(PdfEditingInteractionIntent.move, details.kind);
         setState(() {
           _moveStart = position;
           _moveCurrent = position;
@@ -2792,6 +2859,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     if (_controller.selectableAnnotationAt(widget.pageIndex, x, y) != null) {
       // grab an unselected annotation: select it and move it in one drag
       _controller.selectAnnotationAt(widget.pageIndex, x, y);
+      _beginInteraction(PdfEditingInteractionIntent.move, details.kind);
       setState(() {
         _moveStart = position;
         _moveCurrent = position;
@@ -2804,12 +2872,15 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         details.kind == PointerDeviceKind.mouse ||
         details.kind == PointerDeviceKind.trackpad;
     if (mouseLike) {
+      _beginInteraction(PdfEditingInteractionIntent.marquee, details.kind);
       setState(() {
         _marqueeStart = position;
         _marqueeCurrent = position;
         _marqueeAdd = _additiveModifier;
       });
-    } else if (widget.onPanViewport != null) {
+    } else if (_host.panViewport != null) {
+      _beginInteraction(
+          PdfEditingInteractionIntent.viewportPan, details.kind);
       _viewportPanning = true;
     }
   }
@@ -2823,9 +2894,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final (x, y) = _geometry.toPagePoint(position);
     if (_tool == PdfEditTool.form) {
       return _controller.formFieldAt(widget.pageIndex, x, y) != null &&
-          widget.onShowFormFieldMenu != null;
+          _host.showFormFieldMenu != null;
     }
-    if (!_selectMode || widget.onShowAnnotationMenu == null) return false;
+    if (!_selectMode || _host.showAnnotationMenu == null) {
+      return false;
+    }
     return _controller.selectableAnnotationAt(widget.pageIndex, x, y) != null ||
         _controller.hasAnnotationClipboard;
   }
@@ -2841,7 +2914,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       final field = _controller.formFieldAt(widget.pageIndex, x, y);
       if (field == null) return;
       HapticFeedback.selectionClick();
-      widget.onShowFormFieldMenu
+      _host.showFormFieldMenu
           ?.call(details.globalPosition, field.$1.name, widgetIndex: field.$2);
       return;
     }
@@ -2854,19 +2927,20 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       return;
     }
     HapticFeedback.selectionClick();
-    widget.onShowAnnotationMenu
+    _host.showAnnotationMenu
         ?.call(details.globalPosition, widget.pageIndex, pagePoint: (x, y));
   }
 
   void _panUpdate(DragUpdateDetails details) {
     if (_pointers.gestureBailed || _pointers.rawPointer != null) return;
     final position = details.localPosition;
+    _interaction.sample();
     if (_panErasing) {
       _eraseAt(position);
       return;
     }
     if (_viewportPanning) {
-      widget.onPanViewport?.call(details.delta);
+      _host.panViewport?.call(details.delta);
       return;
     }
     if (_signatureDrag) {
@@ -2959,7 +3033,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// shift-scroll mid-drag also re-tracks the held pointer onto the
   /// newly revealed content.
   void _maybeAutoScroll() {
-    if (widget.edgeAutoScroll == null || widget.onPanViewport == null) return;
+    if (_host.edgeAutoScroll == null ||
+        _host.panViewport == null) {
+      return;
+    }
     if (!_autoScrollDragActive) return;
     if (!_autoScrollTicker.isActive) _autoScrollTicker.start();
   }
@@ -2985,15 +3062,23 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final local = box.globalToLocal(global);
     if (local != _autoScrollLastLocal) {
       _autoScrollLastLocal = local;
+      _interaction.sample();
       _applyDragPosition(local);
     }
     // Keep scrolling while the pointer rests in the viewport's edge band.
-    final delta = widget.edgeAutoScroll!(global);
-    if (delta != Offset.zero) widget.onPanViewport!(delta);
+    final delta = _host.edgeAutoScroll!(global);
+    if (delta != Offset.zero) _host.panViewport!(delta);
   }
 
   void _panEnd(DragEndDetails details) {
     if (_pointers.rawPointer != null) return; // the raw pointer-up commits
+    final before = _controller.document;
+    final transition = _interaction.state.transition;
+    _finishPan(details);
+    _finishInteraction(before, transition);
+  }
+
+  void _finishPan(DragEndDetails details) {
     if (_panErasing) {
       _panErasing = false;
       _commitErase();
@@ -3065,13 +3150,13 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _clearResizeClean();
     // the floating move preview hands off to the commit's afterimage (or
     // the new page's raster for a cross-page drop)
-    widget.onMoveDragPreview?.call(null);
+    _host.moveDragPreview?.call(null);
     _bumpActiveStroke();
 
     if (panned) {
       // momentum: the fling continues in the viewer, which owns the
       // scroll position and zoom window this pan was feeding
-      widget.onPanViewportEnd?.call(details.velocity);
+      _host.endViewportPan?.call(details.velocity);
       return;
     }
     if (signaturePlace != null) {
@@ -3162,7 +3247,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       // a single-annotation move dropped over a *different* page re-homes
       // it there (drawn on top) instead of leaving it off this page's crop
       // box, behind the neighbour
-      final resolve = widget.onResolvePagePoint;
+      final resolve = _host.resolvePagePoint;
       if (resolve != null &&
           moveCurrentGlobal != null &&
           _controller.selectedAnnotationSlots.length == 1) {
@@ -3673,8 +3758,12 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       // a mouse/trackpad click erases what's under it; raw-driven
       // pointers already handled theirs on the way down
       if (!_rawDrives(details.kind)) {
+        final before = _controller.document;
+        _beginInteraction(PdfEditingInteractionIntent.erase, details.kind);
+        final transition = _interaction.state.transition;
         _eraseAt(details.localPosition);
         _commitErase();
+        _finishInteraction(before, transition);
       }
       return;
     }
@@ -3708,7 +3797,24 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
           toggle: _additiveModifier);
       return;
     }
-    switch (_tool) {
+    final tapIntent = switch (_tool) {
+      PdfEditTool.note ||
+      PdfEditTool.count ||
+      PdfEditTool.signature ||
+      PdfEditTool.freeText ||
+      PdfEditTool.callout ||
+      PdfEditTool.stamp ||
+      PdfEditTool.image =>
+        PdfEditingInteractionIntent.create,
+      _ => PdfEditingInteractionIntent.none,
+    };
+    final before = _controller.document;
+    if (tapIntent != PdfEditingInteractionIntent.none) {
+      _beginInteraction(tapIntent, details.kind);
+    }
+    final transition = _interaction.state.transition;
+    try {
+      switch (_tool) {
       case null:
         break;
       case PdfEditTool.select:
@@ -3772,6 +3878,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             toggle: _additiveModifier);
       default:
         break;
+      }
+    } finally {
+      if (tapIntent != PdfEditingInteractionIntent.none) {
+        _finishInteraction(before, transition);
+      }
     }
   }
 
@@ -3979,7 +4090,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                     if (rect != null) _openTextEditor(rect, existing: true);
                   },
                 ),
-              if (widget.onShowAnnotationMenu != null)
+              if (_host.showAnnotationMenu != null)
                 IconButton(
                   key: const ValueKey('pdf-selection-chip-menu'),
                   icon: const Icon(Icons.more_horiz),
@@ -3987,7 +4098,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                   onPressed: () {
                     final box = context.findRenderObject() as RenderBox?;
                     if (box == null) return;
-                    widget.onShowAnnotationMenu!(
+                    _host.showAnnotationMenu!(
                         box.localToGlobal(anchor), widget.pageIndex);
                   },
                 ),
@@ -4384,6 +4495,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
 
   @override
   Widget build(BuildContext context) {
+    _scheduleRasterReady();
     _textEditText.scale = _geometry.scale;
     _ensureGhost();
     _ensureSourceClean();
