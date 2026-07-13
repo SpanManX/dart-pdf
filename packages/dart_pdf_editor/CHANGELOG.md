@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4.2
+## 1.4.3
 
 - Bake page rotation into regenerated form appearances so existing and newly
   authored fields remain upright after rotating the document.
@@ -20,14 +20,17 @@
   contents, and author properties.
 - Restyle annotation-thread Reply and Resolve controls as compact, muted text
   actions that emphasize only on hover, focus, or press.
+- Keep clip-heavy Visio and CAD pages responsive by detecting fragmented
+  sparse-strip plans before worker binning and using cached canvas replay.
+
+## 1.4.2
+
 - Keep touch scrolling responsive on zoomed mixed-width documents when a
   gesture starts on the canvas or in an inter-page gap, and keep the current
   page and render focus synchronized with the transformed viewport.
 - Prevent dense pages from rendering as solid magenta on iPad by routing iOS
   deep-zoom replay through the stable canvas path instead of shader-backed
   sparse strips.
-- Keep clip-heavy Visio and CAD pages responsive by detecting fragmented
-  sparse-strip plans before worker binning and using cached canvas replay.
 
 ## 1.4.1
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.4.1
+## 1.4.3
 
 - Enlarge the DartPDF corner badge on PDF document thumbnails so it remains
   recognizable at smaller Finder and Explorer icon sizes.
@@ -12,6 +12,13 @@
   keyboard and context-menu copy remain available.
 - Add proper certificate-backed PAdES digital signatures from the app menu,
   using an RSA private key and X.509 certificate chain entirely in memory.
+- Create new blank PDFs from page-size and orientation presets, including
+  Ctrl/Cmd+N and correct unsaved-document handling.
+- Make Save As adopt the selected filename and writable origin for subsequent
+  saves while preserving the active editing and viewer sessions.
+
+## 1.4.1
+
 - Windows: Snapshots now copy to the system clipboard instead of failing with
   "Could not copy snapshot to clipboard". The desktop clipboard channel had no
   Windows handler, so the image never reached the OS clipboard.
