@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.4
+
+- Regenerate the bundled web render worker from the current sources so web
+  consumers receive the 1.4.3 form and fragmented-strip rendering fixes.
+
 ## 1.4.3
 
 - Bake page rotation into regenerated form appearances so existing and newly

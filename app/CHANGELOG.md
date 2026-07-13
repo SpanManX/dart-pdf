@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.4
+
+- Ship the regenerated editor web worker so browser builds include the current
+  form and fragmented-strip rendering fixes.
+
 ## 1.4.3
 
 - Enlarge the DartPDF corner badge on PDF document thumbnails so it remains

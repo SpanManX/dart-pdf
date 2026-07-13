@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.4
+
+- Version bump to keep the dart-pdf package suite aligned at 1.4.4. No
+  graphics API changes since 1.4.3.
+
 ## 1.4.3
 
 - Add geometry-free sparse-strip replay profiling so renderers can detect
