@@ -2,6 +2,12 @@
 
 ## 1.4.2
 
+- Add certificate-backed PAdES B-B digital signing to editing sessions via
+  `PdfDigitalSignatureIdentity` and `addDigitalSignature`, including key/cert
+  matching, validation before commit, and undo/redo support.
+- Allow a selected form field to be converted between text, check-box, and
+  image-button types from the contextual toolbar or properties panel while
+  keeping the rebuilt field selected.
 - Keep touch scrolling responsive on zoomed mixed-width documents when a
   gesture starts on the canvas or in an inter-page gap, and keep the current
   page and render focus synchronized with the transformed viewport.

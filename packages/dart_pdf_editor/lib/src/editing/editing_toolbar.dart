@@ -4,7 +4,12 @@ import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:pdf_document/pdf_document.dart'
-    show PdfAlignment, PdfLineEnding, PdfStandardFont, PdfTextAlign, PdfTextFont;
+    show
+        PdfAlignment,
+        PdfLineEnding,
+        PdfStandardFont,
+        PdfTextAlign,
+        PdfTextFont;
 
 import '../pdf_viewer.dart';
 import '../toast.dart';
@@ -1285,6 +1290,12 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
                 },
                 onPressed: controller.deleteSelected,
               ),
+              if (controller.selectedWidgetFieldName != null)
+                PdfSelectedFormFieldTypeMenu(
+                  controller: controller,
+                  buttonKey: const ValueKey('pdf-selected-form-field-type'),
+                  itemKeyPrefix: 'pdf-selected-form-type',
+                ),
               if (controller.canEditSelectedText)
                 IconButton(
                   key: const ValueKey('pdf-edit-selected-text'),
@@ -1713,9 +1724,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
       case 'FreeText':
         final text = controller.canRestyleSelectedText;
         return _StyleFields(
-            opacity: behavior.supportsOpacity,
-            font: text,
-            boxColors: text);
+            opacity: behavior.supportsOpacity, font: text, boxColors: text);
       case 'Square':
       case 'Circle':
       case 'Polygon':
@@ -1817,6 +1826,12 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
   List<Widget> _mobileTrailing(BuildContext context) {
     if (controller.hasAnnotationSelection) {
       return [
+        if (controller.selectedWidgetFieldName != null)
+          PdfSelectedFormFieldTypeMenu(
+            controller: controller,
+            buttonKey: const ValueKey('pdf-selected-form-field-type'),
+            itemKeyPrefix: 'pdf-selected-form-type',
+          ),
         IconButton(
           icon: const Icon(Icons.delete_outline),
           tooltip: switch (controller.selectedAnnotationSlots.length) {
@@ -2892,10 +2907,10 @@ class _StyleMenu extends StatefulWidget {
 
   final PdfEditingController controller;
 
-  /// The colors offered as fill/border swatches (the toolbar's palette).
+  /// The colors offered as text/fill/border swatches (the toolbar's palette).
   final List<Color> palette;
 
-  /// Whether the text-box fill/border color rows are shown. The
+  /// Whether the text, text-box fill, and border color rows are shown. The
   /// stroke/opacity/font controls show regardless - this only hides the
   /// color rows so a color-locked session keeps the sliders.
   final bool showColor;
@@ -2963,6 +2978,15 @@ class _StyleMenuState extends State<_StyleMenu> {
     }
   }
 
+  void _setTextColor(Color? color) {
+    if (color == null) return;
+    controller.color = color; // the new default either way
+    if (controller.restyleEditingTextSelection(color: _rgb(color))) return;
+    if (controller.canRestyleSelected) {
+      controller.restyleSelected(color: color);
+    }
+  }
+
   void _setShapeFill(Color? color) {
     controller.shapeFillColor = color; // the new default either way
     if (controller.canFillSelected) {
@@ -2990,6 +3014,7 @@ class _StyleMenuState extends State<_StyleMenu> {
     required String keyPrefix,
     required Color? value,
     required ValueChanged<Color?> onChanged,
+    bool allowNone = true,
   }) =>
       PdfColorSwatchRow(
         label: label,
@@ -2997,6 +3022,7 @@ class _StyleMenuState extends State<_StyleMenu> {
         value: value,
         palette: widget.palette,
         onChanged: onChanged,
+        allowNone: allowNone,
       );
 
   /// A short human label for a line ending in the picker.
@@ -3107,6 +3133,12 @@ class _StyleMenuState extends State<_StyleMenu> {
             final restyling = controller.canRestyleSelectedText;
             final boxStyle =
                 restyling ? controller.selectedAnnotation?.freeTextStyle : null;
+            final textValue = restyling
+                ? Color(0xFF000000 |
+                    (boxStyle?.color ??
+                        controller.selectedAnnotation?.color ??
+                        (controller.color.toARGB32() & 0xFFFFFF)))
+                : controller.color;
             final fillValue = restyling
                 ? (boxStyle?.fillColor != null
                     ? Color(0xFF000000 | boxStyle!.fillColor!)
@@ -3341,6 +3373,14 @@ class _StyleMenuState extends State<_StyleMenu> {
                     ),
                   ],
                   if (fields.boxColors && widget.showColor) ...[
+                    _boxColorRow(
+                      context: context,
+                      label: 'Text colour',
+                      keyPrefix: 'pdf-text-color',
+                      value: textValue,
+                      onChanged: _setTextColor,
+                      allowNone: false,
+                    ),
                     _boxColorRow(
                       context: context,
                       label: 'Text fill',

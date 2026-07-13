@@ -2,6 +2,8 @@
 
 ## 1.4.1
 
+- Add proper certificate-backed PAdES digital signatures from the app menu,
+  using an RSA private key and X.509 certificate chain entirely in memory.
 - Windows: Snapshots now copy to the system clipboard instead of failing with
   "Could not copy snapshot to clipboard". The desktop clipboard channel had no
   Windows handler, so the image never reached the OS clipboard.

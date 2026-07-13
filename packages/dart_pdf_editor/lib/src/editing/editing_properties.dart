@@ -6,6 +6,7 @@ import 'editing_color_picker.dart';
 import 'editing_controller.dart';
 import 'editing_font_controls.dart';
 import 'editing_fonts.dart';
+import 'editing_form_style.dart';
 import 'editing_panel.dart';
 import 'editing_preferences.dart';
 import 'editing_value_field.dart';
@@ -706,6 +707,18 @@ class _PdfAnnotationPropertiesPanelState
           _textRow('Field name', _fieldName,
               key: const ValueKey('pdf-prop-field-name'),
               onCommit: _commitFieldName),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(children: [
+              const Expanded(child: Text('Type')),
+              PdfSelectedFormFieldTypeMenu(
+                controller: _controller,
+                buttonKey: const ValueKey('pdf-prop-form-type'),
+                itemKeyPrefix: 'pdf-prop-form-type',
+                showLabel: true,
+              ),
+            ]),
+          ),
         ],
         ..._formFieldControls(),
       ] else ...[

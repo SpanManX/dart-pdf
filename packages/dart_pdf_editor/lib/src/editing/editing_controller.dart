@@ -9,6 +9,7 @@ import 'package:pdf_document/pdf_document.dart';
 
 import '../page_geometry.dart';
 import '../renderer.dart';
+import 'digital_signature.dart';
 import 'editing_measure.dart';
 import 'editing_preferences.dart';
 import 'line_style.dart';
@@ -517,6 +518,78 @@ class PdfEditingController extends ChangeNotifier {
     _invalidateElements();
     _emitAnnotationChanges(beforeLength, impact.annotationPages);
     notifyListeners();
+  }
+
+  /// Adds a certificate-backed PAdES B-B digital signature as a new editor
+  /// revision.
+  ///
+  /// This is distinct from the hand-drawn [signature] annotation tool. The
+  /// returned revision cryptographically covers every byte in the current
+  /// document and embeds [identity]'s X.509 chain. It is validated before it
+  /// joins the undo stack; malformed, non-matching, or non-covering output is
+  /// rejected. Undo removes the signature revision and redo restores it.
+  ///
+  /// Further edits are legal PDF incremental revisions and leave the
+  /// signature cryptographically intact, but it will then cover the signed
+  /// revision rather than the new whole file.
+  Future<bool> addDigitalSignature(
+    PdfDigitalSignatureIdentity identity, {
+    String? fieldName,
+    String? signerName,
+    String? reason,
+    String? location,
+    String? contactInfo,
+    DateTime? signingTime,
+  }) async {
+    final before = bytes;
+    final signed = await identity.sign(
+      before,
+      password: _password,
+      fieldName: fieldName,
+      signerName: signerName,
+      reason: reason,
+      location: location,
+      contactInfo: contactInfo,
+      signingTime: signingTime,
+    );
+    return _adoptDigitalSignature(signed, before: before);
+  }
+
+  bool _adoptDigitalSignature(Uint8List signed, {required Uint8List before}) {
+    if (signed.length <= before.length) {
+      throw const FormatException(
+        'The signer did not return a new incremental PDF revision.',
+      );
+    }
+    for (var i = 0; i < before.length; i++) {
+      if (signed[i] != before[i]) {
+        throw const FormatException(
+          'The signed PDF rewrote the current document instead of appending '
+          'an incremental signature revision.',
+        );
+      }
+    }
+    final existingCount = PdfSignature.of(_document).length;
+    final candidate = PdfDocument.open(signed, password: _password);
+    final signatures = PdfSignature.of(candidate);
+    if (signatures.length <= existingCount) {
+      throw const FormatException('The signed PDF has no new signature.');
+    }
+    final validation = signatures.last.validate();
+    if (!validation.intact || !validation.coversWholeDocument) {
+      throw FormatException(
+        validation.problems.isEmpty
+            ? 'The new digital signature did not validate.'
+            : 'The new digital signature did not validate: '
+                '${validation.problems.join('; ')}',
+      );
+    }
+    _commitSavedRevision(
+      signed,
+      beforeLength: before.length,
+      impact: PdfEditImpact.none,
+    );
+    return true;
   }
 
   // ---------------------------------------------------------------------
@@ -5656,19 +5729,28 @@ class PdfEditingController extends ChangeNotifier {
   /// keeping the name ([PdfEditor.changeFieldType]). Returns false when
   /// the field is missing, already that kind, or unrebuildable.
   bool changeFormFieldKind(String name, PdfFormFieldKind kind) {
-    if (acroForm?.fieldNamed(name) == null) return false;
+    final field = acroForm?.fieldNamed(name);
+    if (field == null) return false;
     final type = switch (kind) {
       PdfFormFieldKind.text => PdfFieldType.text,
       PdfFormFieldKind.checkBox => PdfFieldType.checkBox,
       PdfFormFieldKind.pushButton => PdfFieldType.pushButton,
     };
+    if (field.type == type) return false;
+    final reselect = selectedWidgetFieldName == name;
     try {
-      return apply(
+      final changed = apply(
         (e) {
           final f = e.acroForm?.fieldNamed(name);
           if (f != null) e.changeFieldType(f, type);
         },
       );
+      // A conversion removes the old widget and appends a rebuilt one, so
+      // its /Annots slot is not a stable selection handle. Follow the field
+      // name (which changeFieldType preserves) to keep the contextual
+      // toolbar and properties panel anchored on the converted field.
+      if (changed && reselect) selectFormFieldByName(name);
+      return changed;
     } on ArgumentError {
       return false;
     } on StateError {
@@ -5709,6 +5791,22 @@ class PdfEditingController extends ChangeNotifier {
       return null;
     }
     return _widgetFieldForSlot(_selected.last)?.$1;
+  }
+
+  /// The type of the selected form widget's field, or null unless exactly
+  /// one widget belonging to a resolvable field is selected.
+  PdfFieldType? get selectedWidgetFieldType {
+    final name = selectedWidgetFieldName;
+    return name == null ? null : acroForm?.fieldNamed(name)?.type;
+  }
+
+  /// Converts the single selected form widget's field to [kind], preserving
+  /// its name, first-widget rectangle, and selection. Returns false when no
+  /// field widget is selected, it already has that kind, or it cannot be
+  /// rebuilt.
+  bool changeSelectedFormFieldKind(PdfFormFieldKind kind) {
+    final name = selectedWidgetFieldName;
+    return name != null && changeFormFieldKind(name, kind);
   }
 
   /// Selects the field [name]'s first widget (so the style controls and
