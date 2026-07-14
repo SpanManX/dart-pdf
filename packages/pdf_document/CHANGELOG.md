@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.5
+
+- Version bump to keep the dart-pdf package suite aligned at 1.4.5. No
+  document API changes since 1.4.4.
+
 ## 1.4.4
 
 - Version bump to keep the dart-pdf package suite aligned at 1.4.4. No

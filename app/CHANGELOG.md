@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.5
+
+- Correct Arabic and other right-to-left page-text extraction, selection, and
+  copy ordering, including multi-word lines.
+
 ## 1.4.4
 
 - Ship the regenerated editor web worker so browser builds include the current

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.5
+
+- Correct selection and copy ordering for multi-word Arabic and other
+  right-to-left page text.
+
 ## 1.4.4
 
 - Regenerate the bundled web render worker from the current sources so web
