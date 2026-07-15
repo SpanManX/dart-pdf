@@ -142,6 +142,9 @@ are byte prefixes of one buffer.
 - Certificate-backed digital signatures: load an in-memory RSA private key
   and X.509 chain, then add a validated PAdES B-B signature as an undoable
   document revision. This is separate from the drawn ink-signature tool.
+- True redaction: place `/Redact` marks, then burn them per §12.5.6.23 —
+  covered text and images are removed from the file bytes with a compacted
+  save (not painted over), so the redacted content is unrecoverable.
 - Direct manipulation: select (single, marquee, ⌘A), move, resize, and
   rotate with live appearance previews, plus a slicing circle eraser,
   copy/cut/paste, z-order, restyling, and a context menu with
