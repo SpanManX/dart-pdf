@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.6
 
 - Add operation-scoped page-content text replacement and expose the active
   font resource on text element snapshots for selection-driven editing.

@@ -1,9 +1,20 @@
 # Changelog
 
-## Unreleased
+## 1.4.6
 
 - Expose edit-and-style and markup actions when text is selected in an
   editor-backed viewer, on both touch and desktop context menus.
+- Treat each `applyRemoteChange` as an undo checkpoint: local edits made after
+  a remote apply stay undoable, but undo can no longer remove remote state or
+  cross into older local history.
+- Fall back to the bundled DejaVu Sans and platform Arabic faces when
+  substituting fonts, so Arabic (including the presentation forms copied out
+  of shaped PDFs), Hebrew, Greek, and Cyrillic render on hosts whose Helvetica
+  substitute has no suitable fallback.
+- Regenerate the bundled web render worker so browser builds pick up the
+  scaled CCITT decode path and the right-to-left text fixes.
+
+## 1.4.5
 
 ## 1.4.5
 

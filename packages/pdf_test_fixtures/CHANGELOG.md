@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.6
+
+- Add a positioned-tashkil Arabic fixture that mirrors Skia's output shape
+  (each zero-advance mark painted as its own run before its base glyph), for
+  extraction and selection ordering tests.
+
 ## 1.4.5
 
 - Add reusable right-to-left text fixtures for Arabic extraction, selection,
