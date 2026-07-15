@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -234,6 +235,60 @@ void main() {
         closeTo(612 / 792, 0.001));
     expect(tester.getSize(previewFor('landscape.pdf')).aspectRatio,
         closeTo(792 / 612, 0.001));
+  });
+
+  testWidgets('hovering an inactive desktop tab shows its page preview',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(home: EditorScreen(prefs: prefs)));
+    await tester.pump();
+    await openTab(
+      tester,
+      'alpha.pdf',
+      bytes: PdfBlankDocument.create(pageSize: PdfPageSize.letter.landscape),
+    );
+    await openTab(tester, 'beta.pdf');
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer(location: const Offset(799, 599));
+    await tester.pump();
+    await mouse.moveTo(tester.getCenter(tabTitle('alpha.pdf')));
+    await tester.pump(const Duration(milliseconds: 399));
+    expect(find.byKey(const ValueKey('tab-hover-preview')), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byKey(const ValueKey('tab-hover-preview')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('tab-hover-preview-thumbnail')),
+      findsOneWidget,
+    );
+    final thumbnailSize = tester.getSize(
+      find.byKey(const ValueKey('tab-hover-preview-thumbnail')),
+    );
+    expect(thumbnailSize.width / thumbnailSize.height, closeTo(792 / 612, .01));
+    expect(
+      tester.widget<Text>(
+        find.byKey(const ValueKey('tab-hover-preview-title')),
+      ).data,
+      'alpha.pdf',
+    );
+    expect(
+      tester.widget<Text>(
+        find.byKey(const ValueKey('tab-hover-preview-page')),
+      ).data,
+      'Page 1',
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('tab-hover-preview-image')),
+      findsOneWidget,
+    );
+
+    // beta is active, so moving to it dismisses alpha's card and does not
+    // replace it with a redundant preview of the document already on screen.
+    await mouse.moveTo(tester.getCenter(tabTitle('beta.pdf')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const ValueKey('tab-hover-preview')), findsNothing);
+    await mouse.removePointer();
   });
 
   testWidgets('right-click opens the tab context menu', (tester) async {
