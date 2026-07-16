@@ -5321,6 +5321,27 @@ extension PdfAnnotationEditing on PdfEditor {
   /// puffs (with cusps between them) instead of flat half-circles.
   static const double _cloudBulgeFactor = 1.15;
 
+  /// How far the shared foot between two puffs is pulled *inward* (toward the
+  /// interior), as a fraction of the puff's outward bulge. Deepens the pinched
+  /// cusp between neighbours. The apex still sits at the original edge midpoint,
+  /// so the outer extent - and `_cloudPadding` - is unaffected.
+  static const double _cloudNeckInset = 0.2;
+
+  /// Tangential lean of each puff's *trailing* (end) foot control handle,
+  /// forward along the edge (`+u`), as a fraction of the (perpendicular) foot
+  /// handle length. This is what actually *curls* the scallops: leaning the
+  /// handle along the edge makes each puff overshoot past vertical into a
+  /// rounder, rolled shape with a pinched neck - the hand-drawn revision-cloud
+  /// look - instead of a plain half-circle hump. Only the trailing foot leans
+  /// (the leading foot stays upright), so each scallop is asymmetric and the
+  /// puffs all roll the same way around the outline; leaning both feet gave a
+  /// symmetric puff instead. A perpendicular inset alone (no lean) only lowers
+  /// the cusp and leaves the humps looking flat. The lean is purely along the
+  /// edge, so the outward extent (apex height) - and `_cloudPadding` - is
+  /// unchanged; `0` reproduces plain humps exactly. Kept below ~1.0 so the
+  /// puffs round cleanly without the trailing foot crossing into a loop.
+  static const double _cloudNeckCurl = 0.75;
+
   /// Target radius of one cloud scallop, in page points. Its size is driven
   /// by [scale] (a multiplier, 1 = the default puff) *independently* of the
   /// pen so the line thickness and the scallop size change separately; a
@@ -5408,22 +5429,32 @@ extension PdfAnnotationEditing on PdfEditor {
       final bulge = math.min(r, arc) * _cloudBulgeFactor; // apex height
       final ca = r * k; // apex control handle, along the edge
       final cf = bulge * k; // foot control handle, perpendicular (outward)
+      final inset = bulge * _cloudNeckInset; // pull cusp inward
+      final curl = cf * _cloudNeckCurl; // tangential lean that rounds each puff
       for (var j = 0; j < scallops; j++) {
         final t0 = j / scallops;
         final t1 = (j + 1) / scallops;
-        final sx = a.$1 + dx * t0;
-        final sy = a.$2 + dy * t0;
-        final ex = a.$1 + dx * t1;
-        final ey = a.$2 + dy * t1;
-        final apx = (sx + ex) / 2 + nx * bulge;
-        final apy = (sy + ey) / 2 + ny * bulge;
+        // Apex height is measured from the polygon edge, before the feet are
+        // pulled in, so the outward extent (and padding) stays the same.
+        final mx = a.$1 + dx * (t0 + t1) / 2;
+        final my = a.$2 + dy * (t0 + t1) / 2;
+        final sx = a.$1 + dx * t0 - nx * inset;
+        final sy = a.$2 + dy * t0 - ny * inset;
+        final ex = a.$1 + dx * t1 - nx * inset;
+        final ey = a.$2 + dy * t1 - ny * inset;
+        final apx = mx + nx * bulge;
+        final apy = my + ny * bulge;
         if (first) {
           w.moveTo(sx, sy);
           first = false;
         }
-        // Two quarter-arcs meeting at the apex: the feet leave the edge
-        // perpendicular (giving each puff a distinct neck/cusp), the apex
-        // runs parallel to the edge.
+        // Two arcs meeting at the apex. Both feet leave the edge perpendicular
+        // (+n); the trailing (end) foot additionally leans forward along the
+        // edge (+u) so each puff overshoots on its trailing side into an
+        // asymmetric, rolled scallop with a pinched neck (the hand-drawn
+        // revision-cloud look), while the leading foot stays upright. The apex
+        // runs parallel to the edge. The lean is purely tangential, so the
+        // outward extent (apex height) is unchanged.
         w.curveTo(
           sx + nx * cf,
           sy + ny * cf,
@@ -5435,8 +5466,8 @@ extension PdfAnnotationEditing on PdfEditor {
         w.curveTo(
           apx + ux * ca,
           apy + uy * ca,
-          ex + nx * cf,
-          ey + ny * cf,
+          ex + nx * cf + ux * curl,
+          ey + ny * cf + uy * curl,
           ex,
           ey,
         );
