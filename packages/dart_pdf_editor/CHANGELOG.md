@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Nudge the selected annotation(s) with the arrow keys — 1 pt per press,
+  10 pt with Shift — translating the move through the page's /Rotate so a
+  key always slides the annotation the way it points on screen. A bare
+  arrow still scrolls the page when nothing is selected.
 - Shapes and revision clouds: add an "Outline" colour row to the tune popup,
   next to "Fill", so a cloud's stroke colour can be picked from the tune menu
   (not just the toolbar swatches) — armed or with the shape selected.
