@@ -1044,6 +1044,7 @@ class PdfEditingController extends ChangeNotifier {
             'strokeWidth',
             'opacity',
             'lineStyle',
+            'lineScale',
             'shapeFillColor',
           },
         PdfEditTool.line || PdfEditTool.polyline => const {
@@ -1051,6 +1052,7 @@ class PdfEditingController extends ChangeNotifier {
             'strokeWidth',
             'opacity',
             'lineStyle',
+            'lineScale',
             'lineStartEnding',
             'lineEndEnding',
           },
@@ -1058,7 +1060,8 @@ class PdfEditingController extends ChangeNotifier {
             'color',
             'strokeWidth',
             'opacity',
-            'lineStyle'
+            'lineStyle',
+            'lineScale',
           },
         PdfEditTool.measureDistance ||
         PdfEditTool.measurePerimeter ||
@@ -1261,10 +1264,19 @@ class PdfEditingController extends ChangeNotifier {
   set dashedStroke(bool value) =>
       preferences.lineStyle = value ? PdfLineStyle.dashed : PdfLineStyle.solid;
 
+  /// The pattern scale new shape and line annotations are created with - a
+  /// multiplier (1 = default) sizing the dash pattern and cloudy scallops
+  /// *independently* of [strokeWidth], so the line thickness and the
+  /// pattern size are set separately. Persisted.
+  double get lineScale => preferences.lineScale;
+
+  set lineScale(double value) => preferences.lineScale = value;
+
   /// The `/BS /D` dash array new annotations get, for the current
-  /// [lineStyle] at the current [strokeWidth] - null for a solid border.
-  List<double>? get _lineDashPattern =>
-      preferences.lineStyle.dashArray(preferences.strokeWidth);
+  /// [lineStyle] at the current [strokeWidth], sized by [lineScale] - null
+  /// for a solid border.
+  List<double>? get _lineDashPattern => preferences.lineStyle
+      .dashArray(preferences.strokeWidth, scale: preferences.lineScale);
 
   /// The line ending new /Line and /PolyLine annotations carry at their
   /// start vertex (§12.5.6.7). Persisted.
@@ -1392,8 +1404,12 @@ class PdfEditingController extends ChangeNotifier {
   bool _editingText = false;
   TextSelection? _editingTextSelection;
   int _editingTextStyleRevision = 0;
-  ({PdfTextFont? font, double? size, int? color, bool? underline})?
-      _editingTextStyleRequest;
+  ({
+    PdfTextFont? font,
+    double? size,
+    int? color,
+    bool? underline
+  })? _editingTextStyleRequest;
   int _editSelectedTextRevision = 0;
   int _editingTextFocusHoldCount = 0;
   int _editingTextFocusHoldRevision = 0;
@@ -1921,6 +1937,7 @@ class PdfEditingController extends ChangeNotifier {
           opacity: preferences.opacity,
           dashPattern: _lineDashPattern,
           cloudy: true,
+          cloudScale: preferences.lineScale,
           author: author,
         ),
       );
@@ -4392,6 +4409,17 @@ class PdfEditingController extends ChangeNotifier {
     return PdfLineStyle.ofDashArray(annotation.borderDash);
   }
 
+  /// The primary selected cloudy /Polygon's scallop scale (its `/BE /I`),
+  /// for the pattern-scale control to display, or null when the selection
+  /// isn't a cloud - other shapes bake their pattern scale into the stored
+  /// dash array rather than a readable field, so the control falls back to
+  /// the creation default [lineScale] for them.
+  double? get selectedLineScale {
+    final annotation = selectedAnnotation;
+    if (annotation == null) return null;
+    return annotation.hasCloudyBorder ? annotation.cloudBorderScale : null;
+  }
+
   /// Restyles every selected annotation in place - one revision, one
   /// undo, and the selection survives (annotations keep their /Annots
   /// slots). Parameters follow [PdfEditor.restyleAnnotation]: [color]
@@ -4405,12 +4433,14 @@ class PdfEditingController extends ChangeNotifier {
     double? strokeWidth,
     double? opacity,
     PdfLineStyle? lineStyle,
+    double? scale,
   }) {
     if (color == null &&
         fill == null &&
         strokeWidth == null &&
         opacity == null &&
-        lineStyle == null) {
+        lineStyle == null &&
+        scale == null) {
       return false;
     }
     if (!canRestyleSelected) return false;
@@ -4422,8 +4452,14 @@ class PdfEditingController extends ChangeNotifier {
     return apply(
       (e) {
         for (final (page, annotation) in targets) {
-          // the dash array scales to the (possibly just-changed) pen width
           final width = strokeWidth ?? annotation.borderWidth ?? 1;
+          // Recompute the dash array when the line style *or* the pattern
+          // scale changes - both size it, and the scale is otherwise baked
+          // into the stored array with no readable field. A pen-width change
+          // alone no longer resizes it: thickness and pattern are separate.
+          final style =
+              lineStyle ?? PdfLineStyle.ofDashArray(annotation.borderDash);
+          final recomputeDash = lineStyle != null || scale != null;
           e.restyleAnnotation(
             page,
             annotation,
@@ -4431,8 +4467,10 @@ class PdfEditingController extends ChangeNotifier {
             fillColor: fill == null ? null : (_rgbOf(fill.$1),),
             strokeWidth: strokeWidth,
             opacity: opacity,
-            dashPattern:
-                lineStyle == null ? null : (lineStyle.dashArray(width),),
+            dashPattern: recomputeDash
+                ? (style.dashArray(width, scale: scale ?? lineScale),)
+                : null,
+            cloudScale: scale,
             pageRotation: _page(page).rotation,
           );
         }
@@ -4974,7 +5012,9 @@ class PdfEditingController extends ChangeNotifier {
                     underline: underline)
             ];
       _rewriteSelectedRich(annotation, runs,
-          lineSpacing: lineSpacing, charSpacing: charSpacing, fontWidth: fontWidth);
+          lineSpacing: lineSpacing,
+          charSpacing: charSpacing,
+          fontWidth: fontWidth);
     } else {
       _rewriteSelected(
         annotation,
