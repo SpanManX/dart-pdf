@@ -1908,6 +1908,9 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
         value: value,
         min: 0.1,
         max: 1,
+        // a true ratio: typeable down to 0%, never past 100%
+        fieldMin: 0,
+        fieldMax: 1,
         width: 40,
         display: (v) => '${(v * 100).round()}%',
         parse: _parsePercent,
@@ -3521,6 +3524,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                       value: controller.eraserRadius,
                       min: 2,
                       max: 40,
+                      fieldMin: 1,
+                      fieldMax: kPdfTypedSizeMax,
                       display: (v) => '${v.round()} pt',
                       parse: _parsePoints,
                       onChanged: (v) =>
@@ -3532,6 +3537,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                       value: strokeValue,
                       min: 0.5,
                       max: 12,
+                      fieldMin: 0,
+                      fieldMax: kPdfTypedSizeMax,
                       display: (v) => '${v.toStringAsFixed(1)} pt',
                       parse: _parsePoints,
                       onChanged: (v) {
@@ -3552,6 +3559,10 @@ class _StyleMenuState extends State<_StyleMenu> {
                       value: opacityValue,
                       min: 0.1,
                       max: 1,
+                      // opacity is a true ratio: let the field reach 0% but
+                      // never past 100%
+                      fieldMin: 0,
+                      fieldMax: 1,
                       display: (v) => '${(v * 100).round()}%',
                       parse: _parsePercent,
                       onChanged: (v) {
@@ -3679,6 +3690,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                           controller.fontSize,
                       min: 8,
                       max: 48,
+                      fieldMin: 1,
+                      fieldMax: kPdfTypedSizeMax,
                       display: (v) => '${v.round()} pt',
                       parse: _parsePoints,
                       onChanged: (v) {
@@ -3778,6 +3791,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                             controller.lineSpacing,
                         min: 0.8,
                         max: 3,
+                        fieldMin: 0.1,
+                        fieldMax: 100,
                         display: (v) => '${v.toStringAsFixed(1)}×',
                         onChanged: (v) =>
                             setState(() => _draggingLineSpacing = v),
@@ -3794,6 +3809,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                             controller.charSpacing,
                         min: -2,
                         max: 10,
+                        fieldMin: -kPdfTypedSizeMax,
+                        fieldMax: kPdfTypedSizeMax,
                         display: (v) => '${v.toStringAsFixed(1)} pt',
                         parse: _parsePoints,
                         onChanged: (v) =>
@@ -3811,6 +3828,8 @@ class _StyleMenuState extends State<_StyleMenu> {
                             controller.fontWidth,
                         min: 50,
                         max: 200,
+                        fieldMin: 1,
+                        fieldMax: kPdfTypedSizeMax,
                         display: (v) => '${v.round()}%',
                         parse: _parsePoints,
                         onChanged: (v) =>
@@ -3905,6 +3924,8 @@ class _StyleMenuState extends State<_StyleMenu> {
     double? Function(String)? parse,
     required ValueChanged<double> onChanged,
     ValueChanged<double>? onChangeEnd,
+    double? fieldMin,
+    double? fieldMax,
   }) {
     return Row(key: key, children: [
       SizedBox(width: 86, child: Text(label)),
@@ -3919,12 +3940,15 @@ class _StyleMenuState extends State<_StyleMenu> {
       ),
       // the readout is editable: type an exact value (general rule across
       // the editing UI) - committing routes through the change-end callback,
-      // or onChanged for sliders that have none (live-only)
+      // or onChanged for sliders that have none (live-only). The typed value
+      // may run past the slider's scale (fieldMin/fieldMax) within reason.
       PdfSliderValueField(
         key: key is ValueKey ? ValueKey('${key.value}-input') : null,
         value: value,
         min: min,
         max: max,
+        fieldMin: fieldMin,
+        fieldMax: fieldMax,
         width: 56,
         display: display,
         parse: parse,
