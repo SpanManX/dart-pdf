@@ -2000,6 +2000,7 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
               tool == PdfEditTool.ellipse ||
               tool == PdfEditTool.polygon ||
               tool == PdfEditTool.cloudPolygon,
+          cornerRadius: tool == PdfEditTool.rectangle,
         );
       case 'insert':
         return const _StyleFields(opacity: true, font: true, boxColors: true);
@@ -2046,6 +2047,8 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
             // the outline colour of shapes and revision clouds
             strokeColor: canStroke && behavior.supportsStrokeWidth,
             opacity: behavior.supportsOpacity,
+            // only a rectangle rounds its corners
+            cornerRadius: controller.canRoundSelectedCorners,
             // a /Polygon area measurement carries a caption font
             font: controller.canRestyleMeasurementCaption,
             lineType: controller.canSetLineStyleSelected,
@@ -3161,6 +3164,7 @@ class _StyleFields {
     this.font = false,
     this.boxColors = false,
     this.shapeFill = false,
+    this.cornerRadius = false,
     this.eraser = false,
     this.formField = false,
   });
@@ -3172,6 +3176,9 @@ class _StyleFields {
   final bool strokeColor;
 
   final bool opacity;
+
+  /// The rectangle corner-radius slider (rectangle shape only).
+  final bool cornerRadius;
 
   /// The line-type dropdown (solid / dashed / dotted / dash-dot) - shapes
   /// and the line family.
@@ -3208,6 +3215,7 @@ class _StyleFields {
       !font &&
       !boxColors &&
       !shapeFill &&
+      !cornerRadius &&
       !eraser &&
       !formField;
 }
@@ -3263,6 +3271,7 @@ class _StyleMenuState extends State<_StyleMenu> {
   /// Same, for the stroke-width and opacity sliders restyling a
   /// selected annotation.
   double? _draggingStroke;
+  double? _draggingCornerRadius;
   double? _draggingScale;
   double? _draggingOpacity;
   double? _draggingLineSpacing;
@@ -3551,6 +3560,36 @@ class _StyleMenuState extends State<_StyleMenu> {
                           controller.restyleSelected(strokeWidth: v);
                         }
                         setState(() => _draggingStroke = null);
+                      },
+                    ),
+                  if (fields.cornerRadius)
+                    _slider(
+                      key: const ValueKey('pdf-corner-radius'),
+                      label: 'Corner radius',
+                      // a selected rectangle shows its own radius; otherwise
+                      // the creation default while the rectangle tool is armed
+                      value: _draggingCornerRadius ??
+                          (restylingAnnotation
+                              ? controller.selectedCornerRadius
+                              : null) ??
+                          controller.cornerRadius,
+                      min: 0,
+                      max: 40,
+                      display: (v) => '${v.round()} pt',
+                      parse: _parsePoints,
+                      onChanged: (v) {
+                        setState(() => _draggingCornerRadius = v);
+                        if (!restylingAnnotation) {
+                          controller.cornerRadius = v.roundToDouble();
+                        }
+                      },
+                      onChangeEnd: (v) {
+                        controller.cornerRadius = v.roundToDouble();
+                        if (restylingAnnotation) {
+                          controller.restyleSelected(
+                              cornerRadius: v.roundToDouble());
+                        }
+                        setState(() => _draggingCornerRadius = null);
                       },
                     ),
                   if (fields.opacity)

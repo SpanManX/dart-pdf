@@ -1035,7 +1035,14 @@ class PdfEditingController extends ChangeNotifier {
             'opacity'
           },
         PdfEditTool.eraser => const {'eraserRadius'},
-        PdfEditTool.rectangle ||
+        PdfEditTool.rectangle => const {
+            'color',
+            'strokeWidth',
+            'opacity',
+            'lineStyle',
+            'shapeFillColor',
+            'cornerRadius',
+          },
         PdfEditTool.ellipse ||
         PdfEditTool.polygon ||
         PdfEditTool.cloudPolygon =>
@@ -1129,6 +1136,12 @@ class PdfEditingController extends ChangeNotifier {
   double get strokeWidth => preferences.strokeWidth;
 
   set strokeWidth(double value) => preferences.strokeWidth = value;
+
+  /// Corner radius for new rectangle shapes, in PDF points; 0 gives square
+  /// corners. Persisted (remembered per the rectangle tool's style scope).
+  double get cornerRadius => preferences.cornerRadius;
+
+  set cornerRadius(double value) => preferences.cornerRadius = value;
 
   /// The circle eraser's radius, in PDF points - the eraser removes
   /// every part of an ink stroke within this distance of its swept
@@ -1770,6 +1783,7 @@ class PdfEditingController extends ChangeNotifier {
           fillColor: _rgbOf(preferences.shapeFillColor),
           opacity: preferences.opacity,
           dashPattern: _lineDashPattern,
+          cornerRadius: preferences.cornerRadius,
           author: author,
         ),
       );
@@ -4460,6 +4474,7 @@ class PdfEditingController extends ChangeNotifier {
     double? strokeWidth,
     double? opacity,
     PdfLineStyle? lineStyle,
+    double? cornerRadius,
     double? scale,
   }) {
     if (color == null &&
@@ -4467,6 +4482,7 @@ class PdfEditingController extends ChangeNotifier {
         strokeWidth == null &&
         opacity == null &&
         lineStyle == null &&
+        cornerRadius == null &&
         scale == null) {
       return false;
     }
@@ -4498,11 +4514,30 @@ class PdfEditingController extends ChangeNotifier {
                 ? (style.dashArray(width, scale: scale ?? lineScale),)
                 : null,
             cloudScale: scale,
+            // rounding only lands on /Square rectangles; other subtypes
+            // ignore it, so a mixed selection is safe to pass through
+            cornerRadius: cornerRadius,
             pageRotation: _page(page).rotation,
           );
         }
       },
     );
+  }
+
+  /// Whether [restyleSelected]'s `cornerRadius` applies - every selected
+  /// annotation is a restylable /Square rectangle (the only subtype that
+  /// rounds its corners). Gates the selection corner-radius control.
+  bool get canRoundSelectedCorners =>
+      canRestyleSelected &&
+      _selected.every((slot) => _annotationAt(slot)?.subtype == 'Square');
+
+  /// The primary selected rectangle's current corner radius (page points),
+  /// or null when the selection isn't a roundable /Square - for the corner
+  /// radius control to display.
+  double? get selectedCornerRadius {
+    final annotation = selectedAnnotation;
+    if (annotation == null || annotation.subtype != 'Square') return null;
+    return annotation.cornerRadius;
   }
 
   // ---------------------------------------------------------------------

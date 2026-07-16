@@ -106,6 +106,55 @@ void main() {
     });
   });
 
+  group('rectangle corner radius on the controller', () {
+    test('the corner radius preference rounds new rectangles', () {
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..cornerRadius = 10;
+      addTearDown(editing.dispose);
+      editing.addRectangle(0, const PdfRect(100, 100, 300, 200));
+      expect(
+          editing.document.page(0).annotations.single.cornerRadius, 10);
+    });
+
+    test('a zero radius leaves the rectangle square', () {
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+      editing.addRectangle(0, const PdfRect(100, 100, 300, 200));
+      expect(editing.document.page(0).annotations.single.cornerRadius, 0);
+    });
+
+    test('restyleSelected rounds and re-squares a selected rectangle', () {
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+      editing
+        ..addRectangle(0, const PdfRect(100, 100, 300, 200))
+        ..selectAnnotation(0, 0);
+      expect(editing.canRoundSelectedCorners, isTrue);
+      expect(editing.selectedCornerRadius, 0);
+
+      expect(editing.restyleSelected(cornerRadius: 12), isTrue);
+      expect(editing.document.page(0).annotations.single.cornerRadius, 12);
+      // the selection survives, so the control reflects the new radius
+      expect(editing.selectedCornerRadius, 12);
+
+      expect(editing.restyleSelected(cornerRadius: 0), isTrue);
+      expect(editing.document.page(0).annotations.single.cornerRadius, 0);
+      expect(editing.selectedCornerRadius, 0);
+    });
+
+    test('corner radius controls are off for non-rectangle selections', () {
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+      editing
+        ..addEllipse(0, const PdfRect(100, 100, 300, 200))
+        ..selectAnnotation(0, 0);
+      expect(editing.canRoundSelectedCorners, isFalse);
+      expect(editing.selectedCornerRadius, isNull);
+      // a circle has no corners, so the radius restyle is a no-op
+      expect(editing.restyleSelected(cornerRadius: 12), isFalse);
+    });
+  });
+
   group('polygon fill', () {
     test('a polygon drawn with a shape fill colour stores /IC', () {
       final editing = PdfEditingController(buildMultiPagePdf(1))

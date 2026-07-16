@@ -1333,25 +1333,68 @@ void main() {
       // scope to the popup's sliders - the strip also has an inline opacity
       final menuSliders = find.descendant(
           of: find.byType(MenuAnchor), matching: find.byType(Slider));
-      // the shapes popup carries stroke width, opacity, and the pattern
-      // scale (font is irrelevant to a rectangle, so it's not shown)
-      expect(menuSliders, findsNWidgets(3));
+      // the shapes popup carries stroke width, corner radius, opacity, and
+      // the pattern scale (font is irrelevant to a rectangle, so it's not
+      // shown; corner radius is rectangle-only)
+      expect(menuSliders, findsNWidgets(4));
 
-      // sliders are laid out stroke width, opacity, pattern scale
+      // sliders are laid out stroke width, corner radius, opacity,
+      // pattern scale
       await tester.drag(menuSliders.at(0), const Offset(200, 0));
       await tester.pump();
       expect(editing.strokeWidth, greaterThan(2));
 
-      await tester.drag(menuSliders.at(1), const Offset(-200, 0));
+      await tester.drag(menuSliders.at(1), const Offset(200, 0));
+      await tester.pump();
+      expect(editing.cornerRadius, greaterThan(0));
+
+      await tester.drag(menuSliders.at(2), const Offset(-200, 0));
       await tester.pump();
       expect(editing.opacity, lessThan(1));
 
       // the pattern scale is independent of the pen width
       final beforeStroke = editing.strokeWidth;
-      await tester.drag(menuSliders.at(2), const Offset(200, 0));
+      await tester.drag(menuSliders.at(3), const Offset(200, 0));
       await tester.pump();
       expect(editing.lineScale, greaterThan(1));
       expect(editing.strokeWidth, beforeStroke);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the style menu rounds a selected rectangle in place',
+        (tester) async {
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      final viewer = PdfViewerController();
+      addTearDown(editing.dispose);
+      addTearDown(viewer.dispose);
+      editing
+        ..addRectangle(0, const PdfRect(100, 100, 300, 200))
+        ..selectAnnotation(0, 0);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: const SizedBox.expand(),
+          bottomNavigationBar: PdfEditingToolbar(
+            controller: editing,
+            viewerController: viewer,
+          ),
+        ),
+      ));
+
+      // the selection strip carries the tune button for the selected shape
+      await tester.tap(find.byTooltip('Stroke, opacity, font'));
+      await tester.pumpAndSettle();
+
+      final radius = find.byKey(const ValueKey('pdf-corner-radius'));
+      expect(radius, findsOneWidget);
+      await tester.drag(
+          find.descendant(of: radius, matching: find.byType(Slider)),
+          const Offset(200, 0));
+      await tester.pump();
+
+      // dragging restyled the selection, not just the creation default
+      expect(editing.document.page(0).annotations.single.cornerRadius,
+          greaterThan(0));
+      expect(editing.selectedCornerRadius, greaterThan(0));
       await tester.pumpAndSettle();
     });
 
