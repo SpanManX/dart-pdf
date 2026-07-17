@@ -1840,6 +1840,7 @@ class PdfEditingController extends ChangeNotifier {
   /// (e.g. from a calibration dialog or a test) calibrates every measurement
   /// tool at once.
   PdfMeasurementScale? get measurementScale => preferences.measurementScale;
+
   set measurementScale(PdfMeasurementScale? value) =>
       preferences.measurementScale = value;
 
