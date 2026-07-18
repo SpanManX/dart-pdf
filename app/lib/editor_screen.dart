@@ -18,6 +18,8 @@ import 'file_io.dart';
 import 'image_clipboard.dart';
 import 'image_export.dart';
 import 'incoming_file.dart';
+import 'keyless_identity_cache.dart';
+import 'keyless_signing.dart';
 import 'new_document.dart';
 import 'ocr.dart';
 import 'pdf_cache.dart';
@@ -56,6 +58,8 @@ class EditorScreen extends StatefulWidget {
     this.autoCheckUpdates = false,
     this.printDocument,
     this.digitalSignatureOptionsProvider,
+    this.oidcTokenProvider,
+    this.oidcSilentTokenProvider,
     this.saveDocumentAs,
     this.saveDocumentToPath,
     this.imageClipboardWriter,
@@ -92,6 +96,19 @@ class EditorScreen extends StatefulWidget {
   /// hosts with an OS keychain or HSM can supply an identity without exposing
   /// it through the app's file picker.
   final DigitalSignatureOptionsProvider? digitalSignatureOptionsProvider;
+
+  /// Enables Sigstore/Fulcio **keyless** signing in the Digitally sign dialog.
+  /// A deployment supplies this to run its OAuth sign-in and return an OIDC
+  /// token; DartPDF then exchanges it with Fulcio (production HTTPS) and stamps
+  /// the signature with the default TSA. Null (the default) hides the keyless
+  /// option, since no OAuth client ships with the app.
+  final OidcTokenProvider? oidcTokenProvider;
+
+  /// A **silent** OIDC token source (returns a cached/refreshable token, or
+  /// null when a browser sign-in would be needed). When wired, the Digitally
+  /// sign dialog uses it to pre-select the keyless identity on open without
+  /// ever launching sign-in as a side effect of opening.
+  final OidcTokenProvider? oidcSilentTokenProvider;
 
   /// Overrides the Save As backend. Tests use this seam to assert that the
   /// active tab adopts the chosen file without opening platform dialogs.
@@ -990,22 +1007,78 @@ class _EditorScreenState extends State<EditorScreen>
 
   // --- printing ------------------------------------------------------------
 
-  Future<void> _digitallySign(DocumentTab tab) async {
+  /// Reuses a keyless (Sigstore/Fulcio) identity across signatures while its
+  /// short-lived certificate (~10 min) stays valid, so most boxes need no
+  /// fresh OIDC sign-in.
+  final _keylessCache = KeylessIdentityCache();
+
+  /// A keyless identity for signing: the cached one while its cert is valid,
+  /// else freshly minted via [tokenProvider] (interactive or silent).
+  Future<PdfSigningIdentity?> _obtainKeyless(
+          BuildContext context, OidcTokenProvider tokenProvider) =>
+      _keylessCache.obtain(
+          context,
+          (context) =>
+              keylessSigningIdentity(context, tokenProvider: tokenProvider));
+
+  /// Opens the digital-signature dialog and signs. When [placement] is set
+  /// (the signature-box tool drew a rectangle), the dialog offers the visible
+  /// appearance (hand-drawn mark, logo backdrop) and the signature is rendered
+  /// into that box; otherwise the signature is invisible.
+  Future<void> _digitallySign(DocumentTab tab,
+      {SignaturePlacement? placement}) async {
     final session = tab.session;
     if (session == null || _digitallySigning) return;
     setState(() => _digitallySigning = true);
     try {
+      final tokenProvider = widget.oidcTokenProvider;
+      final silentProvider = widget.oidcSilentTokenProvider;
       final options = await (widget.digitalSignatureOptionsProvider ??
-          showDigitalSigningDialog)(context);
+          (context) => showDigitalSigningDialog(
+                context,
+                createKeylessIdentity: tokenProvider == null
+                    ? null
+                    : (context) => _obtainKeyless(context, tokenProvider),
+                timestampClient:
+                    tokenProvider == null ? null : defaultTimestampClient,
+                // On the web the OAuth broker can't complete in a browser tab,
+                // so keyless is native-only; tell the user where to find it.
+                keylessUnavailable: kIsWeb,
+                // Pre-select keyless on open only via the silent provider, so
+                // opening the dialog never launches the browser. It reuses the
+                // cached Fulcio identity while its cert is valid (~10 min), so
+                // most boxes need no OIDC token at all.
+                autoCreateKeylessIdentity:
+                    (tokenProvider == null || silentProvider == null)
+                        ? null
+                        : (context) => _obtainKeyless(context, silentProvider),
+                placement: placement,
+                logoPicker: placement == null ? null : pickImageBytes,
+                pageCount: session.document.pageCount,
+              ))(context);
       if (!mounted || options == null || !_tabs.contains(tab)) return;
+      final keyless = options.keylessIdentity;
       final selfSigned = options.selfSignedIdentity;
-      if (selfSigned != null) {
+      if (keyless != null) {
+        await session.addKeylessSignature(
+          keyless,
+          timestampClient: options.timestampClient!,
+          fieldName: options.fieldName,
+          reason: options.reason,
+          location: options.location,
+          contactInfo: options.contactInfo,
+          signingTime: options.signingTime,
+          appearance: options.appearance,
+        );
+      } else if (selfSigned != null) {
         await session.addSelfSignedSignature(
           selfSigned,
           fieldName: options.fieldName,
           reason: options.reason,
           location: options.location,
           contactInfo: options.contactInfo,
+          signingTime: options.signingTime,
+          appearance: options.appearance,
         );
       } else {
         await session.addDigitalSignature(
@@ -1014,6 +1087,8 @@ class _EditorScreenState extends State<EditorScreen>
           reason: options.reason,
           location: options.location,
           contactInfo: options.contactInfo,
+          signingTime: options.signingTime,
+          appearance: options.appearance,
         );
       }
       if (!mounted || !_tabs.contains(tab)) return;
@@ -1021,6 +1096,8 @@ class _EditorScreenState extends State<EditorScreen>
       // an existing origin is overwritten and an untitled document gets a
       // Save As destination. Cancelling Save As leaves the signed tab dirty.
       await _save(tab);
+      // Offer an immediate undo, in case the signature was placed by accident.
+      if (mounted && _tabs.contains(tab)) _offerSignatureUndo(tab);
     } on FormatException catch (error) {
       if (mounted) _toast('Could not digitally sign: ${error.message}');
     } catch (error) {
@@ -1028,6 +1105,36 @@ class _EditorScreenState extends State<EditorScreen>
     } finally {
       if (mounted) setState(() => _digitallySigning = false);
     }
+  }
+
+  /// Shows a snackbar offering to undo a signature just placed (its revision
+  /// sits on the undo stack), removing it and re-saving without it.
+  void _offerSignatureUndo(DocumentTab tab) {
+    final session = tab.session;
+    if (session == null || !session.canUndo) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(
+        content: const Text('Document digitally signed'),
+        behavior: SnackBarBehavior.floating,
+        margin: pdfFloatingToastMargin(context),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => unawaited(_undoSignature(tab)),
+        ),
+      ));
+  }
+
+  /// Removes the just-placed signature (undoes its revision) and re-saves so
+  /// the file no longer carries it.
+  Future<void> _undoSignature(DocumentTab tab) async {
+    final session = tab.session;
+    if (session == null || !session.canUndo || !_tabs.contains(tab)) return;
+    session.undo();
+    if (!mounted || !_tabs.contains(tab)) return;
+    await _save(tab);
+    if (mounted) _toast('Signature removed');
   }
 
   /// Hands the active document to the OS print dialog (the `printing` plugin -
@@ -1602,6 +1709,10 @@ class _EditorScreenState extends State<EditorScreen>
               : 'Could not copy snapshot to clipboard');
         },
       ),
+      // The signature-box tool: drag a box, then pick an identity and
+      // appearance and cryptographically sign into that rectangle.
+      onPlaceSignature: (context, {required pageIndex, required pageRect}) =>
+          _digitallySign(tab, placement: (page: pageIndex, rect: pageRect)),
     );
   }
 
