@@ -11,6 +11,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'pdf_bookmark_source.dart';
 import 'pdf_file_source.dart';
 import 'pdf_mobile_source.dart';
+import 'web_file_picker_stub.dart'
+    if (dart.library.js_interop) 'web_file_picker.dart';
 
 const _macosFileAccessChannel =
     MethodChannel('dev.milanko.dartpdf/file_access');
@@ -133,13 +135,20 @@ PdfByteSource pdfByteSourceForMobileToken(
     );
 
 /// Opens the system file picker for a PDF. Returns null when the user cancels.
-Future<XFile?> pickPdfFile() =>
-    openFile(acceptedTypeGroups: const [pdfTypeGroup]);
+///
+/// On the web this reads the picked file's bytes directly (see [pickPdfFileWeb])
+/// instead of going through `file_selector`, whose blob-URL XFiles hang on
+/// `readAsBytes()` under the deployed site's cross-origin isolation.
+Future<XFile?> pickPdfFile() => kIsWeb
+    ? pickPdfFileWeb()
+    : openFile(acceptedTypeGroups: const [pdfTypeGroup]);
 
 /// Opens the system file picker for one or more PDFs. Returns an empty list
-/// when the user cancels.
-Future<List<XFile>> pickPdfFiles() =>
-    openFiles(acceptedTypeGroups: const [pdfTypeGroup]);
+/// when the user cancels. On the web, reads the bytes eagerly (see
+/// [pickPdfFilesWeb]) for the same reason as [pickPdfFile].
+Future<List<XFile>> pickPdfFiles() => kIsWeb
+    ? pickPdfFilesWeb()
+    : openFiles(acceptedTypeGroups: const [pdfTypeGroup]);
 
 /// Opens the system file picker and reads the chosen PDF. Returns null when
 /// the user cancels. Throws if the file can't be read - callers surface that.
