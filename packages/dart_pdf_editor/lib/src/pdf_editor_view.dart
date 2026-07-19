@@ -234,6 +234,7 @@ class PdfEditorView extends StatefulWidget {
     this.fontPicker,
     this.onSnapshot,
     this.onPlaceSignature,
+    this.onShareReflowImage,
     this.textPrompt,
     this.styledTextPrompt,
     this.palette = PdfEditingToolbar.defaultPalette,
@@ -308,6 +309,7 @@ class PdfEditorView extends StatefulWidget {
     this.fontPicker,
     this.onSnapshot,
     this.onPlaceSignature,
+    this.onShareReflowImage,
     this.textPrompt,
     this.styledTextPrompt,
     this.palette = PdfEditingToolbar.defaultPalette,
@@ -475,6 +477,11 @@ class PdfEditorView extends StatefulWidget {
 
   /// See [PdfViewer.onPlaceSignature].
   final PdfSignaturePlacer? onPlaceSignature;
+
+  /// Saves or shares a figure the reader taps to open fullscreen in the text
+  /// reflow view (see [PdfReflowView.onShareImage]). Null still allows
+  /// fullscreen pan/pinch-zoom viewing; it just hides the share action.
+  final PdfReflowImageShareHandler? onShareReflowImage;
 
   /// How dialog-based tools ask for text. Defaults to
   /// [showPdfTextPrompt], a Material dialog.
@@ -920,14 +927,19 @@ class _PdfEditorViewState extends State<PdfEditorView> {
           final reflowActive =
               features.reflowView && prefs.showReflowView && !gridActive;
           final altView = reflowActive || gridActive;
+          // The navigational panels (Pages, Bookmarks) drive the reflow view
+          // through the shared controller, so they stay available while
+          // reading; only the full-area page grid hides them. The canvas-bound
+          // panels (search results, annotations, properties) have no page to
+          // act on in reflow, so they still yield to [altView].
           final showThumbnailsPanel =
-              features.thumbnails && showThumbnails && !altView;
+              features.thumbnails && showThumbnails && !gridActive;
           final showSearchPanel = features.search &&
               features.searchResultsPanel &&
               prefs.showSearchResultsPanel &&
               !altView;
           final showBookmarksPanel =
-              features.bookmarks && prefs.showBookmarkSidebar && !altView;
+              features.bookmarks && prefs.showBookmarkSidebar && !gridActive;
           final showAnnotationsPanel = features.annotationSidebar &&
               prefs.showAnnotationSidebar &&
               !altView;
@@ -1138,6 +1150,20 @@ class _PdfEditorViewState extends State<PdfEditorView> {
               );
             },
           );
+          // A one-tap Reflow toggle for the compact Controls sheet - reading
+          // reflow is something phone users reach for often, so it earns a
+          // direct tile instead of living only inside Settings. Mirrors the
+          // Settings toggle: turning reflow on clears the page grid.
+          final reflowControl = PdfShellControlItem(
+            key: const ValueKey('pdf-shell-reflow-toggle'),
+            icon: Icons.article_outlined,
+            label: 'Reflow',
+            selected: reflowActive,
+            onPressed: () {
+              prefs.showThumbnailView = false;
+              prefs.showReflowView = !prefs.showReflowView;
+            },
+          );
           final panelItems = [
             if (features.searchResultsPanel)
               PdfShellPanelItem(
@@ -1258,6 +1284,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                 ],
                 compactControls: [
                   if (features.viewOptions) viewOptionsControl,
+                  if (features.reflowView) reflowControl,
                   for (final item in panelItems)
                     PdfShellControlItem(
                       key: item.key,
@@ -1285,6 +1312,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                 viewer: reflowActive
                     ? PdfReflowView(
                         document: session.document,
+                        controller: _viewer,
+                        onShareImage: widget.onShareReflowImage,
                         backgroundColor: widget.backgroundColor,
                       )
                     : PdfViewer(
