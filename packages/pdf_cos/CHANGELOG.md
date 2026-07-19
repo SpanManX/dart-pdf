@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.0
+
+- Major version bump for the 2.0.0 package suite. A breaking API change in
+  `dart_pdf_editor` moves every package to 2.0.0 in lockstep; the COS object
+  model, syntax, and (de)serialization API is source-compatible with 1.4.7.
+- Add an asynchronous byte-source API (`PdfByteSource`) for progressive PDF
+  loading: the reader pulls ranged slices on demand instead of requiring the
+  whole file up front, so remote and large local files can paint their first
+  page before the full download or read completes (#328, #359).
+- Decode PDF text strings as PDFDocEncoding rather than Latin-1, so document
+  metadata and outline titles that use PDFDocEncoding-specific code points
+  round-trip correctly (#347).
+- Add the crypto primitives behind one-tap and keyless signing identities:
+  P-256 `EcPrivateKey.generate`, deterministic RFC 6979 `ecdsaSign`, the X.509
+  v3 builders `buildSelfSignedCertificate` / `buildCaCertificate` /
+  `issueCertificate`, and `ecSubjectPublicKeyInfo` / `pemEncode` for
+  Sigstore/Fulcio (#322, #337, #355).
+- Internal refactors with no public API change: extract `CosXrefReader` from
+  `CosDocument`, move the encryption object-graph walk behind the security
+  handler, share file-tail framing between the builder and updater, and dedupe
+  ObjStm header parsing between recovery and the stream decoder.
+
 ## 1.4.7
 
 - Version bump to keep the dart-pdf package suite aligned at 1.4.7. No COS API

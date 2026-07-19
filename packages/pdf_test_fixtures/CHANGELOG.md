@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.0
+
+- Major version bump to keep the dart-pdf package suite aligned at 2.0.0.
+- Add an in-process fake Fulcio authority (`test_fulcio.dart`) that verifies
+  the proof of possession and issues a short-lived certificate from a test CA,
+  for exercising Sigstore/Fulcio keyless signing without a network (#322).
+
 ## 1.4.7
 
 - Version bump to keep the dart-pdf package suite aligned at 1.4.7. No fixture

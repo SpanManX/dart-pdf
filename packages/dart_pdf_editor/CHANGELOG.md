@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.0
 
 - **Breaking:** remove the pure style forwarders from `PdfEditingController`.
   The ~19 tool-style properties that only mirrored `preferences`
@@ -33,6 +33,21 @@
   `PdfPageLayout` is a value type with named constructors so further layouts
   (facing/two-page) can be added without changing the viewer's API.
   `PdfReader` and `PdfEditorView` forward the option (#324).
+- Deep-zoom detail via a budgeted zoom-bucket tile pyramid (`PdfTileStore`),
+  now enabled by default on every platform: past the raster caps the viewer
+  renders and caches the visible slice at native resolution instead of
+  upscaling, with a budget-vs-demand guard against eviction thrash (#314).
+- Open local and remote files through the ranged `PdfByteSource` so the first
+  page paints before the whole file is read/downloaded (#359, #328).
+- Wire Sigstore/Fulcio keyless and one-tap self-signed signing into the editor,
+  including the "Create signing identity" UI and secure key storage (#322).
+- Introduce `PdfEditToolBehavior` as the single source of tool identity, and
+  collapse `PdfViewer`'s separate `document` + editing inputs into one revision
+  source (#311, #319).
+- Draggable, dockable side panels (any edge, side-by-side or tab groups, with a
+  saved layout) and an F12 developer-tools overlay (#362, #360).
+- Annotation list gains a hover more-menu and ctrl/shift multi-select (#350),
+  and the toolbar font chip shows the real embedded face (#348).
 
 ## 1.4.7
 

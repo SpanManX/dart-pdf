@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.0.0
+
+- Major version bump for the 2.0.0 package suite (breaking change in
+  `dart_pdf_editor`; the document API is source-compatible with 1.4.7).
+- Open documents from an asynchronous `PdfByteSource` so a remote or large
+  local PDF can be rendered progressively as bytes arrive, rather than after
+  the whole file is in memory (#328).
+- One-tap self-signed signing identities: `PdfSigningIdentity.generate`
+  (P-256 keygen + X.509 v3 self-signed cert) with `toPem`/`fromPem`
+  persistence, `PdfEditor.saveSelfSigned` / `saveSignedEcdsa` /
+  `saveSelfSignedPades` (ECDSA CMS), a default TSA
+  (`PdfDefaultTimestampAuthority`) for trusted B-T time, and org-CA mode
+  (`PdfSigningIdentity.generateCa` + `ca.issue(...)`) so members chain to a
+  shared CA (#337).
+- Sigstore/Fulcio keyless signing (Tier 3): `fulcioSigningIdentity` mints an
+  ephemeral P-256 key, proves possession, requests a short-lived certificate
+  from a Fulcio v2 authority (transport injected like the TSA), and wraps the
+  chain in a `PdfSigningIdentity` to sign B-T (#322, #355).
+- Internal refactors with no public API change: consolidate the composite-font
+  path into one `Type0Font` module and one shared `TextRunRewriter`, and route
+  text-box appearance generation through a single shared builder.
+
 ## 1.4.7
 
 - Add a visible signature box for `saveSigned`/`saveSignedPades`:

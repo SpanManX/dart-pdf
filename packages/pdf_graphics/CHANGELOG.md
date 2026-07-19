@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.0
+
+- Major version bump for the 2.0.0 package suite (breaking change in
+  `dart_pdf_editor`; the graphics API is source-compatible with 1.4.7).
+- Invert CMY when decoding YCCK/Adobe-inverted JPEGs so CMYK photos embedded
+  as DCTDecode render with correct colour, matching pdf.js (#370).
+- Support vector printing on Windows and Linux: the page is streamed to the OS
+  print system as vector content rather than a rasterised bitmap (#303).
+- Extract a shared `PdfColorSpace` module so colour-space resolution is unified
+  across the fill/stroke and image-decode paths (internal refactor, #310).
+
 ## 1.4.7
 
 - Resolve the Separation/DeviceN tint transform once per distinct sample
