@@ -92,6 +92,19 @@ class PdfDocument {
   }
 
   List<CosDictionary>? _leafCache;
+  Map<CosDictionary, int>? _leafIndexCache;
+
+  /// Identity map from page dictionary to index, built alongside [_leaves].
+  ///
+  /// [CosDictionary] does not override `==`, so a plain map is identity-keyed
+  /// - the same comparison the linear scan this replaces made, at O(1).
+  ///
+  /// Iteration order is immaterial because [_leaves] cannot hold the same
+  /// dictionary twice: [_collectLeaves] guards on a `visited` set, so a node a
+  /// broken file reaches from two places in the tree is collected once.
+  Map<CosDictionary, int> get _leafIndex => _leafIndexCache ??= {
+        for (var i = 0; i < _leaves.length; i++) _leaves[i]: i,
+      };
 
   List<CosDictionary> get _leaves => _leafCache ??= () {
         final t0 = PdfPerf.begin();
@@ -103,7 +116,10 @@ class PdfDocument {
 
   /// Drops cached page-tree state. Editing code calls this after structural
   /// changes (reorder, removal, insertion) so lookups re-walk the tree.
-  void invalidatePageCache() => _leafCache = null;
+  void invalidatePageCache() {
+    _leafCache = null;
+    _leafIndexCache = null;
+  }
 
   /// Feeds an append-only incremental revision into this open document in
   /// place (see [CosDocument.applyIncrementalUpdate]) and re-walks the page
@@ -140,13 +156,7 @@ class PdfDocument {
   /// Zero-based index of a page dictionary, or -1 if it isn't a leaf of
   /// this document's page tree. Resolved objects are cached by reference,
   /// so identity comparison is sound. Used to resolve link destinations.
-  int pageIndexOf(CosDictionary pageDict) {
-    final leaves = _leaves;
-    for (var i = 0; i < leaves.length; i++) {
-      if (identical(leaves[i], pageDict)) return i;
-    }
-    return -1;
-  }
+  int pageIndexOf(CosDictionary pageDict) => _leafIndex[pageDict] ?? -1;
 
   void _collectLeaves(CosDictionary node, List<CosDictionary> out,
       Set<CosDictionary> visited) {
