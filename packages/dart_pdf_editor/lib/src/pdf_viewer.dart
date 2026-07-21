@@ -824,6 +824,7 @@ class PdfViewer extends StatefulWidget {
     this.textSelectionEditing = true,
     this.textSelectionMarkup = true,
     this.annotationMenuBuilder,
+    this.contextMenuEnabled = true,
     this.formImagePicker,
     this.fontPicker,
     this.imagePicker,
@@ -1025,6 +1026,12 @@ class PdfViewer extends StatefulWidget {
   /// appear below a divider. Needs [editing] - without a controller
   /// there is no context menu.
   final PdfAnnotationMenuBuilder? annotationMenuBuilder;
+
+  /// Whether right-click (desktop) and long-press (touch/stylus) open the
+  /// annotation context menu. When false, the selection and link behaviors
+  /// still run normally; only the popup menu is suppressed. Defaults to
+  /// true. Has no effect without [editing].
+  final bool contextMenuEnabled;
 
   /// How the form tool fills a tapped push-button field with an image
   /// (signature and logo fields) - typically a file picker returning
@@ -3345,6 +3352,7 @@ class _PdfViewerState extends State<PdfViewer>
   Future<void> _onSecondaryTapUp(TapUpDetails details) async {
     final point = _pagePointAt(details.localPosition);
     if (point == null) return;
+    if (!widget.contextMenuEnabled) return;
     final (page, x, y) = point;
     final editing = widget.editing;
     if (editing != null && !editing.isPickingColor) {
@@ -4255,7 +4263,10 @@ class _PdfViewerState extends State<PdfViewer>
   /// content. Returns whether a menu opened.
   bool _maybeAnnotationMenu(LongPressStartDetails details) {
     final editing = widget.editing;
-    if (editing == null || editing.tool != null || editing.isPickingColor) {
+    if (editing == null ||
+        editing.tool != null ||
+        editing.isPickingColor ||
+        !widget.contextMenuEnabled) {
       return false;
     }
     final point = _pagePointAt(details.localPosition);
