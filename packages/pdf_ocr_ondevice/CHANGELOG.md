@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.0
+
+- Version bump to align with `dart_pdf_editor` 2.1.0. No public on-device OCR API
+  changes since 2.0.0.
+
 ## 2.0.0
 
 - Version bump to align with `dart_pdf_editor` 2.0.0. No public on-device OCR

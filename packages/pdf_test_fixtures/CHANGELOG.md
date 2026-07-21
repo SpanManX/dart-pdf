@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.0
+
+- Add an image-heavy wide CAD sheet fixture in two profiles, for exercising
+  extreme-aspect page handling and region-replay culling (#419).
+- Add a dense-page fixture profile used by the region-replay grid tests (#383).
+
 ## 2.0.0
 
 - Major version bump to keep the dart-pdf package suite aligned at 2.0.0.
