@@ -5212,6 +5212,7 @@ class _PdfViewerState extends State<PdfViewer>
                 onSnapshot: widget.onSnapshot,
                 onPlaceSignature: widget.onPlaceSignature,
                 onAnnotationTap: widget.onAnnotationTap,
+                contextMenuEnabled: widget.contextMenuEnabled,
                 interactionHost: PdfEditingInteractionHost(
                   panViewport: _touchGrabPanBy,
                   endViewportPan: _flingViewport,
@@ -5980,6 +5981,7 @@ class _PdfViewerPage extends StatefulWidget {
     required this.renderWorker,
     required this.performance,
     required this.predictStrokes,
+    required this.contextMenuEnabled,
   });
 
   final PdfPage page;
@@ -6079,6 +6081,11 @@ class _PdfViewerPage extends StatefulWidget {
 
   /// See [PdfViewer.predictStrokes].
   final bool predictStrokes;
+
+  /// See [PdfViewer.contextMenuEnabled] - forwarded to the editing overlay
+  /// so its long-press recognizer and the floating selection chip both
+  /// honor the host's intent.
+  final bool contextMenuEnabled;
 
   @override
   State<_PdfViewerPage> createState() => _PdfViewerPageState();
@@ -6272,6 +6279,7 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
                                 rasterCurrent: rasterCurrent,
                                 zoom: zoom,
                                 predictStrokes: widget.predictStrokes,
+                                contextMenuEnabled: widget.contextMenuEnabled,
                               ),
                             ),
                           );
