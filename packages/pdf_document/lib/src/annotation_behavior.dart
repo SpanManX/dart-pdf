@@ -148,6 +148,16 @@ class PdfAnnotationBehavior {
         _ => false,
       };
 
+  /// Whether a stroke/tint colour control applies. False for image stamps -
+  /// a pasted picture has no colour a /C would tint, so the swatch is hidden
+  /// while opacity stays editable.
+  bool get supportsColor => canRestyle && !isImageStamp;
+
+  /// Whether this /Stamp is a placed raster picture (see
+  /// [PdfAnnotation.isImageStamp]) rather than a drawn text or template
+  /// stamp, so the restyle path re-bakes only its alpha over the same image.
+  bool get isImageStamp => annotation.isImageStamp;
+
   late final PdfFreeTextStyle? _freeTextStyle =
       subtype == 'FreeText' ? annotation.freeTextStyle : null;
 
@@ -209,8 +219,10 @@ class PdfAnnotationBehavior {
     'Squiggly' =>
       markupQuads != null,
     'Text' => annotation.normalAppearance != null,
+    // A text check-mark stamp restyles by redrawing from its /Contents; an
+    // image stamp restyles by re-baking its alpha over the same picture.
     'Stamp' => annotation.normalAppearance != null &&
-        (annotation.contents?.isNotEmpty ?? false),
+        ((annotation.contents?.isNotEmpty ?? false) || isImageStamp),
     _ => false,
   };
 
