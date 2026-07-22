@@ -13,6 +13,11 @@
   `pdfBundledFonts` is now a mutable, empty-by-default registry (a
   `PdfBundledFont` can also carry a `loadBytes` byte loader for
   application-provided fonts), and `pdfRenderWorkerScriptUrl` defaults to null.
+- On web, if page rendering falls back to the main thread because no
+  render-worker script is configured, a one-time **debug-only** warning is now
+  logged pointing at `registerBundledEditorAssets()`, so an app that forgot to
+  opt into the worker asset notices the silent performance cliff. Release and
+  profile builds stay silent.
 
 ## 2.1.0
 
