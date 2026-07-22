@@ -304,7 +304,33 @@ class PdfViewerController extends ChangeNotifier {
   PdfSearchOptions _searchOptions = const PdfSearchOptions();
   List<PdfSearchResult> _results = const [];
   List<PdfTextMatch> _matches = const [];
+  // Matches grouped by page, rebuilt once when [_matches] changes so
+  // [_matchesOn] is an O(1) lookup rather than an O(matches) filter run per page
+  // per build - the per-build rescan #403 flagged during an active search.
+  Map<int, List<PdfTextMatch>> _matchesByPage = const {};
   int _currentMatch = -1;
+
+  /// Assigns [_matches] and rebuilds the by-page index in one pass.
+  ///
+  /// The per-page lists are handed out by [_matchesOn] (unlike the old filter,
+  /// which returned a fresh list per call), so they are frozen unmodifiable -
+  /// the index stays the single source of truth even if a caller tries to
+  /// mutate what it gets back.
+  void _setMatches(List<PdfTextMatch> matches) {
+    _matches = matches;
+    if (matches.isEmpty) {
+      _matchesByPage = const {};
+      return;
+    }
+    final byPage = <int, List<PdfTextMatch>>{};
+    for (final match in matches) {
+      (byPage[match.pageIndex] ??= <PdfTextMatch>[]).add(match);
+    }
+    _matchesByPage = {
+      for (final entry in byPage.entries)
+        entry.key: List<PdfTextMatch>.unmodifiable(entry.value),
+    };
+  }
 
   int get pageCount => _pageCount;
 
@@ -591,7 +617,7 @@ class PdfViewerController extends ChangeNotifier {
     final opts = _searchOptions;
     _query = query;
     _results = const [];
-    _matches = const [];
+    _setMatches(const []);
     _currentMatch = -1;
     _searching = query.isNotEmpty;
     notifyListeners();
@@ -600,7 +626,7 @@ class PdfViewerController extends ChangeNotifier {
     // superseded by a newer search (changed query or options)
     if (_query != query || _searchOptions != opts) return;
     _results = results;
-    _matches = [for (final result in results) result.match];
+    _setMatches([for (final result in results) result.match]);
     _searching = false;
     _currentMatch = results.isEmpty ? -1 : 0;
     notifyListeners();
@@ -636,7 +662,7 @@ class PdfViewerController extends ChangeNotifier {
   void clearSearch() {
     _query = '';
     _results = const [];
-    _matches = const [];
+    _setMatches(const []);
     _currentMatch = -1;
     _searching = false;
     _notifySafely();
@@ -678,10 +704,8 @@ class PdfViewerController extends ChangeNotifier {
     }
   }
 
-  List<PdfTextMatch> _matchesOn(int pageIndex) => [
-        for (final m in _matches)
-          if (m.pageIndex == pageIndex) m
-      ];
+  List<PdfTextMatch> _matchesOn(int pageIndex) =>
+      _matchesByPage[pageIndex] ?? const [];
 }
 
 /// [ChangeNotifier.notifyListeners] is protected; this is the smallest
@@ -4536,6 +4560,8 @@ class _PdfViewerState extends State<PdfViewer>
 
   void _clearSelection() {
     _wordAnchor = null;
+    _selectionQuadCacheRange = null;
+    _selectionQuadCache.clear();
     if (_selAnchor != null || _selFocus != null || _touchSelecting) {
       setState(() {
         _selAnchor = null;
@@ -4575,16 +4601,33 @@ class _PdfViewerState extends State<PdfViewer>
 
   /// Baseline-aligned selection quads on [pageIndex], so the highlight
   /// rotates with rotated text instead of painting an axis-aligned box.
+  // Selection quads memoized per page, keyed on the selection range. The range
+  // is a value-equal record, so a new anchor/focus rebuilds the cache and a
+  // stable selection is computed once instead of per call - `_textSelectionOn`,
+  // `_selectionRectsOn`, and the per-page build each ask for the same quads
+  // (#403). Cleared explicitly in [_clearSelection]; also self-invalidates when
+  // the range changes (an active-selection drag).
+  ((int, int), (int, int))? _selectionQuadCacheRange;
+  final Map<int, List<PdfTextQuad>> _selectionQuadCache = {};
+
   List<PdfTextQuad> _selectionQuadsOn(int pageIndex) {
     final range = _selRange;
     if (range == null) return const [];
+    if (range != _selectionQuadCacheRange) {
+      _selectionQuadCacheRange = range;
+      _selectionQuadCache.clear();
+    }
+    final cached = _selectionQuadCache[pageIndex];
+    if (cached != null) return cached;
     final (start, end) = range;
-    if (pageIndex < start.$1 || pageIndex > end.$1) return const [];
+    if (pageIndex < start.$1 || pageIndex > end.$1) {
+      return _selectionQuadCache[pageIndex] = const [];
+    }
     final text = _pageText(pageIndex);
     final from = pageIndex == start.$1 ? start.$2 : 0;
     final to = pageIndex == end.$1 ? end.$2 : text.text.length;
-    if (from >= to) return const [];
-    return text.quadsFor(from, to);
+    if (from >= to) return _selectionQuadCache[pageIndex] = const [];
+    return _selectionQuadCache[pageIndex] = text.quadsFor(from, to);
   }
 
   void _showMatch(PdfTextMatch match) {
