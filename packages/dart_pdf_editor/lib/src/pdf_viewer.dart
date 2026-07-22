@@ -824,6 +824,7 @@ class PdfViewer extends StatefulWidget {
     this.textSelectionEditing = true,
     this.textSelectionMarkup = true,
     this.annotationMenuBuilder,
+    this.contextMenuEnabled = true,
     this.formImagePicker,
     this.fontPicker,
     this.imagePicker,
@@ -1025,6 +1026,17 @@ class PdfViewer extends StatefulWidget {
   /// appear below a divider. Needs [editing] - without a controller
   /// there is no context menu.
   final PdfAnnotationMenuBuilder? annotationMenuBuilder;
+
+  /// Whether right-click (desktop) and long-press (touch/stylus) open a
+  /// context menu. When false, selection, link taps, and pan/zoom still run
+  /// normally; only the popup menus are suppressed. Defaults to true.
+  ///
+  /// This covers the desktop right-click **text** menu even without [editing]
+  /// (reader mode), plus - when [editing] is set - the right-click and
+  /// long-press **annotation** menus and the floating selection chip's "More"
+  /// button. The long-press annotation menu and selection-chip button require
+  /// [editing]; the desktop text menu does not.
+  final bool contextMenuEnabled;
 
   /// How the form tool fills a tapped push-button field with an image
   /// (signature and logo fields) - typically a file picker returning
@@ -3345,6 +3357,7 @@ class _PdfViewerState extends State<PdfViewer>
   Future<void> _onSecondaryTapUp(TapUpDetails details) async {
     final point = _pagePointAt(details.localPosition);
     if (point == null) return;
+    if (!widget.contextMenuEnabled) return;
     final (page, x, y) = point;
     final editing = widget.editing;
     if (editing != null && !editing.isPickingColor) {
@@ -4255,7 +4268,10 @@ class _PdfViewerState extends State<PdfViewer>
   /// content. Returns whether a menu opened.
   bool _maybeAnnotationMenu(LongPressStartDetails details) {
     final editing = widget.editing;
-    if (editing == null || editing.tool != null || editing.isPickingColor) {
+    if (editing == null ||
+        editing.tool != null ||
+        editing.isPickingColor ||
+        !widget.contextMenuEnabled) {
       return false;
     }
     final point = _pagePointAt(details.localPosition);
@@ -5201,6 +5217,7 @@ class _PdfViewerState extends State<PdfViewer>
                 onSnapshot: widget.onSnapshot,
                 onPlaceSignature: widget.onPlaceSignature,
                 onAnnotationTap: widget.onAnnotationTap,
+                contextMenuEnabled: widget.contextMenuEnabled,
                 interactionHost: PdfEditingInteractionHost(
                   panViewport: _touchGrabPanBy,
                   endViewportPan: _flingViewport,
@@ -5969,6 +5986,7 @@ class _PdfViewerPage extends StatefulWidget {
     required this.renderWorker,
     required this.performance,
     required this.predictStrokes,
+    required this.contextMenuEnabled,
   });
 
   final PdfPage page;
@@ -6068,6 +6086,11 @@ class _PdfViewerPage extends StatefulWidget {
 
   /// See [PdfViewer.predictStrokes].
   final bool predictStrokes;
+
+  /// See [PdfViewer.contextMenuEnabled] - forwarded to the editing overlay
+  /// so its long-press recognizer and the floating selection chip both
+  /// honor the host's intent.
+  final bool contextMenuEnabled;
 
   @override
   State<_PdfViewerPage> createState() => _PdfViewerPageState();
@@ -6261,6 +6284,7 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
                                 rasterCurrent: rasterCurrent,
                                 zoom: zoom,
                                 predictStrokes: widget.predictStrokes,
+                                contextMenuEnabled: widget.contextMenuEnabled,
                               ),
                             ),
                           );

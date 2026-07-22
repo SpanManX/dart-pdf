@@ -224,6 +224,7 @@ class PdfEditorView extends StatefulWidget {
     this.onAnnotationTap,
     this.pageOverlayBuilder,
     this.annotationMenuBuilder,
+    this.contextMenuEnabled = true,
     this.formImagePicker,
     this.imagePicker,
     this.systemImagePasteProvider,
@@ -299,6 +300,7 @@ class PdfEditorView extends StatefulWidget {
     this.onAnnotationTap,
     this.pageOverlayBuilder,
     this.annotationMenuBuilder,
+    this.contextMenuEnabled = true,
     this.formImagePicker,
     this.imagePicker,
     this.systemImagePasteProvider,
@@ -440,6 +442,9 @@ class PdfEditorView extends StatefulWidget {
 
   /// See [PdfViewer.annotationMenuBuilder].
   final PdfAnnotationMenuBuilder? annotationMenuBuilder;
+
+  /// See [PdfViewer.contextMenuEnabled].
+  final bool contextMenuEnabled;
 
   /// See [PdfViewer.formImagePicker].
   final PdfFormImagePicker? formImagePicker;
@@ -690,6 +695,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
         onAnnotationTap: widget.onAnnotationTap,
         pageOverlayBuilder: widget.pageOverlayBuilder,
         annotationMenuBuilder: widget.annotationMenuBuilder,
+        contextMenuEnabled: widget.contextMenuEnabled,
         formImagePicker: widget.formImagePicker,
         imagePicker: widget.imagePicker,
         systemImagePasteProvider: widget.systemImagePasteProvider,
@@ -1324,6 +1330,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                         onAnnotationTap: widget.onAnnotationTap,
                         pageOverlayBuilder: widget.pageOverlayBuilder,
                         annotationMenuBuilder: widget.annotationMenuBuilder,
+                        contextMenuEnabled: widget.contextMenuEnabled,
                         formImagePicker: widget.formImagePicker,
                         imagePicker: widget.imagePicker,
                         systemImagePasteProvider:
