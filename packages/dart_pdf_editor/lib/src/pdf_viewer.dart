@@ -1027,10 +1027,15 @@ class PdfViewer extends StatefulWidget {
   /// there is no context menu.
   final PdfAnnotationMenuBuilder? annotationMenuBuilder;
 
-  /// Whether right-click (desktop) and long-press (touch/stylus) open the
-  /// annotation context menu. When false, the selection and link behaviors
-  /// still run normally; only the popup menu is suppressed. Defaults to
-  /// true. Has no effect without [editing].
+  /// Whether right-click (desktop) and long-press (touch/stylus) open a
+  /// context menu. When false, selection, link taps, and pan/zoom still run
+  /// normally; only the popup menus are suppressed. Defaults to true.
+  ///
+  /// This covers the desktop right-click **text** menu even without [editing]
+  /// (reader mode), plus - when [editing] is set - the right-click and
+  /// long-press **annotation** menus and the floating selection chip's "More"
+  /// button. The long-press annotation menu and selection-chip button require
+  /// [editing]; the desktop text menu does not.
   final bool contextMenuEnabled;
 
   /// How the form tool fills a tapped push-button field with an image
