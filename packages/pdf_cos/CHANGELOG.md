@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.1.0
+
+- Append incremental saves to the existing bytes instead of rebuilding the
+  whole file: `CosUpdater.saveTail()` returns only the new tail (the appended
+  objects, xref, and trailer), so an incremental revision costs the size of
+  the change rather than the size of the document. Save cost no longer scales
+  with the base file - a guard test pins that a 2.78x larger base does not
+  make a same-sized edit 2.78x more expensive (#413).
+- Memoise the per-object decryption key so a page's streams and strings derive
+  it once per object rather than once per access, cutting repeated MD5/AES key
+  derivation on encrypted documents (#400).
 
 - Speed up CCITT G3/G4 decoding by ~4x on dense scanned pages: a monotonic
   cursor for the 2-D reference-row scan (was O(transitions^2) per row),

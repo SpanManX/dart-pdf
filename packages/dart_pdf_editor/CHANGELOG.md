@@ -1,6 +1,33 @@
 # Changelog
 
-## Unreleased
+## 2.1.0
+
+- Add a reflow reading view: lazy scrolling over the extracted text, in-view
+  navigation, a saved reading position, and a figure viewer (#380).
+- Expose progressive open on the reusable viewer widgets, so a host can render
+  a document as its bytes arrive rather than after the last one (#378).
+- Grid-cull region replay and size-gate hover hit-testing on dense pages, so a
+  CAD sheet's replay touches only the commands overlapping the region (#383),
+  and build the region-replay grid index on the render-worker isolate to keep
+  it off the UI thread (#389).
+- Scope tile invalidation to the pages it names: the ordering counter is now
+  separate from the staleness test, so invalidating one page no longer discards
+  in-flight tiles for every other page (#374).
+- Apply incremental revisions in place on the commit path instead of reopening
+  the document (#395).
+- Resolve the hovered page once per pointer event rather than once per hit-test
+  candidate (#403).
+- Let a page leave its sticky render worker when that worker is busier than
+  another active one, so a queued page is not held behind an unrelated backlog
+  (#456).
+- Fix a failed deep-zoom detail render stranding the full-image refinement, and
+  give each render its own vector-first detail completer so concurrent renders
+  cannot complete each other's futures (#420).
+- Add an unstable render-trace diagnostics entry point,
+  `package:dart_pdf_editor/perf_log.dart` (deliberately not exported from the
+  package entry, mirroring `package:pdf_cos/perf.dart`). `PdfPerfLog` gains a
+  `sink` so a host can route the trace into its own log, and the interpret
+  trace splits into wait/build and decode/replay phases (#454).
 
 - Make the viewer scroll-indicator API axis-aware: `PdfScrollMetrics` now
   describes the viewer's **main layout axis** and carries an `Axis scrollAxis`

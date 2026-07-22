@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.1.0
+
+- Cache `PdfPage` instances instead of rebuilding them per access, resolving
+  inherited attributes live: a page holds only ancestor-derived values and
+  reads its own `/Rotate`, `/MediaBox`, `/CropBox`, and `/Resources` from the
+  dictionary, so the cache cannot serve a stale value after an edit (#418).
+- Resolve `pageIndexOf` in O(1) through an identity map rather than walking the
+  page tree (#397).
+- Resolve a form widget to its page in O(1), cache the widget list, and hoist
+  the `/Widths` lookup out of the per-glyph loop (#406).
+- Reuse the caller's element snapshot on a targeted edit instead of
+  re-enumerating the page's elements (#402).
+- Support the incremental append save path (`CosUpdater.saveTail()`), so an
+  incremental revision costs the size of the change (#413).
+
 ## 2.0.0
 
 - Major version bump for the 2.0.0 package suite (breaking change in
