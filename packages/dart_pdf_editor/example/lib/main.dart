@@ -37,6 +37,11 @@ const _sampleRemotePdfUrl =
     'https://raw.githubusercontent.com/mozilla/pdf.js/master/web/'
     'compressed.tracemonkey-pldi-09.pdf';
 
+/// Custom actions for the host-takeover demo menu shown in the app when
+/// the user has disabled the stock context menu. The labels are in
+/// Simplified Chinese to demonstrate that the host owns the strings.
+enum _DemoAnnotAction { copy, note, sendTo }
+
 /// Test seam: builds the byte source a remote open reads from. Defaults to a
 /// real [PdfHttpByteSource]; tests swap in an in-memory source so no network
 /// is touched. See `test/remote_open_test.dart`.
@@ -244,6 +249,74 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// Demo of the two drop-in widgets: the toggle swaps the full
   /// [PdfEditorView] for the view-only [PdfReader]. App-wide.
   bool _readOnly = false;
+
+  /// Demo of [PdfViewer.contextMenuEnabled]: when off, right-click and
+  /// long-press annotation menus are suppressed. App-wide.
+  bool _contextMenuEnabled = true;
+
+  /// Demo of [PdfViewer.onAnnotationMenuRequested]: when the stock menu is
+  /// off, this handler renders the demo app's own menu (a custom Copy
+  /// row plus a "Send to…" action) using the gesture position the
+  /// viewer passes in. App-wide.
+  Future<void> _onAnnotationMenuRequested(
+    Offset globalPosition,
+    int pageIndex, {
+    (double, double) pagePoint = (0, 0),
+  }) async {
+    if (!mounted) return;
+    final overlay =
+        Overlay.of(context, rootOverlay: true).context.findRenderObject()
+            as RenderBox?;
+    if (overlay == null) return;
+    // showMenu anchors at the tap point in the root overlay's coordinate
+    // space; flip the global position to local with the root overlay's box.
+    final local = overlay.globalToLocal(globalPosition);
+    final picked = await showMenu<_DemoAnnotAction>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        local.dx,
+        local.dy,
+        overlay.size.width - local.dx,
+        overlay.size.height - local.dy,
+      ),
+      items: [
+        const PopupMenuItem<_DemoAnnotAction>(
+          value: _DemoAnnotAction.copy,
+          child: ListTile(
+            leading: Icon(Icons.copy),
+            title: Text('Copy (custom)'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem<_DemoAnnotAction>(
+          value: _DemoAnnotAction.note,
+          child: ListTile(
+            leading: Icon(Icons.sticky_note_2_outlined),
+            title: Text('Add note…'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem<_DemoAnnotAction>(
+          value: _DemoAnnotAction.sendTo,
+          child: ListTile(
+            leading: Icon(Icons.send),
+            title: Text('Send to…'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      ],
+    );
+    if (picked != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Page ${pageIndex + 1}: $picked '
+            '(at $pagePoint)'),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+  }
 
   /// Demo of [PdfViewer.pageLayout]: the toggle flips the viewer between the
   /// default vertical continuous layout and horizontal continuous
@@ -471,6 +544,17 @@ class _ViewerScreenState extends State<ViewerScreen> {
             title: _readOnly
                 ? appL10n(context).exSwitchToEdit
                 : appL10n(context).exSwitchToReadOnly,
+          ),
+        ),
+        PopupMenuItem(
+          value: () => setState(
+              () => _contextMenuEnabled = !_contextMenuEnabled),
+          enabled: tab?.session != null,
+          child: _appMenuTile(
+            icon: _contextMenuEnabled ? Icons.touch_app : Icons.do_not_touch,
+            title: _contextMenuEnabled
+                ? 'Disable context menu'
+                : 'Enable context menu',
           ),
         ),
         PopupMenuItem(
@@ -1442,6 +1526,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
                                 rasterCache: _rasterCache,
                                 textCache: _textCache,
                                 pageLayout: _pageLayout,
+                                contextMenuEnabled: _contextMenuEnabled,
+                                onAnnotationMenuRequested:
+                                    _contextMenuEnabled
+                                        ? null
+                                        : _onAnnotationMenuRequested,
                                 onAction: _onAction,
                                 pageOverlayBuilder:
                                     tab.isDemo ? _demoOverlays : null,
@@ -1463,6 +1552,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
                                 pageOverlayBuilder:
                                     tab.isDemo ? _demoOverlays : null,
                                 annotationMenuBuilder: _annotationMenuActions,
+                                contextMenuEnabled: _contextMenuEnabled,
+                                onAnnotationMenuRequested: _contextMenuEnabled
+                                    ? null
+                                    : _onAnnotationMenuRequested,
                                 formImagePicker: _pickFormImage,
                                 imagePicker: _pickImage,
                                 fontPicker: _pickFont,
