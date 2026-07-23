@@ -11,9 +11,18 @@ import 'dart_pdf_editor_localizations_en.dart';
 import 'dart_pdf_editor_localizations_es.dart';
 import 'dart_pdf_editor_localizations_fr.dart';
 import 'dart_pdf_editor_localizations_hi.dart';
+import 'dart_pdf_editor_localizations_id.dart';
+import 'dart_pdf_editor_localizations_it.dart';
 import 'dart_pdf_editor_localizations_ja.dart';
+import 'dart_pdf_editor_localizations_ko.dart';
+import 'dart_pdf_editor_localizations_nl.dart';
+import 'dart_pdf_editor_localizations_pl.dart';
 import 'dart_pdf_editor_localizations_pt.dart';
 import 'dart_pdf_editor_localizations_ru.dart';
+import 'dart_pdf_editor_localizations_th.dart';
+import 'dart_pdf_editor_localizations_tr.dart';
+import 'dart_pdf_editor_localizations_uk.dart';
+import 'dart_pdf_editor_localizations_vi.dart';
 import 'dart_pdf_editor_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -109,10 +118,20 @@ abstract class DartPdfEditorLocalizations {
     Locale('es'),
     Locale('fr'),
     Locale('hi'),
+    Locale('id'),
+    Locale('it'),
     Locale('ja'),
+    Locale('ko'),
+    Locale('nl'),
+    Locale('pl'),
     Locale('pt'),
     Locale('ru'),
-    Locale('zh')
+    Locale('th'),
+    Locale('tr'),
+    Locale('uk'),
+    Locale('vi'),
+    Locale('zh'),
+    Locale.fromSubtags(languageCode: 'zh', scriptCode: 'Hant')
   ];
 
   /// Generic button that adds a new item.
@@ -804,6 +823,18 @@ abstract class DartPdfEditorLocalizations {
   /// In en, this message translates to:
   /// **'Flatten form'**
   String get menuFlattenForm;
+
+  /// Annotation context-menu item that locks the selected annotation(s) so they can't be moved, resized, deleted, or edited (sets the /F Locked and LockedContents flags).
+  ///
+  /// In en, this message translates to:
+  /// **'Lock'**
+  String get menuLock;
+
+  /// Annotation context-menu item shown when right-clicking a locked annotation; unlocks it so it can be edited again.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get menuUnlock;
 
   /// Annotation context-menu item that opens a color picker to recolour a pasted vector snapshot.
   ///
@@ -1591,6 +1622,12 @@ abstract class DartPdfEditorLocalizations {
   /// **'Unmarked'**
   String get sbarStateUnmarked;
 
+  /// Tooltip on the search option toggle that also searches annotation contents (notes, comments, free text).
+  ///
+  /// In en, this message translates to:
+  /// **'Search annotations'**
+  String get searchAnnotations;
+
   /// Tooltip on the button that clears the document search field.
   ///
   /// In en, this message translates to:
@@ -1804,7 +1841,7 @@ abstract class DartPdfEditorLocalizations {
   /// Instructional text in the keyboard-shortcut capture dialog.
   ///
   /// In en, this message translates to:
-  /// **'Press a letter key, or Delete to clear.'**
+  /// **'Press a letter key, add Shift for a variant, or Delete to clear.'**
   String get shellPressLetterKeyHint;
 
   /// Compact control label that toggles the reflow (text reading) view.
@@ -1896,6 +1933,18 @@ abstract class DartPdfEditorLocalizations {
   /// In en, this message translates to:
   /// **'Delete signature'**
   String get sidebarDeleteSignature;
+
+  /// Tooltip for a sidebar row's button that locks the annotation so it can't be moved, resized, deleted, or edited.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock'**
+  String get sidebarLockAnnotation;
+
+  /// Tooltip for a sidebar row's button that unlocks a locked annotation, making it editable again.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get sidebarUnlockAnnotation;
 
   /// Tooltip for a row's overflow (three-dot) menu holding thread actions.
   ///
@@ -2358,6 +2407,36 @@ abstract class DartPdfEditorLocalizations {
   /// In en, this message translates to:
   /// **'Check-marks on the document'**
   String get tbCheckMarksOnDocument;
+
+  /// Tooltip on the button that starts cropping the selected image.
+  ///
+  /// In en, this message translates to:
+  /// **'Crop image'**
+  String get tbCropImage;
+
+  /// Label shown on the toolbar while the image-crop tool is active.
+  ///
+  /// In en, this message translates to:
+  /// **'Cropping image'**
+  String get tbCroppingImage;
+
+  /// Tooltip on the button that confirms the pending image crop.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply crop'**
+  String get tbCropApply;
+
+  /// Tooltip on the button that abandons the pending image crop.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel crop'**
+  String get tbCropCancel;
+
+  /// Tooltip on the button that removes the crop and restores the whole image.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset crop'**
+  String get tbCropReset;
 
   /// Short button label for the color-processing action.
   ///
@@ -3494,9 +3573,18 @@ class _DartPdfEditorLocalizationsDelegate
         'es',
         'fr',
         'hi',
+        'id',
+        'it',
         'ja',
+        'ko',
+        'nl',
+        'pl',
         'pt',
         'ru',
+        'th',
+        'tr',
+        'uk',
+        'vi',
         'zh'
       ].contains(locale.languageCode);
 
@@ -3505,6 +3593,18 @@ class _DartPdfEditorLocalizationsDelegate
 }
 
 DartPdfEditorLocalizations lookupDartPdfEditorLocalizations(Locale locale) {
+  // Lookup logic when language+script codes are specified.
+  switch (locale.languageCode) {
+    case 'zh':
+      {
+        switch (locale.scriptCode) {
+          case 'Hant':
+            return DartPdfEditorLocalizationsZhHant();
+        }
+        break;
+      }
+  }
+
   // Lookup logic when only language code is specified.
   switch (locale.languageCode) {
     case 'ar':
@@ -3519,12 +3619,30 @@ DartPdfEditorLocalizations lookupDartPdfEditorLocalizations(Locale locale) {
       return DartPdfEditorLocalizationsFr();
     case 'hi':
       return DartPdfEditorLocalizationsHi();
+    case 'id':
+      return DartPdfEditorLocalizationsId();
+    case 'it':
+      return DartPdfEditorLocalizationsIt();
     case 'ja':
       return DartPdfEditorLocalizationsJa();
+    case 'ko':
+      return DartPdfEditorLocalizationsKo();
+    case 'nl':
+      return DartPdfEditorLocalizationsNl();
+    case 'pl':
+      return DartPdfEditorLocalizationsPl();
     case 'pt':
       return DartPdfEditorLocalizationsPt();
     case 'ru':
       return DartPdfEditorLocalizationsRu();
+    case 'th':
+      return DartPdfEditorLocalizationsTh();
+    case 'tr':
+      return DartPdfEditorLocalizationsTr();
+    case 'uk':
+      return DartPdfEditorLocalizationsUk();
+    case 'vi':
+      return DartPdfEditorLocalizationsVi();
     case 'zh':
       return DartPdfEditorLocalizationsZh();
   }

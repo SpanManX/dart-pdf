@@ -511,6 +511,14 @@
   "@menuFlattenForm": {
     "description": "Form-field context-menu item that flattens all form fields into page content."
   },
+  "menuLock": "Lock",
+  "@menuLock": {
+    "description": "Annotation context-menu item that locks the selected annotation(s) so they can't be moved, resized, deleted, or edited (sets the /F Locked and LockedContents flags)."
+  },
+  "menuUnlock": "Unlock",
+  "@menuUnlock": {
+    "description": "Annotation context-menu item shown when right-clicking a locked annotation; unlocks it so it can be edited again."
+  },
   "menuRecolour": "Recolour…",
   "@menuRecolour": {
     "description": "Annotation context-menu item that opens a color picker to recolour a pasted vector snapshot."
@@ -1071,6 +1079,10 @@
   "@sbarStateUnmarked": {
     "description": "Review-state chip: the markup's mark was cleared."
   },
+  "searchAnnotations": "Search annotations",
+  "@searchAnnotations": {
+    "description": "Tooltip on the search option toggle that also searches annotation contents (notes, comments, free text)."
+  },
   "searchClearSearch": "Clear search",
   "@searchClearSearch": {
     "description": "Tooltip on the button that clears the document search field."
@@ -1231,7 +1243,7 @@
   "@shellPressAKey": {
     "description": "Dialog title shown while capturing a keyboard shortcut for an editing tool."
   },
-  "shellPressLetterKeyHint": "Press a letter key, or Delete to clear.",
+  "shellPressLetterKeyHint": "Press a letter key, add Shift for a variant, or Delete to clear.",
   "@shellPressLetterKeyHint": {
     "description": "Instructional text in the keyboard-shortcut capture dialog."
   },
@@ -1299,6 +1311,14 @@
   "sidebarDeleteSignature": "Delete signature",
   "@sidebarDeleteSignature": {
     "description": "Tooltip for the button that removes a digital signature from a signature-field row."
+  },
+  "sidebarLockAnnotation": "Lock",
+  "@sidebarLockAnnotation": {
+    "description": "Tooltip for a sidebar row's button that locks the annotation so it can't be moved, resized, deleted, or edited."
+  },
+  "sidebarUnlockAnnotation": "Unlock",
+  "@sidebarUnlockAnnotation": {
+    "description": "Tooltip for a sidebar row's button that unlocks a locked annotation, making it editable again."
   },
   "sidebarMore": "More",
   "@sidebarMore": {
@@ -1632,6 +1652,26 @@
   "tbCheckMarksOnDocument": "Check-marks on the document",
   "@tbCheckMarksOnDocument": {
     "description": "Tooltip on the tally chip counting check-marks placed by the Count tool."
+  },
+  "tbCropImage": "Crop image",
+  "@tbCropImage": {
+    "description": "Tooltip on the button that starts cropping the selected image."
+  },
+  "tbCroppingImage": "Cropping image",
+  "@tbCroppingImage": {
+    "description": "Label shown on the toolbar while the image-crop tool is active."
+  },
+  "tbCropApply": "Apply crop",
+  "@tbCropApply": {
+    "description": "Tooltip on the button that confirms the pending image crop."
+  },
+  "tbCropCancel": "Cancel crop",
+  "@tbCropCancel": {
+    "description": "Tooltip on the button that abandons the pending image crop."
+  },
+  "tbCropReset": "Reset crop",
+  "@tbCropReset": {
+    "description": "Tooltip on the button that removes the crop and restores the whole image."
   },
   "tbColorLabel": "Color",
   "@tbColorLabel": {

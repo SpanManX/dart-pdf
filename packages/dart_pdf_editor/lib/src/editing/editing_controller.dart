@@ -1276,6 +1276,8 @@ class PdfEditingController extends ChangeNotifier {
     _tool = value;
     if (value != PdfEditTool.select) _selected.clear();
     if (value != PdfEditTool.content) _selectedElement = null;
+    _cropModeArmed = false;
+    _cropDraft = null;
     // each annotation tool remembers its own colour, stroke, opacity, … -
     // arming one restores its saved style and routes further style changes
     // back into its slot (see [PdfEditingPreferences.beginStyleScope])
@@ -1550,6 +1552,16 @@ class PdfEditingController extends ChangeNotifier {
   /// placeholders. Override in tests or when a host app needs a fixed clock.
   DateTime Function() stampTemplateClock = DateTime.now;
 
+  /// The UI locale used to localize the built-in `date`/`datetime` stamp
+  /// fields (month names, AM/PM). Kept fresh by the editing overlay from its
+  /// ambient [Localizations]; falls back to [PdfEditingPreferences.locale]
+  /// (the persisted Settings choice) and finally English. Purely an output
+  /// detail of the resolved stamp text - setting it never notifies listeners.
+  ui.Locale? uiLocale;
+
+  String? get _stampLocaleName =>
+      (uiLocale ?? preferences.locale)?.toString();
+
   /// Field names the stamp editor should offer for insertion.
   ///
   /// This includes the built-ins plus the current custom value keys.
@@ -1578,8 +1590,9 @@ class PdfEditingController extends ChangeNotifier {
 
   Map<String, String> _resolvedStampTemplateValues() {
     final now = stampTemplateClock();
-    final date = preferences.stampDateFormat.format(now);
-    final time = preferences.stampTimeFormat.format(now);
+    final localeName = _stampLocaleName;
+    final date = preferences.stampDateFormat.format(now, localeName: localeName);
+    final time = preferences.stampTimeFormat.format(now, localeName: localeName);
     return {
       'date': date,
       'time': time,
@@ -3720,10 +3733,41 @@ class PdfEditingController extends ChangeNotifier {
       !annotation.isLocked &&
       (_canEditAnnotation?.call(annotation) ?? true);
 
+  /// The /F Locked flag (§12.5.3 bit 8): the annotation may not be moved,
+  /// resized, or deleted. The bit conforming viewers - Acrobat, Bluebeam
+  /// Revu - set when a markup is locked.
+  static const int _annotationLockedFlag = 1 << 7; // 128
+
+  /// The /F LockedContents flag (§12.5.3 bit 10): the annotation's
+  /// contents may not change. [lockAnnotation] sets it alongside Locked so
+  /// a locked markup can't be retyped either, matching Acrobat/Bluebeam.
+  static const int _annotationLockedContentsFlag = 1 << 9; // 512
+
+  /// Whether the lock state of [annotation] may be toggled - the way in to
+  /// *unlock* it, which [isAnnotationEditable] itself forbids (a locked
+  /// annotation is by definition not editable, so unlocking can't route
+  /// through the normal edit gate). Only selectable markup annotations
+  /// qualify; the document's /F ReadOnly flag and the host's
+  /// [canEditAnnotation] predicate still veto it, but the Locked flag
+  /// deliberately does not, so a lock can always be lifted.
+  bool isAnnotationLockManageable(PdfAnnotation annotation) =>
+      annotation.behavior.selectable &&
+      !annotation.isReadOnly &&
+      (_canEditAnnotation?.call(annotation) ?? true);
+
   /// Selected (page, /Annots slot) pairs in selection order; the last
   /// one is the primary selection (the one handles and text edits act
   /// on when exactly one is selected).
   final List<(int page, int index)> _selected = [];
+
+  /// True while the interactive image-crop tool is armed on the selection.
+  /// See [beginImageCrop].
+  bool _cropModeArmed = false;
+
+  /// The pending crop rectangle (page space) the crop overlay is dragging,
+  /// or null when not cropping. Always a sub-rectangle of the selected image
+  /// stamp's /Rect.
+  PdfRect? _cropDraft;
 
   /// Pages cached per revision: [PdfDocument.page] rebuilds the page
   /// (and its lazily parsed annotation list) on every call, and the
@@ -3835,6 +3879,26 @@ class PdfEditingController extends ChangeNotifier {
       selectedAnnotation?.behavior.textEditable == true &&
       selectedAnnotation?.isLockedContents != true;
 
+  /// Whether the selection is a single upright image stamp that the crop
+  /// tool can operate on. Rotated image stamps are excluded: cropping shrinks
+  /// the box to an axis-aligned sub-rectangle, which cannot describe a
+  /// rotated frame.
+  bool get canCropSelected {
+    final annotation = selectedAnnotation;
+    if (_selected.length != 1 ||
+        annotation == null ||
+        !annotation.isImageStamp ||
+        annotation.normalAppearance == null) {
+      return false;
+    }
+    final quad = annotation.appearanceQuad;
+    if (quad == null || quad.length < 2) return true;
+    final (x0, y0) = quad[0];
+    final (x1, y1) = quad[1];
+    // Upright when the picture's bottom edge is horizontal.
+    return (y1 - y0).abs() <= 1e-3 * math.max(1.0, (x1 - x0).abs());
+  }
+
   /// The topmost selectable annotation under ([x], [y]) on [pageIndex],
   /// with its /Annots slot - the select tool's hit test (later entries
   /// draw on top, so they win).
@@ -3849,6 +3913,29 @@ class PdfEditingController extends ChangeNotifier {
       if (annotation.isHidden ||
           !annotation.behavior.selectable ||
           !isAnnotationEditable(annotation)) {
+        continue;
+      }
+      if (annotation.rect.contains(x, y)) return (i, annotation);
+    }
+    return null;
+  }
+
+  /// The topmost *locked* lock-manageable annotation under ([x], [y]) on
+  /// [pageIndex], with its /Annots slot - the right-click "Unlock" hit
+  /// test. Unlike [selectableAnnotationAt] it deliberately reaches locked
+  /// annotations (which can't be selected), so a mouse user can lift the
+  /// lock the same way the sidebar row's button does. Skips hidden ones.
+  (int index, PdfAnnotation)? lockedAnnotationAt(
+    int pageIndex,
+    double x,
+    double y,
+  ) {
+    final annotations = _page(pageIndex).annotations;
+    for (var i = annotations.length - 1; i >= 0; i--) {
+      final annotation = annotations[i];
+      if (annotation.isHidden ||
+          !annotation.isLocked ||
+          !isAnnotationLockManageable(annotation)) {
         continue;
       }
       if (annotation.rect.contains(x, y)) return (i, annotation);
@@ -4168,6 +4255,86 @@ class PdfEditingController extends ChangeNotifier {
         }
       },
     );
+  }
+
+  // ---------------------------------------------------------------------
+  // locking (§12.5.3 /F Locked + LockedContents)
+
+  /// Sets or clears the lock on the annotation in slot [index] of
+  /// [pageIndex]'s /Annots.
+  ///
+  /// Locking sets the /F Locked (bit 8) and LockedContents (bit 10) flags
+  /// (§12.5.3) together - the same pair Acrobat and Bluebeam Revu write
+  /// when a markup is locked - so conforming viewers refuse to move,
+  /// resize, delete, or retype it. Unlocking clears just those two bits,
+  /// leaving Print/Hidden/NoView and any other flag untouched.
+  ///
+  /// This is the *unlock* entry point: it bypasses [isAnnotationEditable]
+  /// (a locked annotation is never editable, so it could otherwise never
+  /// be reached) but still honours [isAnnotationLockManageable]. Locking
+  /// drops the annotation from the selection, since it's no longer
+  /// editable. Returns whether the flag word changed.
+  bool setAnnotationLocked(int pageIndex, int index, bool locked) {
+    final annotation = _annotationAt((pageIndex, index));
+    if (annotation == null || !isAnnotationLockManageable(annotation)) {
+      return false;
+    }
+    const lockBits = _annotationLockedFlag | _annotationLockedContentsFlag;
+    final next =
+        locked ? annotation.flags | lockBits : annotation.flags & ~lockBits;
+    if (next == annotation.flags) return false;
+    // A locked annotation is no longer selectable; drop it so stale
+    // resize/rotate handles don't linger over it (resizable is a
+    // capability, not a permission, so the overlay wouldn't hide them).
+    if (locked) _selected.remove((pageIndex, index));
+    return apply((e) => e.setAnnotationFlags(pageIndex, annotation, next));
+  }
+
+  /// Flips the lock on the annotation in slot [index] of [pageIndex]'s
+  /// /Annots - the annotation sidebar's per-row lock button, and the
+  /// reliable way to unlock (a locked annotation can't be selected).
+  /// Returns the lock state it was set to, or the unchanged state when
+  /// the annotation isn't lock-manageable.
+  bool toggleAnnotationLock(int pageIndex, int index) {
+    final annotation = _annotationAt((pageIndex, index));
+    if (annotation == null) return false;
+    final target = !annotation.isLocked;
+    return setAnnotationLocked(pageIndex, index, target)
+        ? target
+        : annotation.isLocked;
+  }
+
+  /// Whether [lockSelectedAnnotations] would lock anything: something is
+  /// selected and every selected slot is an unlocked, lock-manageable
+  /// markup annotation.
+  bool get canLockSelected =>
+      _selected.isNotEmpty &&
+      _selected.every((slot) {
+        final annotation = _annotationAt(slot);
+        return annotation != null &&
+            !annotation.isLocked &&
+            isAnnotationLockManageable(annotation);
+      });
+
+  /// Locks every selected annotation (see [setAnnotationLocked]) as one
+  /// revision, then clears the selection since a locked annotation is no
+  /// longer editable - the context menu's Lock action. Already-locked or
+  /// non-lock-manageable members are skipped; a no-op when none qualify.
+  void lockSelectedAnnotations() {
+    final targets = <(int, PdfAnnotation)>[
+      for (final slot in _selected)
+        if (_annotationAt(slot) case final annotation?
+            when !annotation.isLocked && isAnnotationLockManageable(annotation))
+          (slot.$1, annotation),
+    ];
+    if (targets.isEmpty) return;
+    _selected.clear();
+    const lockBits = _annotationLockedFlag | _annotationLockedContentsFlag;
+    apply((e) {
+      for (final (page, annotation) in targets) {
+        e.setAnnotationFlags(page, annotation, annotation.flags | lockBits);
+      }
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -5145,6 +5312,127 @@ class PdfEditingController extends ChangeNotifier {
         pageRotation: _page(_selected.last.$1).rotation,
       ),
     );
+  }
+
+  /// Crops the selected image stamp so only the picture currently shown
+  /// inside [visibleRect] (page space) survives, shrinking the annotation's
+  /// box to that rectangle. [visibleRect] is clamped to the current box, and
+  /// the crop composes with any crop already applied, so it always narrows
+  /// towards the source picture. A no-op unless [canCropSelected].
+  void cropSelectedImage(PdfRect visibleRect) {
+    final annotation = selectedAnnotation;
+    if (annotation == null || !canCropSelected) return;
+    final rect = annotation.rect;
+    if (rect.width <= 0 || rect.height <= 0) return;
+    final v = visibleRect.intersect(rect);
+    if (v.width < 1 || v.height < 1) return;
+    // Untouched box → nothing to crop.
+    if ((v.left - rect.left).abs() < 0.5 &&
+        (v.bottom - rect.bottom).abs() < 0.5 &&
+        (v.right - rect.right).abs() < 0.5 &&
+        (v.top - rect.top).abs() < 0.5) {
+      return;
+    }
+    final current = annotation.imageStampCrop ?? const PdfRect(0, 0, 1, 1);
+    // Fractions of the current box the visible rect covers, composed into the
+    // source picture's normalized coordinates.
+    final fx0 = (v.left - rect.left) / rect.width;
+    final fx1 = (v.right - rect.left) / rect.width;
+    final fy0 = (v.bottom - rect.bottom) / rect.height;
+    final fy1 = (v.top - rect.bottom) / rect.height;
+    final crop = PdfRect(
+      current.left + fx0 * current.width,
+      current.bottom + fy0 * current.height,
+      current.left + fx1 * current.width,
+      current.bottom + fy1 * current.height,
+    );
+    apply(
+      (e) => e.cropImageStamp(
+        _selected.last.$1,
+        annotation,
+        crop: crop,
+        rect: v,
+      ),
+    );
+  }
+
+  /// Removes any crop from the selected image stamp, restoring the whole
+  /// picture. The box grows back to the picture's full extent at the current
+  /// scale. A no-op unless [canCropSelected] and a crop is applied.
+  void resetSelectedImageCrop() {
+    final annotation = selectedAnnotation;
+    if (annotation == null || !canCropSelected) return;
+    final current = annotation.imageStampCrop;
+    if (current == null) return;
+    // Grow the box back so the retained pixels keep their scale: the current
+    // box shows `current`, so the full picture spans box / current.
+    final rect = annotation.rect;
+    final fullWidth = rect.width / current.width;
+    final fullHeight = rect.height / current.height;
+    final left = rect.left - current.left * fullWidth;
+    final bottom = rect.bottom - current.bottom * fullHeight;
+    final full = PdfRect(left, bottom, left + fullWidth, bottom + fullHeight);
+    apply(
+      (e) => e.cropImageStamp(
+        _selected.last.$1,
+        annotation,
+        crop: const PdfRect(0, 0, 1, 1),
+        rect: full,
+      ),
+    );
+  }
+
+  /// Whether the interactive image-crop tool is armed. The overlay renders
+  /// its crop rectangle and handles while this is true, absorbing gestures;
+  /// the toolbar shows Done/Cancel. Auto-clears if the selection stops being
+  /// a croppable image stamp.
+  bool get isCroppingImage => _cropModeArmed && canCropSelected;
+
+  /// The crop rectangle the overlay is currently dragging (page space), or
+  /// null when [isCroppingImage] is false. Sub-rectangle of the selected
+  /// image stamp's /Rect.
+  PdfRect? get imageCropDraft => isCroppingImage ? _cropDraft : null;
+
+  /// Arms the interactive crop tool on the selected image stamp, seeding the
+  /// crop rectangle to the whole picture. A no-op unless [canCropSelected].
+  void beginImageCrop() {
+    final annotation = selectedAnnotation;
+    if (annotation == null || !canCropSelected) return;
+    _cropModeArmed = true;
+    _cropDraft = annotation.rect;
+    notifyListeners();
+  }
+
+  /// Updates the pending crop rectangle as the overlay drags a handle,
+  /// clamped to the selected image stamp's /Rect. A no-op unless cropping.
+  void updateImageCropDraft(PdfRect draft) {
+    if (!isCroppingImage) return;
+    final rect = selectedAnnotation!.rect;
+    final clamped = draft.intersect(rect);
+    if (clamped.width < 1 || clamped.height < 1) return;
+    if (clamped == _cropDraft) return;
+    _cropDraft = clamped;
+    notifyListeners();
+  }
+
+  /// Applies the pending crop and disarms the tool. A no-op (just disarms)
+  /// when the draft still covers the whole picture.
+  void commitImageCrop() {
+    final region = imageCropDraft;
+    _cropModeArmed = false;
+    _cropDraft = null;
+    if (region != null) cropSelectedImage(region);
+    // cropSelectedImage may no-op (unchanged box); repaint either way so the
+    // crop chrome disappears.
+    notifyListeners();
+  }
+
+  /// Disarms the crop tool, discarding the pending crop.
+  void cancelImageCrop() {
+    if (!_cropModeArmed && _cropDraft == null) return;
+    _cropModeArmed = false;
+    _cropDraft = null;
+    notifyListeners();
   }
 
   /// Moves a selected callout's arrow terminus to [target] (page space),

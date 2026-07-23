@@ -396,6 +396,12 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
   String get menuFlattenForm => 'Flatten form';
 
   @override
+  String get menuLock => 'Lock';
+
+  @override
+  String get menuUnlock => 'Unlock';
+
+  @override
   String get menuRecolour => 'Recolour…';
 
   @override
@@ -818,6 +824,9 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
   String get sbarStateUnmarked => 'Unmarked';
 
   @override
+  String get searchAnnotations => 'Search annotations';
+
+  @override
   String get searchClearSearch => 'Clear search';
 
   @override
@@ -938,7 +947,7 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
 
   @override
   String get shellPressLetterKeyHint =>
-      'Press a letter key, or Delete to clear.';
+      'Press a letter key, add Shift for a variant, or Delete to clear.';
 
   @override
   String get shellReflow => 'Reflow';
@@ -986,6 +995,12 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
 
   @override
   String get sidebarDeleteSignature => 'Delete signature';
+
+  @override
+  String get sidebarLockAnnotation => 'Lock';
+
+  @override
+  String get sidebarUnlockAnnotation => 'Unlock';
 
   @override
   String get sidebarMore => 'More';
@@ -1250,6 +1265,21 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
 
   @override
   String get tbCheckMarksOnDocument => 'Check-marks on the document';
+
+  @override
+  String get tbCropImage => 'Crop image';
+
+  @override
+  String get tbCroppingImage => 'Cropping image';
+
+  @override
+  String get tbCropApply => 'Apply crop';
+
+  @override
+  String get tbCropCancel => 'Cancel crop';
+
+  @override
+  String get tbCropReset => 'Reset crop';
 
   @override
   String get tbColorLabel => 'Color';
