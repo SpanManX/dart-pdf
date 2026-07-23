@@ -118,14 +118,23 @@ class _DartPdfEditorAppState extends State<DartPdfEditorApp> {
           DartPdfEditorLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        // A DevTools locale override wins over platform resolution: returning
-        // it here forces the app onto that locale even when it isn't in
-        // supportedLocales (untranslated app strings fall back to English, but
-        // Directionality and the Material delegates follow it - enough to test
-        // the RTL sweep). With no override, defer to Flutter's own algorithm
-        // over the FULL preferred-locale list so the normal fallback chain is
-        // unchanged (a list callback, not the single-locale one, to keep the
-        // user's second/third preference in play).
+        // The effective locale (DevTools override, else the persisted Settings
+        // choice, else null = "System default") is passed as `locale` rather
+        // than only consulted inside the resolution callback. This matters:
+        // WidgetsApp re-resolves the locale when `locale` changes, but NOT when
+        // an external value the callback reads changes - so driving it purely
+        // from the callback made a runtime language switch appear to do nothing
+        // until the next rebuild for another reason. Feeding it here re-resolves
+        // immediately when the user picks a language or flips the DevTools
+        // override.
+        locale: AppDevTools.instance.localeOverride.value ?? _prefs.locale,
+        // The DevTools override still wins and is returned verbatim, so it can
+        // force a locale that isn't in supportedLocales (untranslated app
+        // strings fall back to English, but Directionality and the Material
+        // delegates follow it - enough to test the RTL sweep). With no
+        // override, defer to Flutter's own algorithm over the preferred-locale
+        // list (the Settings locale when set, else the FULL platform list) so
+        // the normal fallback chain is unchanged.
         localeListResolutionCallback: (locales, supportedLocales) {
           final override = AppDevTools.instance.localeOverride.value;
           if (override != null) return override;
