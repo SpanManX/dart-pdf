@@ -4142,6 +4142,10 @@ class _PdfViewerState extends State<PdfViewer>
         editing.cancelColorPick();
         return;
       }
+      if (editing.isCroppingImage) {
+        editing.cancelImageCrop();
+        return;
+      }
       if (editing.hasAnnotationSelection) {
         editing.clearAnnotationSelection();
         return;
