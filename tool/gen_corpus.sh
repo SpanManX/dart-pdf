@@ -42,4 +42,10 @@ echo "generating public corpus into $OUT"
 (cd "$ROOT" &&
   $DART packages/pdf_test_fixtures/tool/gen_raster_underlay_pdf.dart \
     "$OUT/raster-underlay-1p.pdf" faithful 2 9460 2918 71 6000 20260722)
+# Hatched-sections sheets: tiling-pattern (PatternType 1) fills - ~70 regions
+# per A1 page over four shared pattern cells, the per-tile re-interpretation
+# workload behind #524 (hatch-sections-sweep / scroll-hatch scenarios).
+(cd "$ROOT" &&
+  $DART packages/pdf_cos/tool/gen_hatch_pdf.dart \
+    "$OUT/hatch-sections-4p.pdf" 4 70 20260724)
 ls -la "$OUT" | awk 'NR>1 {print "  " $NF "\t" $5 " bytes"}' | grep -v '^\s*\.'
