@@ -514,7 +514,7 @@ class PdfEditorView extends StatefulWidget {
   /// Single-key shortcuts for arming editing tools. Threaded to both the
   /// embedded [PdfViewer] bindings and [PdfEditingToolbar] tooltip labels.
   /// Pass an empty map to disable tool shortcuts.
-  final Map<PdfEditTool, LogicalKeyboardKey> toolShortcuts;
+  final Map<PdfEditTool, PdfToolShortcut> toolShortcuts;
 
   /// Custom widgets shown before the stock editing toolbar controls.
   ///
@@ -569,7 +569,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
   // method-channel handler isn't claimed needlessly elsewhere.
   PdfPencilInteraction? _pencil;
 
-  late Map<PdfEditTool, LogicalKeyboardKey> _toolShortcuts;
+  late Map<PdfEditTool, PdfToolShortcut> _toolShortcuts;
 
   /// The revision length last reported through onDocumentChanged -
   /// revisions are byte prefixes of one buffer, so equal length means
@@ -594,7 +594,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
   void initState() {
     super.initState();
     _toolShortcuts =
-        Map<PdfEditTool, LogicalKeyboardKey>.of(widget.toolShortcuts);
+        Map<PdfEditTool, PdfToolShortcut>.of(widget.toolShortcuts);
     // In source mode the shell is owned by the inner byte-based PdfEditorView
     // the progressive builder mounts once the first-paint bytes arrive.
     if (_isSource) return;
@@ -640,7 +640,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
     super.didUpdateWidget(oldWidget);
     if (!mapEquals(widget.toolShortcuts, oldWidget.toolShortcuts)) {
       _toolShortcuts =
-          Map<PdfEditTool, LogicalKeyboardKey>.of(widget.toolShortcuts);
+          Map<PdfEditTool, PdfToolShortcut>.of(widget.toolShortcuts);
     }
     if (_isSource) return;
     final sourceChanging = widget.controller != oldWidget.controller ||
