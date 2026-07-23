@@ -89,7 +89,9 @@
   }
 
   function fetchDict(loc) {
-    if (loc === 'en') return Promise.resolve({});
+    // English is native in the HTML, but switching *back* to English from
+    // another locale must actively restore the English strings, so en.json is
+    // fetched and applied like any other locale (it holds every key).
     if (cache[loc]) return Promise.resolve(cache[loc]);
     return fetch(scriptBase + 'i18n/' + loc + '.json', { cache: 'no-cache' })
       .then(function (r) { return r.ok ? r.json() : {}; })
