@@ -396,6 +396,12 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
   String get menuFlattenForm => 'フォームを統合';
 
   @override
+  String get menuLock => 'ロック';
+
+  @override
+  String get menuUnlock => 'ロック解除';
+
+  @override
   String get menuRecolour => '色を変更…';
 
   @override
@@ -448,6 +454,24 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
 
   @override
   String get overlayStampText => 'スタンプのテキスト';
+
+  @override
+  String get linkDialogTitle => 'リンクを追加';
+
+  @override
+  String get linkKindWeb => 'ウェブアドレス';
+
+  @override
+  String get linkKindPage => 'ドキュメント内のページ';
+
+  @override
+  String get linkUrlLabel => 'URL';
+
+  @override
+  String get linkPageLabel => 'ページ番号';
+
+  @override
+  String get toolLink => 'リンク';
 
   @override
   String get overlayUnderline => '下線';
@@ -816,6 +840,9 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
   String get sbarStateUnmarked => 'マーク解除済み';
 
   @override
+  String get searchAnnotations => '注釈を検索';
+
+  @override
   String get searchClearSearch => '検索をクリア';
 
   @override
@@ -985,6 +1012,12 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
   String get sidebarDeleteSignature => '署名を削除';
 
   @override
+  String get sidebarLockAnnotation => 'ロック';
+
+  @override
+  String get sidebarUnlockAnnotation => 'ロック解除';
+
+  @override
   String get sidebarMore => 'その他';
 
   @override
@@ -1030,6 +1063,57 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
       one: '$count 件選択中',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get sidebarSignatureChecking => 'Checking…';
+
+  @override
+  String get sidebarSignatureTrusted => 'Valid — trusted';
+
+  @override
+  String get sidebarSignatureUnverified => 'Valid — unverified';
+
+  @override
+  String get sidebarSignatureInvalid => 'Invalid';
+
+  @override
+  String sidebarSignatureSignedBy(String name) {
+    return 'Signed by $name';
+  }
+
+  @override
+  String sidebarSignatureSignedAt(String time) {
+    return 'Signed $time';
+  }
+
+  @override
+  String sidebarSignatureTrustedVia(String authority) {
+    return 'Trusted via $authority';
+  }
+
+  @override
+  String get sidebarSignatureUntrustedDetail =>
+      'Signer is not from a trusted authority';
+
+  @override
+  String get sidebarSignatureNoAnchors =>
+      'No trusted authorities are configured';
+
+  @override
+  String get sidebarSignatureModified => 'Document was changed after signing';
+
+  @override
+  String get sidebarSignatureRevoked => 'The signer\'s certificate was revoked';
+
+  @override
+  String sidebarSignatureTimestamped(String time) {
+    return 'Timestamped $time';
+  }
+
+  @override
+  String sidebarSignatureLevel(String level) {
+    return 'PAdES $level';
   }
 
   @override
@@ -1244,6 +1328,21 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
 
   @override
   String get tbCheckMarksOnDocument => 'ドキュメント上のチェックマーク';
+
+  @override
+  String get tbCropImage => '画像をトリミング';
+
+  @override
+  String get tbCroppingImage => '画像をトリミング中';
+
+  @override
+  String get tbCropApply => 'トリミングを適用';
+
+  @override
+  String get tbCropCancel => 'トリミングをキャンセル';
+
+  @override
+  String get tbCropReset => 'トリミングをリセット';
 
   @override
   String get tbColorLabel => 'カラー';

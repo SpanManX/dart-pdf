@@ -397,6 +397,12 @@ class DartPdfEditorLocalizationsId extends DartPdfEditorLocalizations {
   String get menuFlattenForm => 'Ratakan formulir';
 
   @override
+  String get menuLock => 'Kunci';
+
+  @override
+  String get menuUnlock => 'Buka kunci';
+
+  @override
   String get menuRecolour => 'Warnai ulang…';
 
   @override
@@ -449,6 +455,24 @@ class DartPdfEditorLocalizationsId extends DartPdfEditorLocalizations {
 
   @override
   String get overlayStampText => 'Teks stempel';
+
+  @override
+  String get linkDialogTitle => 'Tambahkan tautan';
+
+  @override
+  String get linkKindWeb => 'Alamat web';
+
+  @override
+  String get linkKindPage => 'Halaman dalam dokumen';
+
+  @override
+  String get linkUrlLabel => 'URL';
+
+  @override
+  String get linkPageLabel => 'Nomor halaman';
+
+  @override
+  String get toolLink => 'Tautan';
 
   @override
   String get overlayUnderline => 'Garis bawah';
@@ -820,6 +844,9 @@ class DartPdfEditorLocalizationsId extends DartPdfEditorLocalizations {
   String get sbarStateUnmarked => 'Tak ditandai';
 
   @override
+  String get searchAnnotations => 'Cari anotasi';
+
+  @override
   String get searchClearSearch => 'Bersihkan pencarian';
 
   @override
@@ -991,6 +1018,12 @@ class DartPdfEditorLocalizationsId extends DartPdfEditorLocalizations {
   String get sidebarDeleteSignature => 'Hapus tanda tangan';
 
   @override
+  String get sidebarLockAnnotation => 'Kunci';
+
+  @override
+  String get sidebarUnlockAnnotation => 'Buka kunci';
+
+  @override
   String get sidebarMore => 'Lainnya';
 
   @override
@@ -1037,6 +1070,57 @@ class DartPdfEditorLocalizationsId extends DartPdfEditorLocalizations {
       one: '$count dipilih',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get sidebarSignatureChecking => 'Checking…';
+
+  @override
+  String get sidebarSignatureTrusted => 'Valid — trusted';
+
+  @override
+  String get sidebarSignatureUnverified => 'Valid — unverified';
+
+  @override
+  String get sidebarSignatureInvalid => 'Invalid';
+
+  @override
+  String sidebarSignatureSignedBy(String name) {
+    return 'Signed by $name';
+  }
+
+  @override
+  String sidebarSignatureSignedAt(String time) {
+    return 'Signed $time';
+  }
+
+  @override
+  String sidebarSignatureTrustedVia(String authority) {
+    return 'Trusted via $authority';
+  }
+
+  @override
+  String get sidebarSignatureUntrustedDetail =>
+      'Signer is not from a trusted authority';
+
+  @override
+  String get sidebarSignatureNoAnchors =>
+      'No trusted authorities are configured';
+
+  @override
+  String get sidebarSignatureModified => 'Document was changed after signing';
+
+  @override
+  String get sidebarSignatureRevoked => 'The signer\'s certificate was revoked';
+
+  @override
+  String sidebarSignatureTimestamped(String time) {
+    return 'Timestamped $time';
+  }
+
+  @override
+  String sidebarSignatureLevel(String level) {
+    return 'PAdES $level';
   }
 
   @override
@@ -1254,6 +1338,21 @@ class DartPdfEditorLocalizationsId extends DartPdfEditorLocalizations {
 
   @override
   String get tbCheckMarksOnDocument => 'Tanda centang pada dokumen';
+
+  @override
+  String get tbCropImage => 'Pangkas gambar';
+
+  @override
+  String get tbCroppingImage => 'Memangkas gambar';
+
+  @override
+  String get tbCropApply => 'Terapkan pangkas';
+
+  @override
+  String get tbCropCancel => 'Batalkan pangkas';
+
+  @override
+  String get tbCropReset => 'Atur ulang pangkas';
 
   @override
   String get tbColorLabel => 'Warna';

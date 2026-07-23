@@ -398,6 +398,12 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
   String get menuFlattenForm => 'Rendi definitivo il modulo';
 
   @override
+  String get menuLock => 'Blocca';
+
+  @override
+  String get menuUnlock => 'Sblocca';
+
+  @override
   String get menuRecolour => 'Ricolora…';
 
   @override
@@ -450,6 +456,24 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
 
   @override
   String get overlayStampText => 'Testo del timbro';
+
+  @override
+  String get linkDialogTitle => 'Aggiungi link';
+
+  @override
+  String get linkKindWeb => 'Indirizzo web';
+
+  @override
+  String get linkKindPage => 'Pagina nel documento';
+
+  @override
+  String get linkUrlLabel => 'URL';
+
+  @override
+  String get linkPageLabel => 'Numero di pagina';
+
+  @override
+  String get toolLink => 'Link';
 
   @override
   String get overlayUnderline => 'Sottolineato';
@@ -821,6 +845,9 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
   String get sbarStateUnmarked => 'Non contrassegnato';
 
   @override
+  String get searchAnnotations => 'Cerca annotazioni';
+
+  @override
   String get searchClearSearch => 'Cancella ricerca';
 
   @override
@@ -992,6 +1019,12 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
   String get sidebarDeleteSignature => 'Elimina firma';
 
   @override
+  String get sidebarLockAnnotation => 'Blocca';
+
+  @override
+  String get sidebarUnlockAnnotation => 'Sblocca';
+
+  @override
   String get sidebarMore => 'Altro';
 
   @override
@@ -1039,6 +1072,57 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
       one: '$count selezionato',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get sidebarSignatureChecking => 'Checking…';
+
+  @override
+  String get sidebarSignatureTrusted => 'Valid — trusted';
+
+  @override
+  String get sidebarSignatureUnverified => 'Valid — unverified';
+
+  @override
+  String get sidebarSignatureInvalid => 'Invalid';
+
+  @override
+  String sidebarSignatureSignedBy(String name) {
+    return 'Signed by $name';
+  }
+
+  @override
+  String sidebarSignatureSignedAt(String time) {
+    return 'Signed $time';
+  }
+
+  @override
+  String sidebarSignatureTrustedVia(String authority) {
+    return 'Trusted via $authority';
+  }
+
+  @override
+  String get sidebarSignatureUntrustedDetail =>
+      'Signer is not from a trusted authority';
+
+  @override
+  String get sidebarSignatureNoAnchors =>
+      'No trusted authorities are configured';
+
+  @override
+  String get sidebarSignatureModified => 'Document was changed after signing';
+
+  @override
+  String get sidebarSignatureRevoked => 'The signer\'s certificate was revoked';
+
+  @override
+  String sidebarSignatureTimestamped(String time) {
+    return 'Timestamped $time';
+  }
+
+  @override
+  String sidebarSignatureLevel(String level) {
+    return 'PAdES $level';
   }
 
   @override
@@ -1254,6 +1338,21 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
 
   @override
   String get tbCheckMarksOnDocument => 'Segni di spunta sul documento';
+
+  @override
+  String get tbCropImage => 'Ritaglia immagine';
+
+  @override
+  String get tbCroppingImage => 'Ritaglio immagine in corso';
+
+  @override
+  String get tbCropApply => 'Applica ritaglio';
+
+  @override
+  String get tbCropCancel => 'Annulla ritaglio';
+
+  @override
+  String get tbCropReset => 'Reimposta ritaglio';
 
   @override
   String get tbColorLabel => 'Colore';

@@ -396,6 +396,12 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
   String get menuFlattenForm => 'Formu düzleştir';
 
   @override
+  String get menuLock => 'Kilitle';
+
+  @override
+  String get menuUnlock => 'Kilidi aç';
+
+  @override
   String get menuRecolour => 'Yeniden renklendir…';
 
   @override
@@ -448,6 +454,24 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
 
   @override
   String get overlayStampText => 'Damga metni';
+
+  @override
+  String get linkDialogTitle => 'Bağlantı ekle';
+
+  @override
+  String get linkKindWeb => 'Web adresi';
+
+  @override
+  String get linkKindPage => 'Belgedeki sayfa';
+
+  @override
+  String get linkUrlLabel => 'URL';
+
+  @override
+  String get linkPageLabel => 'Sayfa numarası';
+
+  @override
+  String get toolLink => 'Bağlantı';
 
   @override
   String get overlayUnderline => 'Altı çizili';
@@ -818,6 +842,9 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
   String get sbarStateUnmarked => 'İşareti kaldırıldı';
 
   @override
+  String get searchAnnotations => 'Ek açıklamalarda ara';
+
+  @override
   String get searchClearSearch => 'Aramayı temizle';
 
   @override
@@ -989,6 +1016,12 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
   String get sidebarDeleteSignature => 'İmzayı sil';
 
   @override
+  String get sidebarLockAnnotation => 'Kilitle';
+
+  @override
+  String get sidebarUnlockAnnotation => 'Kilidi aç';
+
+  @override
   String get sidebarMore => 'Daha fazla';
 
   @override
@@ -1035,6 +1068,57 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
       one: '$count seçili',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get sidebarSignatureChecking => 'Checking…';
+
+  @override
+  String get sidebarSignatureTrusted => 'Valid — trusted';
+
+  @override
+  String get sidebarSignatureUnverified => 'Valid — unverified';
+
+  @override
+  String get sidebarSignatureInvalid => 'Invalid';
+
+  @override
+  String sidebarSignatureSignedBy(String name) {
+    return 'Signed by $name';
+  }
+
+  @override
+  String sidebarSignatureSignedAt(String time) {
+    return 'Signed $time';
+  }
+
+  @override
+  String sidebarSignatureTrustedVia(String authority) {
+    return 'Trusted via $authority';
+  }
+
+  @override
+  String get sidebarSignatureUntrustedDetail =>
+      'Signer is not from a trusted authority';
+
+  @override
+  String get sidebarSignatureNoAnchors =>
+      'No trusted authorities are configured';
+
+  @override
+  String get sidebarSignatureModified => 'Document was changed after signing';
+
+  @override
+  String get sidebarSignatureRevoked => 'The signer\'s certificate was revoked';
+
+  @override
+  String sidebarSignatureTimestamped(String time) {
+    return 'Timestamped $time';
+  }
+
+  @override
+  String sidebarSignatureLevel(String level) {
+    return 'PAdES $level';
   }
 
   @override
@@ -1250,6 +1334,21 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
 
   @override
   String get tbCheckMarksOnDocument => 'Belge üzerindeki onay işaretleri';
+
+  @override
+  String get tbCropImage => 'Görseli kırp';
+
+  @override
+  String get tbCroppingImage => 'Görsel kırpılıyor';
+
+  @override
+  String get tbCropApply => 'Kırpmayı uygula';
+
+  @override
+  String get tbCropCancel => 'Kırpmayı iptal et';
+
+  @override
+  String get tbCropReset => 'Kırpmayı sıfırla';
 
   @override
   String get tbColorLabel => 'Renk';

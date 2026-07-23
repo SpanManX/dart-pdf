@@ -806,6 +806,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get welcomeTapToReopen => '点按以重新打开';
 
   @override
+  String get welcomeViewAsGrid => '网格视图';
+
+  @override
+  String get welcomeViewAsList => '列表视图';
+
+  @override
   String settingsDefaultAppSubtitle(String platform) {
     String _temp0 = intl.Intl.selectLogic(
       platform,
@@ -1696,6 +1702,12 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get welcomeTapToReopen => '點一下以重新開啟';
+
+  @override
+  String get welcomeViewAsGrid => '網格檢視';
+
+  @override
+  String get welcomeViewAsList => '清單檢視';
 
   @override
   String settingsDefaultAppSubtitle(String platform) {

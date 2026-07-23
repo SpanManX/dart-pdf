@@ -396,6 +396,12 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
   String get menuFlattenForm => 'รวมแบบฟอร์ม';
 
   @override
+  String get menuLock => 'ล็อก';
+
+  @override
+  String get menuUnlock => 'ปลดล็อก';
+
+  @override
   String get menuRecolour => 'เปลี่ยนสี…';
 
   @override
@@ -448,6 +454,24 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
 
   @override
   String get overlayStampText => 'ข้อความตราประทับ';
+
+  @override
+  String get linkDialogTitle => 'เพิ่มลิงก์';
+
+  @override
+  String get linkKindWeb => 'ที่อยู่เว็บ';
+
+  @override
+  String get linkKindPage => 'หน้าในเอกสาร';
+
+  @override
+  String get linkUrlLabel => 'URL';
+
+  @override
+  String get linkPageLabel => 'หมายเลขหน้า';
+
+  @override
+  String get toolLink => 'ลิงก์';
 
   @override
   String get overlayUnderline => 'ขีดเส้นใต้';
@@ -818,6 +842,9 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
   String get sbarStateUnmarked => 'ยกเลิกเครื่องหมายแล้ว';
 
   @override
+  String get searchAnnotations => 'ค้นหาคำอธิบายประกอบ';
+
+  @override
   String get searchClearSearch => 'ล้างการค้นหา';
 
   @override
@@ -988,6 +1015,12 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
   String get sidebarDeleteSignature => 'ลบลายเซ็น';
 
   @override
+  String get sidebarLockAnnotation => 'ล็อก';
+
+  @override
+  String get sidebarUnlockAnnotation => 'ปลดล็อก';
+
+  @override
   String get sidebarMore => 'เพิ่มเติม';
 
   @override
@@ -1034,6 +1067,57 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
       one: 'เลือก $count รายการ',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get sidebarSignatureChecking => 'Checking…';
+
+  @override
+  String get sidebarSignatureTrusted => 'Valid — trusted';
+
+  @override
+  String get sidebarSignatureUnverified => 'Valid — unverified';
+
+  @override
+  String get sidebarSignatureInvalid => 'Invalid';
+
+  @override
+  String sidebarSignatureSignedBy(String name) {
+    return 'Signed by $name';
+  }
+
+  @override
+  String sidebarSignatureSignedAt(String time) {
+    return 'Signed $time';
+  }
+
+  @override
+  String sidebarSignatureTrustedVia(String authority) {
+    return 'Trusted via $authority';
+  }
+
+  @override
+  String get sidebarSignatureUntrustedDetail =>
+      'Signer is not from a trusted authority';
+
+  @override
+  String get sidebarSignatureNoAnchors =>
+      'No trusted authorities are configured';
+
+  @override
+  String get sidebarSignatureModified => 'Document was changed after signing';
+
+  @override
+  String get sidebarSignatureRevoked => 'The signer\'s certificate was revoked';
+
+  @override
+  String sidebarSignatureTimestamped(String time) {
+    return 'Timestamped $time';
+  }
+
+  @override
+  String sidebarSignatureLevel(String level) {
+    return 'PAdES $level';
   }
 
   @override
@@ -1250,6 +1334,21 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
 
   @override
   String get tbCheckMarksOnDocument => 'เครื่องหมายถูกบนเอกสาร';
+
+  @override
+  String get tbCropImage => 'ครอบตัดรูปภาพ';
+
+  @override
+  String get tbCroppingImage => 'กำลังครอบตัดรูปภาพ';
+
+  @override
+  String get tbCropApply => 'ใช้การครอบตัด';
+
+  @override
+  String get tbCropCancel => 'ยกเลิกการครอบตัด';
+
+  @override
+  String get tbCropReset => 'รีเซ็ตการครอบตัด';
 
   @override
   String get tbColorLabel => 'สี';

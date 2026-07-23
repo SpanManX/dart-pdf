@@ -831,6 +831,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get welcomeTapToReopen => 'Toca para volver a abrir';
 
   @override
+  String get welcomeViewAsGrid => 'Vista de cuadrícula';
+
+  @override
+  String get welcomeViewAsList => 'Vista de lista';
+
+  @override
   String settingsDefaultAppSubtitle(String platform) {
     String _temp0 = intl.Intl.selectLogic(
       platform,

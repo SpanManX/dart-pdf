@@ -397,6 +397,12 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
   String get menuFlattenForm => 'Formulier afvlakken';
 
   @override
+  String get menuLock => 'Vergrendelen';
+
+  @override
+  String get menuUnlock => 'Ontgrendelen';
+
+  @override
   String get menuRecolour => 'Herkleuren…';
 
   @override
@@ -449,6 +455,24 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
 
   @override
   String get overlayStampText => 'Stempeltekst';
+
+  @override
+  String get linkDialogTitle => 'Link toevoegen';
+
+  @override
+  String get linkKindWeb => 'Webadres';
+
+  @override
+  String get linkKindPage => 'Pagina in document';
+
+  @override
+  String get linkUrlLabel => 'URL';
+
+  @override
+  String get linkPageLabel => 'Paginanummer';
+
+  @override
+  String get toolLink => 'Link';
 
   @override
   String get overlayUnderline => 'Onderstrepen';
@@ -820,6 +844,9 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
   String get sbarStateUnmarked => 'Niet gemarkeerd';
 
   @override
+  String get searchAnnotations => 'Annotaties doorzoeken';
+
+  @override
   String get searchClearSearch => 'Zoekopdracht wissen';
 
   @override
@@ -991,6 +1018,12 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
   String get sidebarDeleteSignature => 'Handtekening verwijderen';
 
   @override
+  String get sidebarLockAnnotation => 'Vergrendelen';
+
+  @override
+  String get sidebarUnlockAnnotation => 'Ontgrendelen';
+
+  @override
   String get sidebarMore => 'Meer';
 
   @override
@@ -1037,6 +1070,57 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
       one: '$count geselecteerd',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get sidebarSignatureChecking => 'Checking…';
+
+  @override
+  String get sidebarSignatureTrusted => 'Valid — trusted';
+
+  @override
+  String get sidebarSignatureUnverified => 'Valid — unverified';
+
+  @override
+  String get sidebarSignatureInvalid => 'Invalid';
+
+  @override
+  String sidebarSignatureSignedBy(String name) {
+    return 'Signed by $name';
+  }
+
+  @override
+  String sidebarSignatureSignedAt(String time) {
+    return 'Signed $time';
+  }
+
+  @override
+  String sidebarSignatureTrustedVia(String authority) {
+    return 'Trusted via $authority';
+  }
+
+  @override
+  String get sidebarSignatureUntrustedDetail =>
+      'Signer is not from a trusted authority';
+
+  @override
+  String get sidebarSignatureNoAnchors =>
+      'No trusted authorities are configured';
+
+  @override
+  String get sidebarSignatureModified => 'Document was changed after signing';
+
+  @override
+  String get sidebarSignatureRevoked => 'The signer\'s certificate was revoked';
+
+  @override
+  String sidebarSignatureTimestamped(String time) {
+    return 'Timestamped $time';
+  }
+
+  @override
+  String sidebarSignatureLevel(String level) {
+    return 'PAdES $level';
   }
 
   @override
@@ -1253,6 +1337,21 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
 
   @override
   String get tbCheckMarksOnDocument => 'Vinkjes op het document';
+
+  @override
+  String get tbCropImage => 'Afbeelding bijsnijden';
+
+  @override
+  String get tbCroppingImage => 'Bezig met bijsnijden';
+
+  @override
+  String get tbCropApply => 'Bijsnijden toepassen';
+
+  @override
+  String get tbCropCancel => 'Bijsnijden annuleren';
+
+  @override
+  String get tbCropReset => 'Bijsnijden herstellen';
 
   @override
   String get tbColorLabel => 'Kleur';

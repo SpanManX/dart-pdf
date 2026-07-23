@@ -21,6 +21,7 @@ import 'editing_controller.dart';
 import 'editing_fonts.dart';
 import 'editing_image_crop.dart';
 import 'editing_interaction.dart';
+import 'editing_link.dart';
 import 'editing_measure.dart';
 import 'editing_tool_behavior.dart';
 import 'handle_layout.dart';
@@ -486,6 +487,7 @@ class EditingPageOverlay extends StatefulWidget {
     required this.pageIndex,
     required this.geometry,
     required this.textPrompt,
+    this.linkPrompt = showPdfAddLinkDialog,
     this.pageColor = const Color(0xFFFFFFFF),
     this.showAnnotations = true,
     this.interactionHost,
@@ -512,6 +514,10 @@ class EditingPageOverlay extends StatefulWidget {
   final int pageIndex;
   final PdfPageGeometry geometry;
   final PdfTextPrompt textPrompt;
+
+  /// How the link tool ([PdfEditTool.link]) and the text-selection "Add link"
+  /// action collect a hyperlink's target. Defaults to [showPdfAddLinkDialog].
+  final PdfLinkPrompt linkPrompt;
 
   /// How the form tool asks for a push-button field's image. With none,
   /// tapping a push button does nothing.
@@ -1058,6 +1064,15 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     _adoptInteraction();
     _adoptHost();
     _controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Keep the controller's stamp-locale in sync with the ambient UI locale so
+    // the built-in {{date}}/{{datetime}} stamp fields localize their month
+    // names and AM/PM markers. Runs on mount and whenever the locale changes.
+    _controller.uiLocale = Localizations.localeOf(context);
   }
 
   void _adoptInteraction() {
@@ -3011,7 +3026,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             PdfEditTool.image ||
             PdfEditTool.redact ||
             PdfEditTool.snapshot ||
-            PdfEditTool.signatureBox:
+            PdfEditTool.signatureBox ||
+            PdfEditTool.link:
         _beginInteraction(PdfEditingInteractionIntent.create, details.kind);
         setState(() {
           _dragStart = position;
@@ -3893,6 +3909,15 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             _controller.newFormFieldKind, widget.pageIndex, rect);
       case PdfEditTool.redact:
         _controller.addRedaction(widget.pageIndex, rect);
+      case PdfEditTool.link:
+        final target = await widget.linkPrompt(
+          context,
+          pageCount: _controller.document.pageCount,
+          currentPage: widget.pageIndex,
+          initialUrl: '',
+        );
+        if (target == null) return;
+        _controller.addLink(widget.pageIndex, [rect], target);
       case PdfEditTool.signatureBox:
         final placer = widget.onPlaceSignature;
         if (placer == null) return;
@@ -6037,9 +6062,12 @@ class _EditingPreviewPainter extends CustomPainter {
               ..strokeWidth = 1 * chromeScale);
       case PdfEditTool.redact:
         paintRedactionHatch(canvas, rect, chromeScale: chromeScale);
-      case PdfEditTool.snapshot || PdfEditTool.signatureBox:
-        // a selection marquee: the region grab in a screenshot tool, and the
-        // "draw where the signature goes" box in Acrobat/Bluebeam
+      case PdfEditTool.snapshot ||
+            PdfEditTool.signatureBox ||
+            PdfEditTool.link:
+        // a selection marquee: the region grab in a screenshot tool, the
+        // "draw where the signature goes" box in Acrobat/Bluebeam, and the
+        // region a hyperlink is being drawn over
         canvas.drawRect(rect, Paint()..color = _chrome.withAlpha(0x1A));
         canvas.drawRect(
             rect,

@@ -396,6 +396,12 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
   String get menuFlattenForm => '展平表单';
 
   @override
+  String get menuLock => '锁定';
+
+  @override
+  String get menuUnlock => '解锁';
+
+  @override
   String get menuRecolour => '重新着色…';
 
   @override
@@ -448,6 +454,24 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
 
   @override
   String get overlayStampText => '图章文本';
+
+  @override
+  String get linkDialogTitle => '添加链接';
+
+  @override
+  String get linkKindWeb => '网址';
+
+  @override
+  String get linkKindPage => '文档中的页面';
+
+  @override
+  String get linkUrlLabel => 'URL';
+
+  @override
+  String get linkPageLabel => '页码';
+
+  @override
+  String get toolLink => '链接';
 
   @override
   String get overlayUnderline => '下划线';
@@ -815,6 +839,9 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
   String get sbarStateUnmarked => '未标记';
 
   @override
+  String get searchAnnotations => '搜索注释';
+
+  @override
   String get searchClearSearch => '清除搜索';
 
   @override
@@ -984,6 +1011,12 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
   String get sidebarDeleteSignature => '删除签名';
 
   @override
+  String get sidebarLockAnnotation => '锁定';
+
+  @override
+  String get sidebarUnlockAnnotation => '解锁';
+
+  @override
   String get sidebarMore => '更多';
 
   @override
@@ -1029,6 +1062,57 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
       one: '已选 $count 个',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get sidebarSignatureChecking => 'Checking…';
+
+  @override
+  String get sidebarSignatureTrusted => 'Valid — trusted';
+
+  @override
+  String get sidebarSignatureUnverified => 'Valid — unverified';
+
+  @override
+  String get sidebarSignatureInvalid => 'Invalid';
+
+  @override
+  String sidebarSignatureSignedBy(String name) {
+    return 'Signed by $name';
+  }
+
+  @override
+  String sidebarSignatureSignedAt(String time) {
+    return 'Signed $time';
+  }
+
+  @override
+  String sidebarSignatureTrustedVia(String authority) {
+    return 'Trusted via $authority';
+  }
+
+  @override
+  String get sidebarSignatureUntrustedDetail =>
+      'Signer is not from a trusted authority';
+
+  @override
+  String get sidebarSignatureNoAnchors =>
+      'No trusted authorities are configured';
+
+  @override
+  String get sidebarSignatureModified => 'Document was changed after signing';
+
+  @override
+  String get sidebarSignatureRevoked => 'The signer\'s certificate was revoked';
+
+  @override
+  String sidebarSignatureTimestamped(String time) {
+    return 'Timestamped $time';
+  }
+
+  @override
+  String sidebarSignatureLevel(String level) {
+    return 'PAdES $level';
   }
 
   @override
@@ -1242,6 +1326,21 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
 
   @override
   String get tbCheckMarksOnDocument => '文档上的勾选标记';
+
+  @override
+  String get tbCropImage => '裁剪图像';
+
+  @override
+  String get tbCroppingImage => '正在裁剪图像';
+
+  @override
+  String get tbCropApply => '应用裁剪';
+
+  @override
+  String get tbCropCancel => '取消裁剪';
+
+  @override
+  String get tbCropReset => '重置裁剪';
 
   @override
   String get tbColorLabel => '颜色';
@@ -2281,6 +2380,12 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
   String get menuFlattenForm => '平面化表單';
 
   @override
+  String get menuLock => '鎖定';
+
+  @override
+  String get menuUnlock => '解鎖';
+
+  @override
   String get menuRecolour => '重新上色…';
 
   @override
@@ -2333,6 +2438,24 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
 
   @override
   String get overlayStampText => '戳記文字';
+
+  @override
+  String get linkDialogTitle => '新增連結';
+
+  @override
+  String get linkKindWeb => '網址';
+
+  @override
+  String get linkKindPage => '文件中的頁面';
+
+  @override
+  String get linkUrlLabel => 'URL';
+
+  @override
+  String get linkPageLabel => '頁碼';
+
+  @override
+  String get toolLink => '連結';
 
   @override
   String get overlayUnderline => '底線';
@@ -2700,6 +2823,9 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
   String get sbarStateUnmarked => '未標記';
 
   @override
+  String get searchAnnotations => '搜尋註解';
+
+  @override
   String get searchClearSearch => '清除搜尋';
 
   @override
@@ -2869,6 +2995,12 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
   String get sidebarDeleteSignature => '刪除簽章';
 
   @override
+  String get sidebarLockAnnotation => '鎖定';
+
+  @override
+  String get sidebarUnlockAnnotation => '解鎖';
+
+  @override
   String get sidebarMore => '更多';
 
   @override
@@ -2914,6 +3046,57 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
       one: '已選取 $count 個',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get sidebarSignatureChecking => 'Checking…';
+
+  @override
+  String get sidebarSignatureTrusted => 'Valid — trusted';
+
+  @override
+  String get sidebarSignatureUnverified => 'Valid — unverified';
+
+  @override
+  String get sidebarSignatureInvalid => 'Invalid';
+
+  @override
+  String sidebarSignatureSignedBy(String name) {
+    return 'Signed by $name';
+  }
+
+  @override
+  String sidebarSignatureSignedAt(String time) {
+    return 'Signed $time';
+  }
+
+  @override
+  String sidebarSignatureTrustedVia(String authority) {
+    return 'Trusted via $authority';
+  }
+
+  @override
+  String get sidebarSignatureUntrustedDetail =>
+      'Signer is not from a trusted authority';
+
+  @override
+  String get sidebarSignatureNoAnchors =>
+      'No trusted authorities are configured';
+
+  @override
+  String get sidebarSignatureModified => 'Document was changed after signing';
+
+  @override
+  String get sidebarSignatureRevoked => 'The signer\'s certificate was revoked';
+
+  @override
+  String sidebarSignatureTimestamped(String time) {
+    return 'Timestamped $time';
+  }
+
+  @override
+  String sidebarSignatureLevel(String level) {
+    return 'PAdES $level';
   }
 
   @override
@@ -3127,6 +3310,21 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
 
   @override
   String get tbCheckMarksOnDocument => '文件上的勾選標記';
+
+  @override
+  String get tbCropImage => '裁剪影像';
+
+  @override
+  String get tbCroppingImage => '正在裁剪影像';
+
+  @override
+  String get tbCropApply => '套用裁剪';
+
+  @override
+  String get tbCropCancel => '取消裁剪';
+
+  @override
+  String get tbCropReset => '重設裁剪';
 
   @override
   String get tbColorLabel => '顏色';
