@@ -38,10 +38,10 @@ site/.firebase/hosting..cache
 tool/perf/history/
 tool/perf/cache/
 
-# Localized store screenshots — regenerable from the tracked raw captures
-# (doc/screenshots/) + captions (doc/screenshots/captions/) via
-# packages/dart_pdf_editor/example/tool/screenshots.sh compose. The English
-# framed set at doc/marketing/<target>/<platform>/*.png stays tracked; the
-# per-locale subdirs and the staged store screenshots are not.
-doc/marketing/*/*/*/
+# Store screenshots. The standalone-app marketing tree (doc/marketing/app/,
+# English + localized) IS tracked so AppStream metainfo can reference stable
+# raw-URL screenshots. The example/SDK showcase localized subdirs and the
+# staged store copies are regenerable (screenshots.sh compose from the tracked
+# raw captures + captions), so they stay out.
+doc/marketing/example/*/*/
 app/fastlane/metadata/*/*/images/
