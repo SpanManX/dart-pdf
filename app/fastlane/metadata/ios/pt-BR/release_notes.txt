@@ -1,19 +1,18 @@
-Novidades na versão 2.1.0
+Novidades na versão 3.0.0
 
-LEITURA
-• Modo de leitura com refluxo: leia um documento como texto contínuo em vez de páginas fixas, com rolagem sob demanda em arquivos longos, navegação rápida, memorização da posição de leitura e um visualizador de figuras para percorrer imagens e diagramas.
+IDIOMAS
+• O DartPDF agora está disponível em 10 idiomas, com layout completo da direita para a esquerda para o árabe.
 
-VELOCIDADE E MEMÓRIA
-• Os documentos abrem e são renderizados visivelmente mais rápido, com os maiores ganhos em arquivos grandes ou com muitas imagens.
-• Salvar uma edição agora é proporcional ao tamanho da alteração, e não ao tamanho do documento, então as edições continuam rápidas em arquivos longos.
-• Menor uso de memória em desenhos muito largos, que agora mantêm na memória apenas a parte visível da página enquanto você navega.
-• Decodificação mais rápida de documentos digitalizados em preto e branco.
+RENDERIZAÇÃO
+• Renderização mais precisa de sobreimpressão, modos de mesclagem e máscaras suaves, para que PDFs voltados à impressão fiquem mais próximos do resultado pretendido.
+• Grupos de transparência desenhados sob um modo de mesclagem agora são compostos corretamente, corrigindo caixas opacas indesejadas em alguns arquivos.
 
-CORREÇÕES DE RENDERIZAÇÃO
-• As linhas finas permanecem nítidas e legíveis com o zoom reduzido, em vez de desaparecer — uma diferença que você notará mais em desenhos e plantas.
-• Cores mais precisas em gradientes, incluindo gradientes radiais que antes mostravam apenas uma forma parcial.
-• Cor correta para imagens indexadas, incluindo as baseadas em JPEG 2000, Separation e DeviceN.
-• Os caracteres Symbol e ZapfDingbats agora são renderizados corretamente em vez de aparecer como caixas vazias.
-• Funções de cor amostradas com múltiplas entradas são avaliadas corretamente.
+EDIÇÃO
+• Segure Shift ao desenhar para restringir o traço à mão livre e as linhas a traços retos.
+• Defina um estilo padrão para as marcações e reutilize-o com um toque.
+• Abas de documento redesenhadas que continuam legíveis conforme você abre mais arquivos.
+
+VELOCIDADE
+• Renderização mais rápida e menor uso de memória, com os maiores ganhos em arquivos grandes ou com muitas imagens.
 
 Obrigado por usar o DartPDF. Comentários e relatos de erros são sempre bem-vindos.

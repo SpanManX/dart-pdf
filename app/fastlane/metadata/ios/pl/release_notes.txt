@@ -1,19 +1,18 @@
-Nowość w wersji 2.1.0
+Nowości w 3.0.0
 
-CZYTANIE
-• Widok czytania z przepływem tekstu: czytaj dokument jako płynący tekst zamiast stałych stron, z leniwym przewijaniem długich plików, szybką nawigacją, zapamiętywaną pozycją czytania oraz przeglądarką ilustracji do przełączania obrazów i diagramów jednym dotknięciem.
+JĘZYKI
+• DartPDF jest teraz dostępny w 10 językach, z pełną obsługą układu od prawej do lewej dla języka arabskiego.
 
-SZYBKOŚĆ I PAMIĘĆ
-• Dokumenty otwierają się i renderują zauważalnie szybciej, a największe zyski dotyczą dużych plików oraz plików z wieloma obrazami.
-• Zapis edycji jest teraz proporcjonalny do wielkości zmiany, a nie do wielkości dokumentu, więc edycja pozostaje szybka nawet w długich plikach.
-• Niższe zużycie pamięci przy bardzo szerokich rysunkach, które podczas przesuwania utrzymują teraz w pamięci tylko widoczny fragment strony.
-• Szybsze dekodowanie zeskanowanych dokumentów czarno-białych.
+RENDEROWANIE
+• Dokładniejsze renderowanie nadruku, trybów mieszania i miękkich masek, dzięki czemu pliki PDF przygotowane do druku wyglądają bliżej zamierzonego efektu.
+• Grupy przezroczystości rysowane w trybie mieszania są teraz poprawnie komponowane, co usuwa przypadkowe nieprzezroczyste prostokąty w niektórych plikach.
 
-POPRAWKI RENDEROWANIA
-• Cienkie linie pozostają wyraźne i czytelne przy oddaleniu, zamiast zanikać — różnicę tę najbardziej zauważysz na rysunkach i planach.
-• Dokładniejsze kolory w gradientach, w tym w gradientach radialnych, które wcześniej pokazywały tylko część kształtu.
-• Poprawne kolory obrazów indeksowanych, w tym opartych na bazach JPEG 2000, Separation i DeviceN.
-• Znaki Symbol i ZapfDingbats renderują się teraz poprawnie, zamiast pojawiać się jako puste ramki.
-• Próbkowane funkcje kolorów z wieloma wejściami są obliczane poprawnie.
+EDYCJA
+• Przytrzymaj Shift podczas rysowania, aby ograniczyć rysunek odręczny i linie do prostych pociągnięć.
+• Ustaw domyślny styl adnotacji i użyj go ponownie jednym dotknięciem.
+• Przeprojektowane karty dokumentów pozostają czytelne w miarę otwierania kolejnych plików.
+
+SZYBKOŚĆ
+• Szybsze renderowanie i mniejsze zużycie pamięci, z największymi korzyściami w dużych plikach lub plikach z wieloma obrazami.
 
 Dziękujemy za korzystanie z DartPDF. Zawsze czekamy na opinie i zgłoszenia błędów.

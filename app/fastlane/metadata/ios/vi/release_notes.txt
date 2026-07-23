@@ -1,19 +1,18 @@
-Mới trong 2.1.0
+Mới trong 3.0.0
 
-ĐỌC
-• Chế độ đọc sắp xếp lại văn bản: đọc tài liệu dưới dạng văn bản trôi chảy thay vì các trang cố định, với cuộn lười qua các tệp dài, điều hướng nhanh, ghi nhớ vị trí đọc, và trình xem hình để nhấn xem qua các hình ảnh và sơ đồ.
+NGÔN NGỮ
+• DartPDF hiện có 10 ngôn ngữ, hỗ trợ đầy đủ bố cục từ phải sang trái cho tiếng Ả Rập.
 
-TỐC ĐỘ VÀ BỘ NHỚ
-• Tài liệu mở và hiển thị nhanh hơn rõ rệt, cải thiện nhiều nhất trên các tệp lớn hoặc nhiều hình ảnh.
-• Việc lưu một chỉnh sửa giờ tỉ lệ với kích thước của thay đổi thay vì kích thước của tài liệu, nên các chỉnh sửa vẫn nhanh trong các tệp dài.
-• Dùng ít bộ nhớ hơn trên các bản vẽ rất rộng, giờ chỉ giữ phần trang đang hiển thị trong bộ nhớ khi bạn di chuyển.
-• Giải mã nhanh hơn các tài liệu đen trắng đã quét.
+HIỂN THỊ
+• Hiển thị in đè, chế độ hòa trộn và mặt nạ mềm chính xác hơn, giúp các tệp PDF hướng đến in ấn trông sát với kết quả mong muốn hơn.
+• Các nhóm trong suốt được vẽ dưới một chế độ hòa trộn giờ đây hợp thành đúng cách, khắc phục những ô mờ đục thừa trên một số tệp.
 
-SỬA LỖI HIỂN THỊ
-• Nét mảnh vẫn sắc nét và dễ đọc khi thu nhỏ, thay vì mờ dần — khác biệt bạn sẽ thấy rõ nhất trên bản vẽ và bản thiết kế.
-• Màu chính xác hơn trong dải màu chuyển, gồm cả dải màu tỏa tròn mà trước đây chỉ hiển thị một phần hình.
-• Màu đúng cho hình ảnh dạng chỉ mục, gồm cả những hình dựng trên nền JPEG 2000, Separation và DeviceN.
-• Ký tự Symbol và ZapfDingbats giờ hiển thị đúng thay vì hiện thành ô trống.
-• Hàm màu lấy mẫu với nhiều đầu vào được tính đúng.
+CHỈNH SỬA
+• Giữ Shift trong khi vẽ để giới hạn nét mực và đường vẽ thành các nét thẳng.
+• Đặt một kiểu mặc định cho chú thích và tái sử dụng chỉ với một lần chạm.
+• Thẻ tài liệu được thiết kế lại, luôn dễ đọc khi bạn mở thêm nhiều tệp.
 
-Cảm ơn bạn đã dùng DartPDF. Chúng tôi luôn hoan nghênh phản hồi và báo lỗi.
+TỐC ĐỘ
+• Hiển thị nhanh hơn và dùng ít bộ nhớ hơn, cải thiện rõ rệt nhất trên các tệp lớn hoặc nhiều hình ảnh.
+
+Cảm ơn bạn đã sử dụng DartPDF. Chúng tôi luôn hoan nghênh mọi ý kiến phản hồi và báo cáo lỗi.
