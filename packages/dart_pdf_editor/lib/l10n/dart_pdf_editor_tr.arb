@@ -1,5 +1,11 @@
 {
   "@@locale": "tr",
+  "linkDialogTitle": "Bağlantı ekle",
+  "linkKindPage": "Belgedeki sayfa",
+  "linkKindWeb": "Web adresi",
+  "linkPageLabel": "Sayfa numarası",
+  "linkUrlLabel": "URL",
+  "toolLink": "Bağlantı",
   "tbCropImage": "Görseli kırp",
   "tbCroppingImage": "Görsel kırpılıyor",
   "tbCropApply": "Kırpmayı uygula",

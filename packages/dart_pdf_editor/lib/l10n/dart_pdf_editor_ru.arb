@@ -1,5 +1,11 @@
 {
   "@@locale": "ru",
+  "linkDialogTitle": "Добавить ссылку",
+  "linkKindPage": "Страница в документе",
+  "linkKindWeb": "Веб-адрес",
+  "linkPageLabel": "Номер страницы",
+  "linkUrlLabel": "URL",
+  "toolLink": "Ссылка",
   "tbCropImage": "Обрезать изображение",
   "tbCroppingImage": "Обрезка изображения",
   "tbCropApply": "Применить обрезку",

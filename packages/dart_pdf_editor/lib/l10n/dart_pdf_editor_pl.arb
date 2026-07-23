@@ -1,5 +1,11 @@
 {
   "@@locale": "pl",
+  "linkDialogTitle": "Dodaj link",
+  "linkKindPage": "Strona w dokumencie",
+  "linkKindWeb": "Adres internetowy",
+  "linkPageLabel": "Numer strony",
+  "linkUrlLabel": "URL",
+  "toolLink": "Link",
   "tbCropImage": "Przytnij obraz",
   "tbCroppingImage": "Przycinanie obrazu",
   "tbCropApply": "Zastosuj przycięcie",

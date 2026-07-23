@@ -1,5 +1,11 @@
 {
   "@@locale": "id",
+  "linkDialogTitle": "Tambahkan tautan",
+  "linkKindPage": "Halaman dalam dokumen",
+  "linkKindWeb": "Alamat web",
+  "linkPageLabel": "Nomor halaman",
+  "linkUrlLabel": "URL",
+  "toolLink": "Tautan",
   "tbCropImage": "Pangkas gambar",
   "tbCroppingImage": "Memangkas gambar",
   "tbCropApply": "Terapkan pangkas",

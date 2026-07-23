@@ -1,5 +1,11 @@
 {
   "@@locale": "vi",
+  "linkDialogTitle": "Thêm liên kết",
+  "linkKindPage": "Trang trong tài liệu",
+  "linkKindWeb": "Địa chỉ web",
+  "linkPageLabel": "Số trang",
+  "linkUrlLabel": "URL",
+  "toolLink": "Liên kết",
   "tbCropImage": "Cắt hình ảnh",
   "tbCroppingImage": "Đang cắt hình ảnh",
   "tbCropApply": "Áp dụng cắt",

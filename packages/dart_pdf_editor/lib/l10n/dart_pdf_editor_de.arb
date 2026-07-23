@@ -1,5 +1,11 @@
 {
   "@@locale": "de",
+  "linkDialogTitle": "Link hinzufügen",
+  "linkKindPage": "Seite im Dokument",
+  "linkKindWeb": "Webadresse",
+  "linkPageLabel": "Seitenzahl",
+  "linkUrlLabel": "URL",
+  "toolLink": "Link",
   "tbCropImage": "Bild zuschneiden",
   "tbCroppingImage": "Bild wird zugeschnitten",
   "tbCropApply": "Zuschnitt anwenden",

@@ -1,5 +1,11 @@
 {
   "@@locale": "uk",
+  "linkDialogTitle": "Додати посилання",
+  "linkKindPage": "Сторінка в документі",
+  "linkKindWeb": "Веб-адреса",
+  "linkPageLabel": "Номер сторінки",
+  "linkUrlLabel": "URL",
+  "toolLink": "Посилання",
   "tbCropImage": "Обрізати зображення",
   "tbCroppingImage": "Обрізання зображення",
   "tbCropApply": "Застосувати обрізання",

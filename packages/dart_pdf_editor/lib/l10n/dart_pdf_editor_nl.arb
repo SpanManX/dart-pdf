@@ -1,5 +1,11 @@
 {
   "@@locale": "nl",
+  "linkDialogTitle": "Link toevoegen",
+  "linkKindPage": "Pagina in document",
+  "linkKindWeb": "Webadres",
+  "linkPageLabel": "Paginanummer",
+  "linkUrlLabel": "URL",
+  "toolLink": "Link",
   "tbCropImage": "Afbeelding bijsnijden",
   "tbCroppingImage": "Bezig met bijsnijden",
   "tbCropApply": "Bijsnijden toepassen",

@@ -1,5 +1,11 @@
 {
   "@@locale": "th",
+  "linkDialogTitle": "เพิ่มลิงก์",
+  "linkKindPage": "หน้าในเอกสาร",
+  "linkKindWeb": "ที่อยู่เว็บ",
+  "linkPageLabel": "หมายเลขหน้า",
+  "linkUrlLabel": "URL",
+  "toolLink": "ลิงก์",
   "tbCropImage": "ครอบตัดรูปภาพ",
   "tbCroppingImage": "กำลังครอบตัดรูปภาพ",
   "tbCropApply": "ใช้การครอบตัด",
