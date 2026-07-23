@@ -37,3 +37,11 @@ site/.firebase/hosting..cache
 # perf tooling artifacts (tool/perf.sh)
 tool/perf/history/
 tool/perf/cache/
+
+# Localized store screenshots — regenerable from the tracked raw captures
+# (doc/screenshots/) + captions (doc/screenshots/captions/) via
+# packages/dart_pdf_editor/example/tool/screenshots.sh compose. The English
+# framed set at doc/marketing/<target>/<platform>/*.png stays tracked; the
+# per-locale subdirs and the staged store screenshots are not.
+doc/marketing/*/*/*/
+app/fastlane/metadata/*/*/images/
