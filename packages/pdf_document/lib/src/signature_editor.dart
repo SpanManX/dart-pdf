@@ -1,5 +1,12 @@
 part of 'editor.dart';
 
+/// An external signing callback: receives the DER `SET OF` signed
+/// attributes and returns the RSA PKCS#1 v1.5 SHA-256 signature over those
+/// exact bytes — typically computed by a platform keystore (Android
+/// KeyStore, iOS Keychain) whose private key never leaves the device.
+typedef PdfExternalSigner = Future<Uint8List> Function(
+    Uint8List signedAttributes);
+
 /// The visible signature box drawn into a signature field's widget when
 /// signing - the two-column layout Acrobat and Bluebeam render once a
 /// field is signed: the signer's name (or a handwritten-signature image)
@@ -26,6 +33,10 @@ class PdfSignatureAppearance {
     this.backgroundColor,
     this.borderColor = 0x2E5E86,
     this.textColor = 0x1A1A1A,
+    this.signedByLabel = 'Digitally signed by',
+    this.dateLabel = 'Date:',
+    this.reasonLabel = 'Reason:',
+    this.locationLabel = 'Location:',
   });
 
   /// The 0-based page a newly created signature widget is placed on.
@@ -82,6 +93,19 @@ class PdfSignatureAppearance {
 
   /// The text color (0xRRGGBB).
   final int textColor;
+
+  /// Label prefixed to the signer name on the details panel. Override to
+  /// localise, e.g. 'Signature numérique de'.
+  final String signedByLabel;
+
+  /// Label prefixed to the signing date on the details panel.
+  final String dateLabel;
+
+  /// Label prefixed to the /Reason on the details panel.
+  final String reasonLabel;
+
+  /// Label prefixed to the /Location on the details panel.
+  final String locationLabel;
 }
 
 /// The signer details rendered into a visible signature box.
@@ -141,10 +165,56 @@ extension PdfSigning on PdfEditor {
       appearance: appearance,
     );
     final cms = cmsSignDetached(
-      contentDigest: crypto.sha256.convert(revision.signedData).bytes,
+      contentDigest: revision.digestSha256(),
       privateKey: privateKey,
       certificates: certificates,
       signingTime: time,
+    );
+    _writeContents(revision, cms);
+    return revision.saved;
+  }
+
+  /// Like [saveSigned], but the RSA operation is delegated to [signer], so
+  /// the private key can live in a hardware keystore. [signingTime] keeps
+  /// its own offset: pass a local DateTime to show local time in the
+  /// signature box and the /M date (the CMS signingTime attribute is
+  /// always encoded in UTC as RFC 5652 requires).
+  Future<Uint8List> saveSignedExternal({
+    required PdfExternalSigner signer,
+    required List<Uint8List> certificates,
+    String? fieldName,
+    String? signerName,
+    String? reason,
+    String? location,
+    String? contactInfo,
+    DateTime? signingTime,
+    PdfSignatureAppearance? appearance,
+  }) async {
+    if (certificates.isEmpty) {
+      throw ArgumentError('the signer certificate is required');
+    }
+    final time = signingTime ?? DateTime.now();
+    final revision = _emitSignatureRevision(
+      subFilter: 'adbe.pkcs7.detached',
+      capacity: _cmsCapacity(certificates),
+      fieldName: fieldName,
+      signingTime: time,
+      signerName: signerName,
+      reason: reason,
+      location: location,
+      contactInfo: contactInfo,
+      defaultSignerCert: certificates.first,
+      appearance: appearance,
+    );
+    final signedAttrs = cmsSignedAttributes(
+      contentDigest: revision.digestSha256(),
+      signingTime: time.toUtc(),
+    );
+    final signature = await signer(signedAttrs);
+    final cms = cmsAssembleSignedData(
+      signedAttributes: signedAttrs,
+      signature: signature,
+      certificates: certificates,
     );
     _writeContents(revision, cms);
     return revision.saved;
@@ -183,7 +253,7 @@ extension PdfSigning on PdfEditor {
       appearance: appearance,
     );
     final cms = cmsSignDetachedEcdsa(
-      contentDigest: crypto.sha256.convert(revision.signedData).bytes,
+      contentDigest: revision.digestSha256(),
       privateKey: privateKey,
       certificates: certificates,
       signingTime: time,
@@ -346,11 +416,7 @@ extension PdfSigning on PdfEditor {
     saved.setRange(rangeStart, rangeStart + byteRange.length, byteRange);
     PdfPerf.end(PdfPerfPhase.byteRangePatch, tPatch);
 
-    final signedBytes = BytesBuilder(copy: false)
-      ..add(Uint8List.sublistView(saved, 0, contentsStart))
-      ..add(Uint8List.sublistView(saved, contentsEnd));
-    return _SignatureRevision(
-        saved, contentsStart, contentsEnd, signedBytes.takeBytes());
+    return _SignatureRevision(saved, contentsStart, contentsEnd);
   }
 
   /// Fills a revision's /Contents placeholder with [blob] (a CMS container
@@ -392,10 +458,14 @@ extension PdfSigning on PdfEditor {
   /// Ten digits so the patched real values always fit.
   static const _rangePlaceholder = 9999999999;
 
-  static String _pdfDate(DateTime utc) {
+  static String _pdfDate(DateTime time) {
     String two(int v) => v.toString().padLeft(2, '0');
-    return 'D:${utc.year}${two(utc.month)}${two(utc.day)}'
-        '${two(utc.hour)}${two(utc.minute)}${two(utc.second)}Z';
+    final base = 'D:${time.year}${two(time.month)}${two(time.day)}'
+        '${two(time.hour)}${two(time.minute)}${two(time.second)}';
+    final off = time.timeZoneOffset;
+    if (off == Duration.zero) return '${base}Z';
+    final sign = off.isNegative ? '-' : '+';
+    return "$base$sign${two(off.abs().inHours)}'${two(off.abs().inMinutes % 60)}'";
   }
 
   static String? _subjectCn(Uint8List certDer) {
@@ -508,9 +578,19 @@ extension PdfSigning on PdfEditor {
     // AcroForm /Fields
     final acroForm = cos.resolve(document.catalog['AcroForm']);
     if (acroForm is CosDictionary) {
-      final fields = cos.resolve(acroForm['Fields']);
+      final fieldsRaw = acroForm['Fields'];
+      final fields = cos.resolve(fieldsRaw);
       if (fields is CosArray) {
-        fields.items.add(fieldRef);
+        // When /Fields is an *indirect* array, mutating the resolved array in
+        // place leaves the array object unstaged, so the incremental updater
+        // writes the old bytes and the new signature field is lost. Rebuild
+        // and re-stage whichever object owns the array (the /Annots rule).
+        final rebuilt = CosArray([...fields.items, fieldRef]);
+        if (fieldsRaw is CosReference) {
+          _updater.replaceObject(fieldsRaw.objectNumber, rebuilt);
+        } else {
+          acroForm['Fields'] = rebuilt;
+        }
       } else {
         acroForm['Fields'] = CosArray([fieldRef]);
       }
@@ -655,17 +735,17 @@ extension PdfSigning on PdfEditor {
 
     final details = <String>[
       if (config.showName && name != null && name.isNotEmpty)
-        'Digitally signed by $name',
+        '${config.signedByLabel} $name',
       if (config.showDate && info.time != null)
-        'Date: ${_displaySignDate(info.time!)}',
+        '${config.dateLabel} ${_displaySignDate(info.time!)}',
       if (config.showReason &&
           info.reason != null &&
           info.reason!.isNotEmpty)
-        'Reason: ${info.reason}',
+        '${config.reasonLabel} ${info.reason}',
       if (config.showLocation &&
           info.location != null &&
           info.location!.isNotEmpty)
-        'Location: ${info.location}',
+        '${config.locationLabel} ${info.location}',
     ];
 
     // Column split coordinate (no drawn divider line): left panel when both
@@ -844,24 +924,40 @@ extension PdfSigning on PdfEditor {
     writer.restore();
   }
 
-  /// Acrobat-style display date: `2026.06.10 12:00:00 +00'00'`. Signing
-  /// times are normalized to UTC before display.
+  /// Acrobat-style display date: `2026.06.10 12:00:00 +00'00'`. The offset
+  /// of the [DateTime] passed is preserved; UTC input gives `+00'00'`.
   static String _displaySignDate(DateTime time) {
-    final utc = time.toUtc();
     String two(int v) => v.toString().padLeft(2, '0');
-    return '${utc.year}.${two(utc.month)}.${two(utc.day)} '
-        "${two(utc.hour)}:${two(utc.minute)}:${two(utc.second)} +00'00'";
+    final off = time.timeZoneOffset;
+    final sign = off.isNegative ? '-' : '+';
+    return '${time.year}.${two(time.month)}.${two(time.day)} '
+        '${two(time.hour)}:${two(time.minute)}:${two(time.second)} '
+        "$sign${two(off.abs().inHours)}'${two(off.abs().inMinutes % 60)}'";
   }
 }
 
-/// A written-but-unsigned revision: the buffer with patched /ByteRange, the
-/// /Contents hex span to fill, and the signed byte ranges to digest.
+/// A written-but-unsigned revision: the buffer with patched /ByteRange and
+/// the /Contents hex span to fill. The signed content is the two /ByteRange
+/// spans (everything either side of the /Contents hex).
 class _SignatureRevision {
-  _SignatureRevision(
-      this.saved, this.contentsStart, this.contentsEnd, this.signedData);
+  _SignatureRevision(this.saved, this.contentsStart, this.contentsEnd);
 
   final Uint8List saved;
   final int contentsStart;
   final int contentsEnd;
-  final Uint8List signedData;
+
+  /// SHA-256 of the signed byte ranges, digested over sublist views of
+  /// [saved] without materialising the concatenation (which would double
+  /// peak memory and memcpy the whole document per sign).
+  List<int> digestSha256() {
+    crypto.Digest? digest;
+    final sink = crypto.sha256.startChunkedConversion(
+        ChunkedConversionSink<crypto.Digest>.withCallback((d) {
+      digest = d.single;
+    }));
+    sink.add(Uint8List.sublistView(saved, 0, contentsStart));
+    sink.add(Uint8List.sublistView(saved, contentsEnd));
+    sink.close();
+    return digest!.bytes;
+  }
 }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 import 'dart:math' as math;
@@ -73,7 +74,10 @@ bool pdfRenderWorkerUseSharedArrayBuffer = true;
 PdfRenderWorker startRenderWorker(Uint8List bytes) {
   final url = pdfRenderWorkerScriptUrl;
   _wlog('startRenderWorker url=$url bytes=${bytes.length}');
-  if (url == null) return _WebRenderWorker.disabled();
+  if (url == null) {
+    _warnMainThreadRendering();
+    return _WebRenderWorker.disabled();
+  }
   try {
     return _WebRenderWorker(bytes, url);
   } catch (e) {
@@ -83,9 +87,89 @@ PdfRenderWorker startRenderWorker(Uint8List bytes) {
   }
 }
 
+/// Whether the one-time main-thread-rendering advisory has already fired.
+bool _warnedMainThreadRendering = false;
+
+/// Warns once, in debug builds only, that web page rendering is falling back to
+/// the main thread because no render-worker script is configured
+/// ([pdfRenderWorkerScriptUrl] is null) - the silent performance cliff an app
+/// hits after upgrading if it never opted into the worker asset. Points at the
+/// one-line fix.
+///
+/// The whole body runs inside an `assert`, so release and profile builds strip
+/// it and stay silent; it is emitted once per session to avoid spamming the
+/// console on every document open. A host that deliberately forces main-thread
+/// rendering can ignore it.
+void _warnMainThreadRendering() {
+  assert(() {
+    if (_warnedMainThreadRendering) return true;
+    _warnedMainThreadRendering = true;
+    developer.log(
+      'Web page rendering is running on the MAIN THREAD: no render-worker '
+      'script is configured (pdfRenderWorkerScriptUrl is null), so scrolling '
+      'and page decode will jank on large documents. For off-main-thread '
+      'rendering, depend on the dart_pdf_editor_assets package and call '
+      'registerBundledEditorAssets() once at startup, or set '
+      'pdfRenderWorkerScriptUrl to your own compiled worker URL. (Debug-only '
+      'notice, shown once; ignore it if main-thread rendering is intentional.)',
+      name: 'dart_pdf_editor.render_worker',
+      level: 900, // WARNING
+    );
+    return true;
+  }());
+}
+
+/// Pre-booted Web Workers waiting for their first `init`. The expensive part of
+/// web worker startup is fetching + compiling the ~1 MB dart2js worker script
+/// and booting its runtime (#450: ~1.45 s on a phone), and none of it depends on
+/// the document. Constructing the Web Worker at app boot lets that happen while
+/// the user is still choosing a file; the real worker then adopts a pre-booted
+/// instance and only posts `init` (the document hand-off, a few tens of ms). The
+/// worker is silent until it receives `init`, so nothing is lost before adoption.
+final _prewarmedWorkers = <web.Worker>[];
+
+/// Constructs up to [count] Web Workers now (fetch + compile + boot the worker
+/// script) so a later [startRenderWorker] adopts a pre-booted one instead of
+/// paying the full startup on the critical path. Tops the pool up to [count]
+/// rather than doubling it, so repeated calls are safe. No-op when no worker
+/// script is configured ([pdfRenderWorkerScriptUrl] null) or construction throws
+/// (bad URL / CSP) - the normal path then just constructs on demand as before.
+void prewarmRenderWorkers(int count) {
+  final url = pdfRenderWorkerScriptUrl;
+  if (url == null) return;
+  while (_prewarmedWorkers.length < count) {
+    try {
+      final worker = web.Worker(url.toJS);
+      // Swallow a boot-time error rather than leave it unhandled; the adopter
+      // installs the real handler, and its ready-watchdog falls back to local
+      // if a broken worker never opens the document.
+      worker.onerror = ((web.Event _) {}).toJS;
+      _prewarmedWorkers.add(worker);
+      _wlog('prewarmed worker ${_prewarmedWorkers.length}/$count from $url');
+    } catch (e) {
+      _wlog('prewarm construction threw: $e - skipping');
+      return;
+    }
+  }
+}
+
+/// Terminates any prewarmed workers not yet adopted (host teardown, or a host
+/// opting out of worker rendering after prewarming). Adopted workers are owned
+/// by their [_WebRenderWorker] and unaffected.
+void disposePrewarmedRenderWorkers() {
+  for (final worker in _prewarmedWorkers) {
+    worker.terminate();
+  }
+  _prewarmedWorkers.clear();
+}
+
 class _WebRenderWorker extends PdfRenderWorker {
   _WebRenderWorker(Uint8List bytes, String scriptUrl) {
-    final worker = web.Worker(scriptUrl.toJS);
+    // Adopt a pre-booted worker (its fetch/compile/boot already overlapped the
+    // file pick) when one is available, else construct on demand as before.
+    final worker = _prewarmedWorkers.isNotEmpty
+        ? _prewarmedWorkers.removeAt(0)
+        : web.Worker(scriptUrl.toJS);
     _worker = worker;
     worker.onmessage = ((web.MessageEvent event) => _onMessage(event)).toJS;
     // A worker-level error (script failed to load/parse) is terminal: behave
@@ -180,10 +264,17 @@ class _WebRenderWorker extends PdfRenderWorker {
       final shared =
           (data.getProperty('shared'.toJS) as JSBoolean?)?.toDart ?? false;
       final openUs = (data.getProperty('openUs'.toJS) as JSNumber?)?.toDartInt;
+      final browserImageDecode =
+          (data.getProperty('browserImageDecode'.toJS) as JSBoolean?)?.toDart;
+      final browserImageDecodeMissing =
+          (data.getProperty('browserImageDecodeMissing'.toJS) as JSString?)
+              ?.toDart;
       final startupUs = _perfClock?.elapsedMicroseconds;
       _wlog(
         'ready worker=$_workerNumber '
         '(worker opened the document, sharedBytes=$shared)'
+        '${browserImageDecode == null ? '' : ' browserImageDecode=$browserImageDecode'}'
+        '${browserImageDecodeMissing == null ? '' : ' missing=$browserImageDecodeMissing'}'
         '${startupUs == null ? '' : ' startup=${_traceMs(startupUs)}'}'
         '${openUs == null ? '' : ' open=${_traceMs(openUs)}'}',
       );
@@ -780,6 +871,7 @@ class _WebRequestTrace {
   int deserializeUs = 0;
   bool transcriptHit = false;
   String? cosStatsJson;
+  String? imageDecodeSummary;
 
   void receive(JSObject data, int nowUs) {
     receivedUs = nowUs;
@@ -793,6 +885,8 @@ class _WebRequestTrace {
     transcriptHit =
         (data.getProperty('transcriptHit'.toJS) as JSBoolean?)?.toDart ?? false;
     cosStatsJson = (data.getProperty('cosStats'.toJS) as JSString?)?.toDart;
+    imageDecodeSummary =
+        (data.getProperty('imageDecode'.toJS) as JSString?)?.toDart;
   }
 
   /// Assembles this request's collected halves into one unified [PdfRenderTrace]
@@ -812,6 +906,7 @@ class _WebRequestTrace {
       ..transferUs = math.max(0, roundTripUs - workerUs)
       ..deserializeUs = deserializeUs
       ..transcriptHit = transcriptHit
+      ..imageDecodeSummary = imageDecodeSummary
       ..cosStats = cosStatsJson == null
           ? null
           : PdfPerfStats.fromJson(
@@ -832,7 +927,8 @@ class _WebRequestTrace {
       'decode=${_traceMs(decodeUs)} serialize=${_traceMs(serializeUs)} '
       'bin=${_traceMs(binUs)} transfer=${_traceMs(transferUs)} '
       'deserialize=${_traceMs(deserializeUs)} total=${_traceMs(totalUs)} '
-      'transcript=${transcriptHit ? 'hit' : 'miss'}',
+      'transcript=${transcriptHit ? 'hit' : 'miss'}'
+      '${imageDecodeSummary == null ? '' : ' imageDecode=$imageDecodeSummary'}',
     );
   }
 }

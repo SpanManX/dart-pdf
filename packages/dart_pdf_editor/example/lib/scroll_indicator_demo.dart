@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
 
+import 'l10n/app_l10n.dart';
+
 /// A self-contained showcase of the viewer's public scroll-indicator API
 /// (issues #326 and #428): [PdfViewer.scrollIndicatorBuilder] fed by a live
 /// [PdfScrollMetrics], driven back with
@@ -80,23 +82,23 @@ class _ScrollIndicatorDemoScreenState extends State<ScrollIndicatorDemoScreen> {
     final horizontal = _layout.scrollAxis == Axis.horizontal;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scroll indicator API'),
+        title: Text(appL10n(context).scrollDemoTitle),
         actions: [
           IconButton(
             tooltip: horizontal
-                ? 'Switch to vertical layout'
-                : 'Switch to horizontal layout',
+                ? appL10n(context).scrollDemoSwitchVertical
+                : appL10n(context).scrollDemoSwitchHorizontal,
             icon: Icon(horizontal ? Icons.view_day : Icons.view_column),
             onPressed: _toggleLayout,
           ),
           IconButton(
-            tooltip: 'Previous page',
+            tooltip: appL10n(context).scrollDemoPreviousPage,
             icon: Icon(
                 horizontal ? Icons.keyboard_arrow_left : Icons.keyboard_arrow_up),
             onPressed: () => _step(-1),
           ),
           IconButton(
-            tooltip: 'Next page',
+            tooltip: appL10n(context).scrollDemoNextPage,
             icon: Icon(horizontal
                 ? Icons.keyboard_arrow_right
                 : Icons.keyboard_arrow_down),
@@ -176,8 +178,10 @@ class _PageScrubberState extends State<_PageScrubber> {
     final horizontal = metrics.scrollAxis == Axis.horizontal;
     return Align(
       // the track hugs the edge along the scroll axis: the bottom for a
-      // horizontal layout, the right for a vertical one
-      alignment: horizontal ? Alignment.bottomCenter : Alignment.centerRight,
+      // horizontal layout, the trailing edge (right in LTR, left in RTL) for
+      // a vertical one
+      alignment:
+          horizontal ? Alignment.bottomCenter : AlignmentDirectional.centerEnd,
       child: SizedBox(
         width: horizontal ? null : _trackBreadth,
         height: horizontal ? _trackBreadth : null,
@@ -280,7 +284,8 @@ class _PageScrubberState extends State<_PageScrubber> {
                 ? null
                 : (thumbLead + thumbMain / 2 - 18).clamp(0.0, trackMain - 36),
             child: _Bubble(
-              'Page ${metrics.currentPage + 1} / ${metrics.pageCount}',
+              appL10n(context).scrollDemoPageBubble(
+                  metrics.currentPage + 1, metrics.pageCount),
             ),
           ),
       ],

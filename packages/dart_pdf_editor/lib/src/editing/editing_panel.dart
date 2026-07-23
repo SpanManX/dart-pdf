@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
+import '../l10n/pdf_l10n.dart';
 import '../scrollbar.dart';
 
 /// Which side of the viewer a sidebar panel's resize grip belongs to. Its
@@ -37,19 +38,30 @@ enum PdfPanelDock {
 /// dragged from a move handle onto a drop zone and the identity a shell maps
 /// to the panel's persisted [PdfPanelDock].
 enum PdfDockablePanel {
-  thumbnails('Pages', Icons.grid_view),
-  search('Search results', Icons.manage_search),
-  bookmarks('Bookmarks', Icons.bookmarks_outlined),
-  annotations('Annotations', Icons.list_alt),
-  properties('Properties', Icons.tune);
+  thumbnails(Icons.grid_view),
+  search(Icons.manage_search),
+  bookmarks(Icons.bookmarks_outlined),
+  annotations(Icons.list_alt),
+  properties(Icons.tune);
 
-  const PdfDockablePanel(this.label, this.icon);
-
-  /// A human-readable name shown on the drag feedback chip.
-  final String label;
+  const PdfDockablePanel(this.icon);
 
   /// The panel's glyph, shown on the drag feedback chip.
   final IconData icon;
+
+  /// A localized, human-readable name shown on the drag feedback chip and
+  /// panel headers. Reuses the shell's panel names so the same words are
+  /// translated once.
+  String label(BuildContext context) {
+    final l = pdfL10n(context);
+    return switch (this) {
+      PdfDockablePanel.thumbnails => l.shellPanelPages,
+      PdfDockablePanel.search => l.shellPanelSearchResults,
+      PdfDockablePanel.bookmarks => l.shellPanelBookmarks,
+      PdfDockablePanel.annotations => l.shellPanelAnnotations,
+      PdfDockablePanel.properties => l.shellPanelProperties,
+    };
+  }
 }
 
 /// Whether panel row controls should be revealed by mouse hover.
@@ -110,7 +122,7 @@ class PdfSidebarCloseButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
         icon: const Icon(Icons.close, size: 18),
-        tooltip: 'Close',
+        tooltip: pdfL10n(context).close,
         visualDensity: VisualDensity.compact,
         onPressed: onPressed,
       );
@@ -136,7 +148,7 @@ class PdfSidebarMoveHandle extends StatelessWidget {
     final handle = MouseRegion(
       cursor: SystemMouseCursors.move,
       child: Tooltip(
-        message: 'Drag to move panel',
+        message: pdfL10n(context).panelDragToMovePanel,
         child: Icon(Icons.drag_indicator,
             size: 18, color: scheme.onSurfaceVariant),
       ),
@@ -183,7 +195,7 @@ class PdfPanelDragFeedback extends StatelessWidget {
         child: Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(panel.icon, size: 18, color: scheme.onPrimaryContainer),
           const SizedBox(width: 8),
-          Text(panel.label,
+          Text(panel.label(context),
               style: TextStyle(
                   color: scheme.onPrimaryContainer,
                   fontWeight: FontWeight.w500)),
