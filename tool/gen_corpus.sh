@@ -48,4 +48,9 @@ echo "generating public corpus into $OUT"
 (cd "$ROOT" &&
   $DART packages/pdf_cos/tool/gen_hatch_pdf.dart \
     "$OUT/hatch-sections-4p.pdf" 4 70 20260724)
+# Type3-font text: the TeX-era CharProc-per-glyph class - half vector procs,
+# half 1-bit inline ImageMasks (#535; type3-text-sweep / type3-text-render).
+(cd "$ROOT" &&
+  $DART packages/pdf_cos/tool/gen_type3_pdf.dart \
+    "$OUT/type3-text-6p.pdf" 6 9000 20260724)
 ls -la "$OUT" | awk 'NR>1 {print "  " $NF "\t" $5 " bytes"}' | grep -v '^\s*\.'
