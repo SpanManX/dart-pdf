@@ -2323,6 +2323,13 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         });
       }
     }
+    if (_controller.shouldKeepEditingTextFocused &&
+        _textEditRect != null &&
+        !_textEditFocus.hasFocus) {
+      // the tune popup just opened over this session and may have stolen
+      // focus - reclaim it so the selection highlight comes straight back
+      _reclaimEditingTextFocus();
+    }
     final editRevision = _controller.editSelectedTextRevision;
     if (editRevision != _editSelectedTextRevision) {
       _editSelectedTextRevision = editRevision;
@@ -2932,11 +2939,50 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   /// (Escape cancels first, so by the time the unfocus arrives the
   /// session is already gone and this is a no-op.)
   void _onTextEditFocus() {
-    if (!_textEditFocus.hasFocus &&
-        !_textEditStyleMenuOpen &&
-        !_controller.isEditingTextFocusCommitHeld) {
-      _commitTextEdit();
+    if (_textEditFocus.hasFocus || _textEditStyleMenuOpen) return;
+    // While the tune popup is open we keep the field focused so its selection
+    // highlight (which a TextField only paints when focused) stays on - both
+    // as the popup opens and after each control tap, so the user keeps seeing
+    // the run they're restyling. A control tap steals focus; take it straight
+    // back. But if the popup's own value field took focus (the user is typing
+    // an exact number), leave the keyboard there.
+    if (_controller.shouldKeepEditingTextFocused) {
+      if (_textEditRect != null && !_primaryFocusIsEditable()) {
+        _reclaimEditingTextFocus();
+      }
+      return;
     }
+    if (_controller.isEditingTextFocusCommitHeld) return;
+    _commitTextEdit();
+  }
+
+  /// Pulls keyboard focus back to the in-place editor before the next paint,
+  /// so the selection highlight never blanks for a frame (no flash). Guarded
+  /// against the field having meanwhile committed or a popup value field
+  /// having claimed the keyboard.
+  void _reclaimEditingTextFocus() {
+    scheduleMicrotask(() {
+      if (!mounted ||
+          _textEditRect == null ||
+          !_controller.shouldKeepEditingTextFocused ||
+          _textEditFocus.hasFocus ||
+          _primaryFocusIsEditable()) {
+        return;
+      }
+      _textEditFocus.requestFocus();
+    });
+  }
+
+  /// Whether the primary focus is a real text input - used to tell "a popup
+  /// button stole focus, reclaim it" from "the user tapped a value field to
+  /// type, leave it be". A focused field's node is attached to the `Focus`
+  /// [EditableText] builds around itself, so that node's context has an
+  /// [EditableText] ancestor; a bare [FocusScopeNode] (what a plain unfocus
+  /// lands on) does not, even though text fields sit under it elsewhere.
+  static bool _primaryFocusIsEditable() {
+    final ctx = FocusManager.instance.primaryFocus?.context;
+    return ctx != null &&
+        ctx.findAncestorWidgetOfExactType<EditableText>() != null;
   }
 
   /// Holds the inline editor's focus while a pointer is down on the style

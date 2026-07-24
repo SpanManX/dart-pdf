@@ -1767,6 +1767,7 @@ class PdfEditingController extends ChangeNotifier {
   int _editSelectedTextRevision = 0;
   int _editingTextFocusHoldCount = 0;
   int _editingTextFocusHoldRevision = 0;
+  int _keepEditingTextFocusedCount = 0;
 
   /// Whether an in-place text editor (the free-text tool's box) is open
   /// on a page. While it is, the viewer releases its keyboard shortcuts -
@@ -1789,6 +1790,29 @@ class PdfEditingController extends ChangeNotifier {
   bool get isEditingTextFocusCommitHeld => _editingTextFocusHoldCount > 0;
 
   int get editingTextFocusHoldRevision => _editingTextFocusHoldRevision;
+
+  /// Whether an open in-place text editor should hold on to keyboard focus.
+  /// Set while the tune popup is open over a text-editing session: a
+  /// `TextField` only paints its selection highlight while focused, so the
+  /// popup's controls (which steal focus on tap on some platforms) would
+  /// otherwise hide the very selection they restyle. The overlay reclaims
+  /// focus for the field while this is true. Only meaningful while editing.
+  bool get shouldKeepEditingTextFocused =>
+      _editingText && _keepEditingTextFocusedCount > 0;
+
+  /// Begins a keep-focused window (see [shouldKeepEditingTextFocused]).
+  /// Balanced by [endKeepEditingTextFocused]; reference-counted so nested
+  /// popups don't drop the guard early.
+  void beginKeepEditingTextFocused() {
+    _keepEditingTextFocusedCount++;
+    notifyListeners();
+  }
+
+  void endKeepEditingTextFocused() {
+    if (_keepEditingTextFocusedCount == 0) return;
+    _keepEditingTextFocusedCount--;
+    notifyListeners();
+  }
 
   /// Marks an in-place text editor open/closed. Called by the page
   /// overlay that owns the editor.
