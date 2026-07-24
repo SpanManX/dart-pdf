@@ -343,9 +343,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
         // Sticky notes / free text carry their body in /Contents; falling
         // back to empty string keeps the clipboard call legal even if
         // the annotation has no text body.
-        final text = annotation?.contents ?? '';
+        final text = tab?.viewer!.selectedText;  // 用 controller 的 selectedText
         print(text);
-        await Clipboard.setData(ClipboardData(text: text));
+        print(_active);
+        await Clipboard.setData(ClipboardData(text: text.toString()));
         _toast(l10n.exCopiedToClipboard);
       case _DemoAnnotAction.note:
         // Wire this to your app's note-insertion flow. The demo just
