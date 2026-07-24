@@ -7,6 +7,7 @@ import 'package:pdf_graphics/pdf_graphics.dart';
 
 import 'editing/editing_bookmarks.dart';
 import 'editing/editing_controller.dart';
+import 'editing/editing_interaction.dart';
 import 'editing/editing_menu.dart';
 import 'editing/editing_panel.dart';
 import 'editing/editing_pencil.dart';
@@ -226,6 +227,7 @@ class PdfEditorView extends StatefulWidget {
     this.pageOverlayBuilder,
     this.annotationMenuBuilder,
     this.contextMenuEnabled = true,
+    this.onContextMenuRequested,
     this.formImagePicker,
     this.imagePicker,
     this.systemImagePasteProvider,
@@ -303,6 +305,7 @@ class PdfEditorView extends StatefulWidget {
     this.pageOverlayBuilder,
     this.annotationMenuBuilder,
     this.contextMenuEnabled = true,
+    this.onContextMenuRequested,
     this.formImagePicker,
     this.imagePicker,
     this.systemImagePasteProvider,
@@ -448,6 +451,9 @@ class PdfEditorView extends StatefulWidget {
 
   /// See [PdfViewer.contextMenuEnabled].
   final bool contextMenuEnabled;
+
+  /// See [PdfViewer.onContextMenuRequested].
+  final PdfContextMenuHost? onContextMenuRequested;
 
   /// See [PdfViewer.formImagePicker].
   final PdfFormImagePicker? formImagePicker;
@@ -702,6 +708,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
         pageOverlayBuilder: widget.pageOverlayBuilder,
         annotationMenuBuilder: widget.annotationMenuBuilder,
         contextMenuEnabled: widget.contextMenuEnabled,
+        onContextMenuRequested: widget.onContextMenuRequested,
         formImagePicker: widget.formImagePicker,
         imagePicker: widget.imagePicker,
         systemImagePasteProvider: widget.systemImagePasteProvider,
@@ -1339,6 +1346,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                         pageOverlayBuilder: widget.pageOverlayBuilder,
                         annotationMenuBuilder: widget.annotationMenuBuilder,
                         contextMenuEnabled: widget.contextMenuEnabled,
+                        onContextMenuRequested:
+                            widget.onContextMenuRequested,
                         formImagePicker: widget.formImagePicker,
                         imagePicker: widget.imagePicker,
                         systemImagePasteProvider:

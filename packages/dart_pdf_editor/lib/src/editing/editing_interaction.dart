@@ -29,6 +29,32 @@ class PdfMoveDragPreview {
 
 typedef PdfMoveDragPreviewCallback = void Function(PdfMoveDragPreview? preview);
 
+/// Fires when the host wants to render its own context menu in place of the
+/// stock annotation/text menu. Activated only when
+/// [PdfViewer.contextMenuEnabled] is false: with the default menu disabled,
+/// the viewer hands the gesture to the host instead of opening one itself.
+/// The host typically wraps this in `showMenu<_T>(context, position: ...)`
+/// at [globalPosition], and routes [pagePoint] (page coordinates) into its
+/// own hit-testing when needed.
+///
+/// To branch on annotation type from the host side, re-run the viewer's
+/// hit-test on [pagePoint]; it returns the `(slot, annotation)` pair or
+/// null for plain text / empty page area:
+///
+/// ```dart
+/// onContextMenuRequested: (globalPos, pageIndex, {pagePoint = (0, 0)}) {
+///   final hit = editing.selectableAnnotationAt(
+///     pageIndex, pagePoint.$1, pagePoint.$2);
+///   // hit == null: page text / empty area
+///   // hit != null: (slot, annotation) for that press point
+/// }
+/// ```
+typedef PdfContextMenuHost = void Function(
+  Offset globalPosition,
+  int pageIndex, {
+  (double, double) pagePoint,
+});
+
 /// The viewer-owned services an editing interaction may request.
 ///
 /// Recognizers and preview painters stay internal to the page overlay. This
@@ -41,6 +67,7 @@ class PdfEditingInteractionHost {
     this.edgeAutoScroll,
     this.showAnnotationMenu,
     this.showFormFieldMenu,
+    this.requestContextMenu,
     this.resolvePagePoint,
     this.moveDragPreview,
     this.textEditClosed,
@@ -53,6 +80,7 @@ class PdfEditingInteractionHost {
       {(double, double)? pagePoint})? showAnnotationMenu;
   final void Function(Offset globalPosition, String fieldName,
       {int? widgetIndex})? showFormFieldMenu;
+  final PdfContextMenuHost? requestContextMenu;
   final (int, double, double)? Function(Offset globalPosition)?
       resolvePagePoint;
   final PdfMoveDragPreviewCallback? moveDragPreview;

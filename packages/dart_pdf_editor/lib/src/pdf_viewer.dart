@@ -879,6 +879,7 @@ class PdfViewer extends StatefulWidget {
     this.textSelectionMarkup = true,
     this.annotationMenuBuilder,
     this.contextMenuEnabled = true,
+    this.onContextMenuRequested,
     this.formImagePicker,
     this.fontPicker,
     this.imagePicker,
@@ -1093,6 +1094,19 @@ class PdfViewer extends StatefulWidget {
   /// button. The long-press annotation menu and selection-chip button require
   /// [editing]; the desktop text menu does not.
   final bool contextMenuEnabled;
+
+  /// Fires when the user requests a context menu (desktop right-click on
+  /// text, right-click / long-press on an annotation, touch long-press on
+  /// either) while [contextMenuEnabled] is false. The viewer does not show
+  /// a menu in that case; this callback hands the gesture to the host so it
+  /// can render its own (`showMenu`, a custom toolbar, a translated copy of
+  /// the stock items, app-specific actions). Null means "no host takeover"
+  /// - the gesture is dropped silently. Has no effect while
+  /// [contextMenuEnabled] is true (the default menu still owns the gesture).
+  ///
+  /// To branch on annotation type, re-run the viewer's hit-test on
+  /// [pagePoint]; see [PdfContextMenuHost] for an example.
+  final PdfContextMenuHost? onContextMenuRequested;
 
   /// How the form tool fills a tapped push-button field with an image
   /// (signature and logo fields) - typically a file picker returning
@@ -3538,8 +3552,18 @@ class _PdfViewerState extends State<PdfViewer>
   Future<void> _onSecondaryTapUp(TapUpDetails details) async {
     final point = _pagePointAt(details.localPosition);
     if (point == null) return;
-    if (!widget.contextMenuEnabled) return;
     final (page, x, y) = point;
+    if (!widget.contextMenuEnabled) {
+      // Host-takeover mode: hand the gesture to the host's own menu
+      // renderer instead of swallowing it. Position is the global cursor
+      // location; pagePoint is page coordinates for the host's hit tests.
+      widget.onContextMenuRequested?.call(
+        details.globalPosition,
+        page,
+        pagePoint: (x, y),
+      );
+      return;
+    }
     final editing = widget.editing;
     if (editing != null && !editing.isPickingColor) {
       // Existing form widgets become the selection in normal/select/form
@@ -3815,6 +3839,23 @@ class _PdfViewerState extends State<PdfViewer>
         behavior: SnackBarBehavior.floating,
         margin: pdfFloatingToastMargin(context),
       ));
+  }
+
+  /// Bridge from the page overlay's interaction host to the viewer's
+  /// public [PdfViewer.onContextMenuRequested]: lets the long-press
+  /// path (which lives in the overlay) hand the gesture back to the host
+  /// when the stock menu is suppressed. Returns silently if the host did
+  /// not provide a callback - the gesture just stops there.
+  void _requestContextMenu(
+    Offset globalPosition,
+    int pageIndex, {
+    (double, double) pagePoint = (0, 0),
+  }) {
+    widget.onContextMenuRequested?.call(
+      globalPosition,
+      pageIndex,
+      pagePoint: pagePoint,
+    );
   }
 
   Widget _textMenuRow(IconData icon, String label, bool enabled) => Row(
@@ -4509,23 +4550,62 @@ class _PdfViewerState extends State<PdfViewer>
       _selFocus = range.$2;
     });
     _controller._setSelection(_selectedText());
+    // Stock menu is suppressed: the host owns the popup. Selection is
+    // still in place - the host can offer Copy / Select all in its own
+    // labels or ignore the request entirely.
+    if (!widget.contextMenuEnabled) {
+      final point = _pagePointAt(details.localPosition);
+      if (point != null) {
+        widget.onContextMenuRequested?.call(
+          details.globalPosition,
+          point.$1,
+          pagePoint: (point.$2, point.$3),
+        );
+      }
+    }
   }
 
   /// Reader-mode touch long-press fallback: with no text under the
   /// press, an annotation joins the selection and gets the context
   /// menu; empty page area gets the paste menu when the clipboard has
-  /// content. Returns whether a menu opened.
+  /// content. When [widget.contextMenuEnabled] is false the stock menu
+  /// is suppressed and the gesture is handed to
+  /// [widget.onContextMenuRequested] instead - matching the right-click
+  /// and editing-overlay long-press paths. Returns whether the gesture
+  /// was consumed (stock menu opened, host callback fired, or the press
+  /// already settled into a no-op selection change).
   bool _maybeAnnotationMenu(LongPressStartDetails details) {
     final editing = widget.editing;
-    if (editing == null ||
-        editing.tool != null ||
-        editing.isPickingColor ||
-        !widget.contextMenuEnabled) {
+    // Drawing/eyedropper tools own long-press as the start of their own
+    // drag; refuse the gesture before the host sees it.
+    if (editing != null && (editing.tool != null || editing.isPickingColor)) {
       return false;
     }
     final point = _pagePointAt(details.localPosition);
     if (point == null) return false;
     final (page, x, y) = point;
+
+    if (!widget.contextMenuEnabled) {
+      // Stock menu disabled → hand the gesture to the host's renderer.
+      // Select the annotation under the press (when there is one) so the
+      // host has the same context the stock menu would have had; the host
+      // may also re-run `editing.selectableAnnotationAt` from
+      // `pagePoint` if it needs the (slot, annotation) pair.
+      if (editing != null) {
+        final hit = editing.selectableAnnotationAt(page, x, y);
+        if (hit != null && !editing.isAnnotationSelected(page, hit.$1)) {
+          editing.selectAnnotationAt(page, x, y);
+        }
+      }
+      widget.onContextMenuRequested?.call(
+        details.globalPosition,
+        page,
+        pagePoint: (x, y),
+      );
+      return true;
+    }
+
+    if (editing == null) return false;
     final hit = editing.selectableAnnotationAt(page, x, y);
     if (hit != null) {
       if (!editing.isAnnotationSelected(page, hit.$1)) {
@@ -5498,6 +5578,7 @@ class _PdfViewerState extends State<PdfViewer>
                   edgeAutoScroll: _edgeAutoScrollDelta,
                   showAnnotationMenu: _showSelectionMenu,
                   showFormFieldMenu: _showFormFieldMenu,
+                  requestContextMenu: _requestContextMenu,
                   resolvePagePoint: _resolvePagePointGlobal,
                   moveDragPreview: _onMoveDragPreview,
                   textEditClosed: _reclaimFocusAfterTextEdit,

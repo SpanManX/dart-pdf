@@ -3228,7 +3228,9 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   ///
   /// When [contextMenuEnabled] is false the press still selects the
   /// annotation (or, with a clipboard, still bails out the same way) -
-  /// only the popup is suppressed.
+  /// the popup is suppressed, and if the host registered a
+  /// [PdfEditingInteractionHost.requestContextMenu] callback the
+  /// gesture is handed to it instead.
   void _onMenuLongPress(LongPressStartDetails details) {
     final position = details.localPosition;
     final (x, y) = _geometry.toPagePoint(position);
@@ -3241,7 +3243,14 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       return;
     }
     HapticFeedback.selectionClick();
-    if (!widget.contextMenuEnabled) return;
+    if (!widget.contextMenuEnabled) {
+      _host.requestContextMenu?.call(
+        details.globalPosition,
+        widget.pageIndex,
+        pagePoint: (x, y),
+      );
+      return;
+    }
     _host.showAnnotationMenu
         ?.call(details.globalPosition, widget.pageIndex, pagePoint: (x, y));
   }
