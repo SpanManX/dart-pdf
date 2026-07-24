@@ -314,20 +314,50 @@ class _ViewerScreenState extends State<ViewerScreen> {
       ],
     );
 
-    if (picked != null && mounted) {
-      if(picked == _DemoAnnotAction.copy){
-        print(picked);
-        final hit = editing?.selectableAnnotationAt(pageIndex, x, y);
-        if (hit != null) {
-          await Clipboard.setData(ClipboardData(text: hit.$2.contents ?? ''));
-          _toast(appL10n(context).exCopiedToClipboard);
+    if (picked == null || !mounted) return;
+    final l10n = appL10n(context); // capture before the switch
+    // tab / editing / (x, y) are declared above; reuse them here.
+
+    // The viewer has already added the annotation under the press to
+    // the selection by the time this callback fires
+    // (see _maybeAnnotationMenu / _onMenuLongPress in pdf_viewer.dart
+    // and editing_overlay.dart). Read the slot from the controller
+    // instead of re-running a hit test on pagePoint - re-hit-test can
+    // miss when the viewport has shifted during the await showMenu
+    // window, and fall back to selectableAnnotationAt for plain-text
+    // entries where the viewer didn't pre-select anything.
+    PdfAnnotation? annotation;
+    if (editing != null) {
+      for (final slot in editing.selectedAnnotationSlots) {
+        if (slot.$1 == pageIndex) {
+          annotation = editing.document.page(slot.$1).annotations[slot.$2];
+          break;
         }
       }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Page ${pageIndex + 1}: $picked '
-            '(at $pagePoint)'),
-        behavior: SnackBarBehavior.floating,
-      ));
+      annotation ??=
+          editing.selectableAnnotationAt(pageIndex, x, y)?.$2;
+    }
+
+    switch (picked) {
+      case _DemoAnnotAction.copy:
+        // Sticky notes / free text carry their body in /Contents; falling
+        // back to empty string keeps the clipboard call legal even if
+        // the annotation has no text body.
+        final text = annotation?.contents ?? '';
+        print(text);
+        await Clipboard.setData(ClipboardData(text: text));
+        _toast(l10n.exCopiedToClipboard);
+      case _DemoAnnotAction.note:
+        // Wire this to your app's note-insertion flow. The demo just
+        // surfaces where the gesture landed so the host can verify the
+        // page coordinates it received.
+        _toast('Add note at page ${pageIndex + 1} ($x, $y)');
+      case _DemoAnnotAction.sendTo:
+        // Wire this to your app's send/share flow. The demo surfaces
+        // the resolved annotation so the host can verify what the
+        // host-takeover callback delivered.
+        _toast('Send page ${pageIndex + 1}'
+            '${annotation != null ? " (${annotation.subtype})" : ""}');
     }
   }
 
