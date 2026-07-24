@@ -253,7 +253,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// Demo of [PdfViewer.contextMenuEnabled]: when off, right-click and
   /// long-press annotation menus are suppressed. App-wide.
-  bool _contextMenuEnabled = true;
+  bool _contextMenuEnabled = false;
 
   /// Demo of [PdfViewer.onContextMenuRequested]: when the stock menu is
   /// off, this handler renders the demo app's own menu (a custom Copy
@@ -272,6 +272,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     // showMenu anchors at the tap point in the root overlay's coordinate
     // space; flip the global position to local with the root overlay's box.
     final local = overlay.globalToLocal(globalPosition);
+    final tab = _active;
+    final editing = tab?.session;
+    final (x, y) = pagePoint;
     final picked = await showMenu<_DemoAnnotAction>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -310,7 +313,16 @@ class _ViewerScreenState extends State<ViewerScreen> {
         ),
       ],
     );
+
     if (picked != null && mounted) {
+      if(picked == _DemoAnnotAction.copy){
+        print(picked);
+        final hit = editing?.selectableAnnotationAt(pageIndex, x, y);
+        if (hit != null) {
+          await Clipboard.setData(ClipboardData(text: hit.$2.contents ?? ''));
+          _toast(appL10n(context).exCopiedToClipboard);
+        }
+      }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Page ${pageIndex + 1}: $picked '
             '(at $pagePoint)'),
