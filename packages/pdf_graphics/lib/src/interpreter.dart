@@ -13,12 +13,18 @@ import 'device.dart';
 import 'font_info.dart';
 import 'function.dart';
 import 'icc.dart';
+import 'image_colorants.dart';
 import 'overprint_compositor.dart';
 import 'path.dart';
 import 'recording_device.dart';
 import 'render_command.dart';
 import 'shading.dart';
 import 'translating_device.dart';
+
+/// What an image draw resolves to once overprint has been applied: the stream
+/// the device should draw, and the colour a stencil paints through its mask
+/// (issue #604).
+typedef PdfImageDraw = ({CosStream stream, PdfColor stencilColor});
 
 /// Graphics state, mirroring §8.4. Text state parameters live here too
 /// because `Tf`, `Tc` etc. are saved and restored by `q`/`Q`.
@@ -201,7 +207,8 @@ class PdfInterpreter {
       bool scanImagesOnly = false,
       this.resolveOverprint = true,
       this.cancellation})
-      : _scanImages = scanImagesOnly;
+      : _scanImagesOnly = scanImagesOnly,
+        _scanImages = scanImagesOnly;
 
   final CosDocument cos;
 
@@ -302,7 +309,19 @@ class PdfInterpreter {
   // interpretation. It lets a render's decode-collect pass cost a fraction of a
   // pass instead of a redundant second full interpretation (see
   // PdfPageRenderer.renderPicture).
-  final bool _scanImages;
+  //
+  // Reset from `_scanImagesOnly` whenever the overprint state is (re)opened:
+  // a page that resolves overprint has to be walked in full even to *collect*
+  // its images, because an overprinting raster is drawn as a substitute stream
+  // the colorant buffer builds (issue #604), and a collect pass that skipped
+  // the buffer would hand the decoder a different stream than the paint pass
+  // draws - the image would then silently fail to appear. See
+  // `_beginOverprint`.
+  bool _scanImages;
+
+  // The scan-only mode the caller asked for; `_scanImages` is what is in force
+  // for the page being interpreted.
+  final bool _scanImagesOnly;
 
   var _state = _GraphicsState();
   final List<_GraphicsState> _stateStack = [];
@@ -553,6 +572,7 @@ class PdfInterpreter {
       {bool Function(PdfAnnotation)? skip, bool forPrint = false}) {
     _pageBox = page.mediaBox;
     _overprint = null;
+    _scanImages = _scanImagesOnly;
     for (final annotation in page.annotations) {
       if (annotation.isHidden) continue;
       if (forPrint) {
@@ -578,6 +598,7 @@ class PdfInterpreter {
   void drawAnnotation(PdfPage page, PdfAnnotation annotation) {
     _pageBox = page.mediaBox;
     _overprint = null;
+    _scanImages = _scanImagesOnly;
     final form = annotation.normalAppearance;
     if (form == null) {
       _drawFallbackAnnotation(annotation);
@@ -1613,7 +1634,7 @@ class PdfInterpreter {
       case 'Do':
         if (_contentVisible) _doXObject(resources, o, formDepth);
       case 'BI':
-        if (_contentVisible) _drawInlineImage(o);
+        if (_contentVisible) _drawInlineImage(resources, o);
 
       case 'sh':
         // Shadings are gradients/meshes - never images.
@@ -1892,7 +1913,8 @@ class PdfInterpreter {
     _deliveredStrokeOverprint = false;
     _deliveredOverprintMode = 0;
     _overprint = null;
-    if (!resolveOverprint || !debugResolveOverprint || _scanImages) return;
+    _scanImages = _scanImagesOnly;
+    if (!resolveOverprint || !debugResolveOverprint) return;
     // Building the buffer is only worth it on a page that actually enables
     // overprint - a scan of the resource tree's ExtGStates, which is cheap
     // next to interpreting the page and keeps every other page at exactly the
@@ -1901,6 +1923,12 @@ class PdfInterpreter {
     final box = page.cropBox;
     _overprint = PdfOverprintCompositor.forPageBox(
         box.left, box.bottom, box.right, box.top);
+    // The buffer needs paths, clips and colours, none of which the scan-only
+    // walk builds - and the substitute streams it produces have to be the ones
+    // the collect pass decodes. So a page that opens a buffer is walked in
+    // full even when the caller only wanted the image set. Pages that declare
+    // no overprint (the overwhelming majority) keep the cheap scan.
+    if (_overprint != null) _scanImages = false;
   }
 
   /// Whether any ExtGState reachable from [resources] turns overprint on.
@@ -2496,20 +2524,64 @@ class PdfInterpreter {
     overprint.markUnknownPath(box, PdfFillRule.nonzero);
   }
 
-  /// Records the unit square of an image draw, mapped through [transform],
-  /// as "colorants unknown" - decoded pixels carry no colorant reading.
-  void _markImageUnknown(PdfMatrix transform) {
+  /// The page-space quad an image covers: its unit square (image space, y-up)
+  /// mapped through [transform].
+  static PdfPath _imageQuad(PdfMatrix transform) => PdfPath([
+        PdfMoveTo(transform.transformX(0, 0), transform.transformY(0, 0)),
+        PdfLineTo(transform.transformX(1, 0), transform.transformY(1, 0)),
+        PdfLineTo(transform.transformX(1, 1), transform.transformY(1, 1)),
+        PdfLineTo(transform.transformX(0, 1), transform.transformY(0, 1)),
+        const PdfClosePath(),
+      ]);
+
+  /// Records an image draw in the colorant buffer and resolves its overprint,
+  /// returning what the device should actually draw (issue #604).
+  ///
+  /// An overprinting raster over a known backdrop is drawn as a **substitute**
+  /// stream whose samples are already composited in ink space
+  /// (`pdfImageOverprintStream`) - the same subtractive rule the vector path
+  /// applies, one layer above any device, so the canvas, strip and worker paths
+  /// agree by construction. Everywhere the buffer declines (no colorant
+  /// reading, a backdrop that is unknown or not one vector, translucent paint,
+  /// an open transparency group) the original stream is drawn exactly as
+  /// before.
+  ///
+  /// A stencil (/ImageMask) carries no colour of its own - it paints the fill
+  /// colour through its alpha - so it keeps its stream and gets a resolved
+  /// [PdfImageDraw.stencilColor] instead (see [PdfOverprintCompositor.stencil]).
+  PdfImageDraw _imageDrawFor(
+      CosStream stream, CosDictionary? resources, bool isStencil) {
     final overprint = _overprint;
-    if (overprint == null) return;
-    overprint.markUnknownPath(
-        PdfPath([
-          PdfMoveTo(transform.transformX(0, 0), transform.transformY(0, 0)),
-          PdfLineTo(transform.transformX(1, 0), transform.transformY(1, 0)),
-          PdfLineTo(transform.transformX(1, 1), transform.transformY(1, 1)),
-          PdfLineTo(transform.transformX(0, 1), transform.transformY(0, 1)),
-          const PdfClosePath(),
-        ]),
-        PdfFillRule.nonzero);
+    final stencilColor = _state.fillColor;
+    if (overprint == null) return (stream: stream, stencilColor: stencilColor);
+    final quad = _imageQuad(_state.ctm);
+    if (isStencil) {
+      final resolved = overprint.stencil(quad, stencilColor, _state.fillInk,
+          overprint: _state.fillOverprint,
+          mode: _state.overprintMode,
+          opaque: _opaquePaint(_state.fillAlpha));
+      return (stream: stream, stencilColor: resolved ?? stencilColor);
+    }
+    final reading = pdfImageColorants(cos, stream, resources: resources);
+    final resolved = overprint.image<CosStream>(
+      quad,
+      ink: reading?.backdropInk,
+      color: reading?.uniformColor ?? PdfColor.black,
+      hasColorants: reading != null,
+      overprint: _state.fillOverprint,
+      mode: _state.overprintMode,
+      opaque: _opaquePaint(_state.fillAlpha),
+      resolve: (backdrop, backdropColor) => pdfImageOverprintStream(
+        cos,
+        stream,
+        resources: resources,
+        backdrop: backdrop,
+        backdropColor: backdropColor,
+        mode: _state.overprintMode,
+        spotEquivalents: overprint.spotEquivalents,
+      ),
+    );
+    return (stream: resolved ?? stream, stencilColor: stencilColor);
   }
 
   /// Executes a Type3 glyph procedure: a tiny content stream in glyph space,
@@ -3102,14 +3174,15 @@ class PdfInterpreter {
     final subtype = xobject.dictionary['Subtype'];
     final name = subtype is CosName ? subtype.value : '';
     if (name == 'Image') {
-      _markImageUnknown(_state.ctm);
+      final isStencil = cos.resolve(xobject.dictionary['ImageMask']) ==
+          const CosBoolean(true);
+      final draw = _imageDrawFor(xobject, resources, isStencil);
       device.drawImage(PdfImageRequest(
-        stream: xobject,
+        stream: draw.stream,
         transform: _state.ctm,
         alpha: _state.fillAlpha,
-        isStencil: cos.resolve(xobject.dictionary['ImageMask']) ==
-            const CosBoolean(true),
-        stencilColor: _state.fillColor,
+        isStencil: isStencil,
+        stencilColor: draw.stencilColor,
       ));
       return;
     }
@@ -3253,7 +3326,7 @@ class PdfInterpreter {
     }
   }
 
-  void _drawInlineImage(List<CosObject> o) {
+  void _drawInlineImage(CosDictionary resources, List<CosObject> o) {
     if (o.length < 2 || o[0] is! CosDictionary || o[1] is! CosString) return;
     final abbreviated = o[0] as CosDictionary;
     // inline image dictionaries use abbreviated keys (§8.9.7, table 91)
@@ -3272,13 +3345,18 @@ class PdfInterpreter {
     abbreviated.entries.forEach((key, value) {
       dict[expansions[key] ?? key] = value;
     });
-    _markImageUnknown(_state.ctm);
+    final isStencil = dict['ImageMask'] == const CosBoolean(true);
+    // An inline image's stream is synthesized fresh on every pass, so consumers
+    // key it by value - which a substitute (also fresh each pass) satisfies
+    // exactly as the original does.
+    final draw = _imageDrawFor(
+        CosStream(dict, (o[1] as CosString).bytes), resources, isStencil);
     device.drawImage(PdfImageRequest(
-      stream: CosStream(dict, (o[1] as CosString).bytes),
+      stream: draw.stream,
       transform: _state.ctm,
       alpha: _state.fillAlpha,
-      isStencil: dict['ImageMask'] == const CosBoolean(true),
-      stencilColor: _state.fillColor,
+      isStencil: isStencil,
+      stencilColor: draw.stencilColor,
       isInline: true,
     ));
   }
