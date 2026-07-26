@@ -43,6 +43,14 @@ final class FileAccessExecutor {
       }
     }
   }
+
+  /// Runs native file work without a Flutter result callback.
+  ///
+  /// AppDelegate uses this for files delivered by Finder before the Flutter
+  /// method channels are ready.
+  func perform(_ operation: @escaping () -> Void) {
+    queue.async(execute: operation)
+  }
 }
 
 class MainFlutterWindow: NSWindow {

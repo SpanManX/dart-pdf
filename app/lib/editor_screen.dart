@@ -470,7 +470,11 @@ class _EditorScreenState extends State<EditorScreen>
       // Let the tab left active materialize now that restore is done.
       if (mounted) setState(() {});
     }
-    _sessionLoaded = true;
+    if (mounted) {
+      setState(() => _sessionLoaded = true);
+    } else {
+      _sessionLoaded = true;
+    }
     unawaited(_persistSession());
   }
 
@@ -2572,7 +2576,12 @@ class _EditorScreenState extends State<EditorScreen>
         recents: _recents,
         onOpen: _pickAndOpen,
         onOpenRecent: _openRecent,
-        thumbnails: _recentThumbnails,
+        // Recents can load before the session list. Starting their first-page
+        // renders during that transient welcome frame wastes enough platform-
+        // thread work to beachball macOS, only for restore to replace the
+        // welcome screen immediately. Enable them once restore has decided
+        // that there really is no document to show.
+        thumbnails: _sessionLoaded ? _recentThumbnails : null,
       );
     }
     if (tab.isDeferredPath) {
