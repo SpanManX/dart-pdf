@@ -575,6 +575,113 @@ void main() {
       expect(restored.request.decoded!.rgba, decoded.rgba);
     });
 
+    test('a shared image cache makes a re-record byte-identical and free', () {
+      // The worker records the same page several times in one scroll and each
+      // serialize re-decoded every image - one device page paid ~900ms of
+      // pure-Dart CMYK decode three times (#451). Pins that the codec actually
+      // consults the cache it is handed, and that reuse changes nothing.
+      final cos = CosDocument.open(buildClassicPdf());
+      // 2x2 DeviceRGB, uncompressed: decoded by the pure-Dart path, so it goes
+      // through the cache rather than declining to the platform codec.
+      final stream = CosStream(
+        CosDictionary({
+          'Width': const CosInteger(2),
+          'Height': const CosInteger(2),
+          'BitsPerComponent': const CosInteger(8),
+          'ColorSpace': const CosName('DeviceRGB'),
+        }),
+        Uint8List.fromList(<int>[
+          10, 20, 30, 40, 50, 60, //
+          70, 80, 90, 100, 110, 120,
+        ]),
+      );
+      final command = PdfDrawImageCommand(PdfImageRequest(
+        stream: stream,
+        transform: PdfMatrix(64, 0, 0, 64, 0, 0),
+      ));
+
+      final uncached =
+          serializeCommands([command], cos: cos, decodeImages: true);
+      final cache = PdfImageDecodeCache();
+      final first = serializeCommands([command],
+          cos: cos, decodeImages: true, imageCache: cache);
+      final second = serializeCommands([command],
+          cos: cos, decodeImages: true, imageCache: cache);
+
+      expect(cache.misses, greaterThan(0),
+          reason: 'the codec must route its decode through the cache');
+      expect(cache.hits, greaterThan(0),
+          reason: 'the second record must reuse the first decode');
+      // The whole safety argument: reuse is byte-identical to decoding again,
+      // so the cache can never change what a record renders.
+      expect(second, first);
+      expect(first, uncached);
+    });
+
+    test('a cached record at one ratio does not corrupt another ratio', () {
+      // The device trace's actual pattern: a page's repeat records are a
+      // full-page pass and a 128px thumbnail tile, at *different* image pixel
+      // ratios. Exact-match reuse never fires across them, and reuse that
+      // crosses ratios must still produce the bytes the uncached record would.
+      final cos = CosDocument.open(buildClassicPdf());
+      // 64x64 with a gradient, drawn into a 64pt box: at ratio 2.0 the cap is
+      // a no-op (native), at 0.2 it binds. A 2x2 image would decode the same
+      // at both and the test would pass without exercising anything.
+      final pixels = Uint8List(64 * 64 * 3);
+      for (var i = 0; i < 64 * 64; i++) {
+        pixels[i * 3] = i % 251;
+        pixels[i * 3 + 1] = (i * 7) % 253;
+        pixels[i * 3 + 2] = (i * 13) % 247;
+      }
+      final stream = CosStream(
+        CosDictionary({
+          'Width': const CosInteger(64),
+          'Height': const CosInteger(64),
+          'BitsPerComponent': const CosInteger(8),
+          'ColorSpace': const CosName('DeviceRGB'),
+        }),
+        pixels,
+      );
+      final command = PdfDrawImageCommand(PdfImageRequest(
+        stream: stream,
+        transform: PdfMatrix(64, 0, 0, 64, 0, 0),
+      ));
+
+      Uint8List? record(double ratio, PdfImageDecodeCache? cache) =>
+          serializeCommands([command],
+              cos: cos,
+              decodeImages: true,
+              maxImagePixelRatio: ratio,
+              imageCache: cache);
+
+      final pageOnly = record(2.0, null);
+      final tileOnly = record(0.2, null);
+      final cache = PdfImageDecodeCache();
+      final page = record(2.0, cache);
+      final tile = record(0.2, cache);
+
+      // Neither ratio may inherit the other's pixels.
+      expect(page, pageOnly);
+      expect(tile, tileOnly);
+      expect(page, isNot(tileOnly));
+
+      // And the routing itself: this stream has no DCT filter, so it keeps the
+      // strict exact-match rule and is retained under its target size. Only a
+      // stream whose decoder ignores the target may be retained at native
+      // resolution and downsampled to serve other ratios - doing that for a
+      // format with a real scaled decode path would substitute different
+      // pixels for the ones that path produces.
+      // At ratio 2.0 the cap is a no-op, so that record decodes natively and
+      // legitimately leaves a native entry. Probe with a fresh cache and the
+      // tile ratio alone, where the cap does bind.
+      expect(pdfImageDecodeIgnoresTarget(cos, stream), isFalse);
+      final tileOnlyCache = PdfImageDecodeCache();
+      record(0.2, tileOnlyCache);
+      expect(tileOnlyCache.get(stream, null, null), isNull,
+          reason: 'a non-DCT stream keeps exact-match: it must be retained '
+              'under its target size, never natively for downsampling');
+    });
+
     test('large decoded pixel planes stay zero-copy on deserialize', () {
       final cos = CosDocument.open(buildClassicPdf());
       final stream = CosStream(

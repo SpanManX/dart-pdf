@@ -7,6 +7,7 @@ import 'package:pdf_document/pdf_document.dart';
 
 import 'color.dart';
 import 'device.dart';
+import 'image_decode_cache.dart';
 import 'image_pixels.dart';
 import 'mesh.dart';
 import 'path.dart';
@@ -212,6 +213,7 @@ Uint8List? serializeCommands(List<PdfRenderCommand> commands,
     int? pageRasterPixels,
     bool imagePlaceholders = false,
     int? commandLimit,
+    PdfImageDecodeCache? imageCache,
     bool compactStateScopes = false}) {
   final wireCommands = compactStateScopes
       ? _compactStateScopes(commands, commandLimit: commandLimit)
@@ -240,6 +242,7 @@ Uint8List? serializeCommands(List<PdfRenderCommand> commands,
         imageDecodeRegion: imageDecodeRegion,
         budgetScale: budgetScale,
         imagePlaceholders: imagePlaceholders && !decodeImages,
+        imageCache: imageCache,
         commandLimit: compactStateScopes ? null : commandLimit);
   } on _UnserializableImage {
     return null;
@@ -483,6 +486,7 @@ void _writeCommands(
     PdfRect? imageDecodeRegion,
     double budgetScale = 1.0,
     bool imagePlaceholders = false,
+    PdfImageDecodeCache? imageCache,
     int? commandLimit}) {
   final length = commandLimit == null
       ? commands.length
@@ -495,7 +499,8 @@ void _writeCommands(
         maxImageRatio: maxImageRatio,
         imageDecodeRegion: imageDecodeRegion,
         budgetScale: budgetScale,
-        imagePlaceholders: imagePlaceholders);
+        imagePlaceholders: imagePlaceholders,
+        imageCache: imageCache);
   }
 }
 
@@ -521,7 +526,8 @@ void _writeCommand(_Writer w, PdfRenderCommand command, CosDocument? cos,
     double? maxImageRatio,
     PdfRect? imageDecodeRegion,
     double budgetScale = 1.0,
-    bool imagePlaceholders = false}) {
+    bool imagePlaceholders = false,
+    PdfImageDecodeCache? imageCache}) {
   switch (command) {
     case PdfSaveCommand():
       w.u8(_tSave);
@@ -589,8 +595,8 @@ void _writeCommand(_Writer w, PdfRenderCommand command, CosDocument? cos,
         final document = cos;
         _CommandImage? decodedImage;
         if (decode) {
-          decodedImage = _decodeImageForCommand(
-              document, request, maxImageRatio, budgetScale, imageDecodeRegion);
+          decodedImage = _decodeImageForCommand(document, request,
+              maxImageRatio, budgetScale, imageDecodeRegion, imageCache);
         }
         CosObject inlined;
         try {
@@ -638,7 +644,8 @@ void _writeCommand(_Writer w, PdfRenderCommand command, CosDocument? cos,
           maxImageRatio: maxImageRatio,
           imageDecodeRegion: imageDecodeRegion,
           budgetScale: budgetScale,
-          imagePlaceholders: imagePlaceholders); // nested
+          imagePlaceholders: imagePlaceholders,
+          imageCache: imageCache); // nested
     case PdfDrawTiledCellCommand(
         :final cellCommands,
         :final originsX,
@@ -652,7 +659,8 @@ void _writeCommand(_Writer w, PdfRenderCommand command, CosDocument? cos,
           maxImageRatio: maxImageRatio,
           imageDecodeRegion: imageDecodeRegion,
           budgetScale: budgetScale,
-          imagePlaceholders: imagePlaceholders); // nested
+          imagePlaceholders: imagePlaceholders,
+          imageCache: imageCache); // nested
   }
 }
 
@@ -662,6 +670,7 @@ _CommandImage? _decodeImageForCommand(
   double? maxImageRatio,
   double budgetScale,
   PdfRect? imageDecodeRegion,
+  PdfImageDecodeCache? imageCache,
 ) {
   final predecoded = request.decoded;
   final regionPlan = imageDecodeRegion == null
@@ -716,15 +725,40 @@ _CommandImage? _decodeImageForCommand(
       // stream supports it, else a full decode downsampled to the target
       // (equivalent to a full decode through _capImageResolution, which caps
       // to the same cappedImagePixelSize).
-      final scaled = decodePdfImage(document, request.stream,
-          targetWidth: target.$1, targetHeight: target.$2);
+      // Reuse a retained decode where one applies (#451). A page's repeat
+      // records use *different* image pixel ratios - a full-page pass and a
+      // 128px thumbnail tile - so exact-match reuse alone almost never fires
+      // on the records that matter. For a stream whose decoder ignores the
+      // target anyway, retain the native decode and downsample it here, which
+      // is precisely what decodePdfImage(target) does internally.
+      final PdfDecodedPixels? scaled;
+      if (imageCache == null) {
+        scaled = decodePdfImage(document, request.stream,
+            targetWidth: target.$1, targetHeight: target.$2);
+      } else if (pdfImageDecodeIgnoresTarget(document, request.stream)) {
+        final full = imageCache.decode(request.stream, null, null,
+            () => decodePdfImagePixels(document, request.stream));
+        scaled = full == null
+            ? null
+            : downsamplePdfDecodedPixels(full, target.$1, target.$2);
+      } else {
+        scaled = imageCache.decode(
+            request.stream,
+            target.$1,
+            target.$2,
+            () => decodePdfImage(document, request.stream,
+                targetWidth: target.$1, targetHeight: target.$2));
+      }
       if (scaled != null) {
         return _CommandImage(
             _copyImageRequest(request, decoded: scaled), scaled);
       }
     }
   }
-  final decoded = decodePdfImagePixels(document, request.stream);
+  final decoded = imageCache == null
+      ? decodePdfImagePixels(document, request.stream)
+      : imageCache.decode(request.stream, null, null,
+          () => decodePdfImagePixels(document, request.stream));
   if (decoded == null) return null;
   final capped = maxImageRatio == null
       ? decoded
