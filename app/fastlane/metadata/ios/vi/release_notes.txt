@@ -1,18 +1,23 @@
-Mới trong 3.0.0
+Mới trong 3.1.0
 
-NGÔN NGỮ
-• DartPDF hiện có 10 ngôn ngữ, hỗ trợ đầy đủ bố cục từ phải sang trái cho tiếng Ả Rập.
+QUÉT VÀ CHỤP
+• Quét tài liệu giấy thẳng thành PDF — tạo tài liệu mới từ bản quét hoặc chèn trang vào tệp đang mở.
+• Chụp ảnh bằng máy ảnh và thêm vào tài liệu của bạn.
+
+YÊN TÂM
+• Các thay đổi chưa lưu được sao lưu trong nền và khôi phục sau sự cố, giúp công việc của bạn được bảo toàn.
+
+CÔNG CỤ MỚI
+• Thêm siêu liên kết đến web hoặc đến trang khác trong tài liệu.
+• Cắt ảnh đã đặt và ảnh đã dán.
+• Khóa chú thích để tránh chỉnh sửa nhầm, và mở khóa khi cần.
+• Mọi công cụ chỉnh sửa giờ đều có phím tắt.
+• Tìm kiếm giờ cũng tìm thấy văn bản trong ghi chú và chú thích của bạn.
 
 HIỂN THỊ
-• Hiển thị in đè, chế độ hòa trộn và mặt nạ mềm chính xác hơn, giúp các tệp PDF hướng đến in ấn trông sát với kết quả mong muốn hơn.
-• Các nhóm trong suốt được vẽ dưới một chế độ hòa trộn giờ đây hợp thành đúng cách, khắc phục những ô mờ đục thừa trên một số tệp.
+• Overprint giờ được hiển thị trung thực, nên các PDF dùng cho in ấn với knockout và mực spot trông giống bản in.
+• Trang hiện dần khi được kết xuất — nhanh hơn nhiều với tệp lớn hoặc nhiều hình ảnh.
+• Tệp gần đây có thể hiển thị dạng lưới hình thu nhỏ của trang.
+• Giảm kích thước tệp PDF không mất dữ liệu khi lưu.
 
-CHỈNH SỬA
-• Giữ Shift trong khi vẽ để giới hạn nét mực và đường vẽ thành các nét thẳng.
-• Đặt một kiểu mặc định cho chú thích và tái sử dụng chỉ với một lần chạm.
-• Thẻ tài liệu được thiết kế lại, luôn dễ đọc khi bạn mở thêm nhiều tệp.
-
-TỐC ĐỘ
-• Hiển thị nhanh hơn và dùng ít bộ nhớ hơn, cải thiện rõ rệt nhất trên các tệp lớn hoặc nhiều hình ảnh.
-
-Cảm ơn bạn đã sử dụng DartPDF. Chúng tôi luôn hoan nghênh mọi ý kiến phản hồi và báo cáo lỗi.
+Cảm ơn bạn đã dùng DartPDF. Mọi góp ý và báo lỗi đều luôn được hoan nghênh.

@@ -1,18 +1,23 @@
-Nieuw in 3.0.0
+Nieuw in 3.1.0
 
-TALEN
-• DartPDF is nu beschikbaar in 10 talen, met volledige rechts-naar-links lay-out voor Arabisch.
+SCANNEN EN VASTLEGGEN
+• Scan papieren documenten rechtstreeks naar een pdf: begin een nieuw document vanuit een scan of voeg pagina's in aan het geopende bestand.
+• Maak een foto met de camera en voeg die aan je document toe.
+
+GERUSTHEID
+• Niet-opgeslagen wijzigingen worden op de achtergrond gespiegeld en na een crash hersteld, zodat je werk behouden blijft.
+
+NIEUWE GEREEDSCHAPPEN
+• Voeg hyperlinks toe naar het web of naar een andere pagina in het document.
+• Snijd geplaatste afbeeldingen en geplakte afbeeldingen bij.
+• Vergrendel annotaties tegen onbedoelde wijzigingen en ontgrendel ze wanneer nodig.
+• Elk bewerkingsgereedschap heeft nu een sneltoets.
+• Zoeken vindt nu ook tekst in je notities en annotaties.
 
 WEERGAVE
-• Nauwkeurigere weergave van overprint, overvloeimodi en zachte maskers, zodat PDF's die voor druk zijn bedoeld dichter bij het beoogde resultaat blijven.
-• Transparantiegroepen die onder een overvloeimodus worden getekend, worden nu correct samengesteld, waardoor losse ondoorzichtige vlakken in sommige bestanden verdwijnen.
+• Overprint wordt nu getrouw weergegeven: pdf's voor drukwerk met vrijvallen en steunkleuren zien er uit zoals ze worden afgedrukt.
+• Pagina's verschijnen geleidelijk tijdens het renderen — veel sneller bij grote of beeldrijke bestanden.
+• Recent geopende bestanden kunnen worden getoond als een raster van paginaminiaturen.
+• Verklein een pdf verliesvrij bij het opslaan.
 
-BEWERKEN
-• Houd Shift ingedrukt tijdens het tekenen om inkt en lijnen tot rechte streken te beperken.
-• Stel een standaardstijl voor annotaties in en gebruik die opnieuw met één tik.
-• Vernieuwde documenttabbladen die leesbaar blijven naarmate u meer bestanden opent.
-
-SNELHEID
-• Snellere weergave en lager geheugengebruik, met de grootste winst bij grote of afbeeldingsrijke bestanden.
-
-Bedankt voor het gebruik van DartPDF. Feedback en foutmeldingen zijn altijd welkom.
+Bedankt voor het gebruik van DartPDF. Feedback en bugrapporten zijn altijd welkom.

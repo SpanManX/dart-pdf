@@ -1,18 +1,23 @@
-Novidades na versão 3.0.0
+Novidades da 3.1.0
 
-IDIOMAS
-• O DartPDF agora está disponível em 10 idiomas, com layout completo da direita para a esquerda para o árabe.
+DIGITALIZAR E CAPTURAR
+• Digitalize documentos em papel diretamente para um PDF: comece um novo documento a partir de uma digitalização ou insira páginas no arquivo aberto.
+• Tire uma foto com a câmera e adicione-a ao seu documento.
+
+TRANQUILIDADE
+• Alterações não salvas são espelhadas em segundo plano e restauradas após uma falha — seu trabalho está protegido.
+
+NOVAS FERRAMENTAS
+• Adicione hiperlinks para a web ou para outra página do documento.
+• Corte imagens inseridas e imagens coladas.
+• Bloqueie anotações contra edições acidentais e desbloqueie quando precisar.
+• Todas as ferramentas de edição agora têm atalho de teclado.
+• A busca agora também encontra texto dentro das suas notas e anotações.
 
 RENDERIZAÇÃO
-• Renderização mais precisa de sobreimpressão, modos de mesclagem e máscaras suaves, para que PDFs voltados à impressão fiquem mais próximos do resultado pretendido.
-• Grupos de transparência desenhados sob um modo de mesclagem agora são compostos corretamente, corrigindo caixas opacas indesejadas em alguns arquivos.
+• O overprint agora é renderizado fielmente: PDFs voltados à impressão, com reservas e cores especiais, aparecem como impressos.
+• As páginas aparecem progressivamente durante a renderização — muito mais rápido em arquivos grandes ou com muitas imagens.
+• Os arquivos recentes podem ser exibidos como grade de miniaturas das páginas.
+• Reduza o tamanho de um PDF sem perdas ao salvar.
 
-EDIÇÃO
-• Segure Shift ao desenhar para restringir o traço à mão livre e as linhas a traços retos.
-• Defina um estilo padrão para as marcações e reutilize-o com um toque.
-• Abas de documento redesenhadas que continuam legíveis conforme você abre mais arquivos.
-
-VELOCIDADE
-• Renderização mais rápida e menor uso de memória, com os maiores ganhos em arquivos grandes ou com muitas imagens.
-
-Obrigado por usar o DartPDF. Comentários e relatos de erros são sempre bem-vindos.
+Obrigado por usar o DartPDF. Comentários e relatórios de erros são sempre bem-vindos.

@@ -1,18 +1,23 @@
-3.0.0'daki yenilikler
+3.1.0'daki yenilikler
 
-DİLLER
-• DartPDF artık Arapça için tam sağdan sola düzen desteğiyle 10 dilde kullanılabilir.
+TARAMA VE ÇEKİM
+• Kâğıt belgeleri doğrudan PDF'ye tarayın: bir taramadan yeni belge başlatın veya açık dosyaya sayfalar ekleyin.
+• Kamerayla fotoğraf çekin ve belgenize ekleyin.
+
+İÇİNİZ RAHAT
+• Kaydedilmemiş değişiklikler arka planda yansıtılır ve bir çökmeden sonra geri yüklenir; çalışmanız güvende.
+
+YENİ ARAÇLAR
+• Web'e veya belgedeki başka bir sayfaya köprüler ekleyin.
+• Yerleştirilmiş ve yapıştırılmış görüntüleri kırpın.
+• Açıklamaları yanlışlıkla düzenlemeye karşı kilitleyin, gerektiğinde kilidini açın.
+• Her düzenleme aracının artık bir klavye kısayolu var.
+• Arama artık notlarınızın ve açıklamalarınızın içindeki metni de bulur.
 
 İŞLEME
-• Daha isabetli üst baskı, karışım modu ve yumuşak maske işleme sayesinde baskıya yönelik PDF'ler amaçlanan çıktıya daha yakın görünür.
-• Bir karışım modu altında çizilen saydamlık grupları artık doğru şekilde birleştiriliyor; bu, bazı dosyalardaki gelişigüzel opak kutuları giderir.
+• Overprint artık gerçeğine uygun işleniyor: vuruşlar ve spot mürekkepler içeren baskı odaklı PDF'ler basıldığı gibi görünür.
+• Sayfalar işlendikçe aşamalı olarak görünür — büyük veya görüntü ağırlıklı dosyalarda çok daha hızlı.
+• Son dosyalar sayfa küçük resimlerinden oluşan bir ızgara olarak gösterilebilir.
+• Kaydederken PDF'nin boyutunu kayıpsız küçültün.
 
-DÜZENLEME
-• Çizim yaparken kalem ve çizgileri düz vuruşlarla sınırlamak için Shift'e basılı tutun.
-• Açıklamalar için varsayılan bir stil ayarlayın ve tek dokunuşla yeniden kullanın.
-• Yeniden tasarlanan belge sekmeleri, daha fazla dosya açtıkça okunaklı kalır.
-
-HIZ
-• Daha hızlı işleme ve daha az bellek kullanımı; en büyük kazanımlar büyük veya görsel yoğunluklu dosyalarda.
-
-DartPDF'yi kullandığınız için teşekkürler. Geri bildirimler ve hata raporları her zaman memnuniyetle karşılanır.
+DartPDF kullandığınız için teşekkürler. Geri bildirimlerinizi ve hata raporlarınızı her zaman bekliyoruz.

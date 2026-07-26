@@ -1,18 +1,23 @@
-Neu in 3.0.0
+Neu in 3.1.0
 
-SPRACHEN
-• DartPDF ist jetzt in 10 Sprachen verfügbar, mit vollständigem Rechts-nach-links-Layout für Arabisch.
+SCANNEN UND AUFNEHMEN
+• Scannen Sie Papierdokumente direkt in ein PDF – beginnen Sie ein neues Dokument aus einem Scan oder fügen Sie Seiten in die geöffnete Datei ein.
+• Fotografieren Sie mit der Kamera und fügen Sie das Bild Ihrem Dokument hinzu.
 
-RENDERING
-• Genaueres Rendering von Überdrucken, Mischmodi und weichen Masken, damit druckorientierte PDFs ihrem beabsichtigten Ergebnis näherkommen.
-• Transparenzgruppen, die unter einem Mischmodus gezeichnet werden, werden jetzt korrekt zusammengesetzt – störende undurchsichtige Kästen in manchen Dateien verschwinden.
+SICHERHEIT
+• Ungespeicherte Änderungen werden im Hintergrund gespiegelt und nach einem Absturz wiederhergestellt – Ihre Arbeit bleibt erhalten.
 
-BEARBEITEN
-• Halten Sie beim Zeichnen die Umschalttaste gedrückt, um Freihand und Linien auf gerade Striche zu beschränken.
-• Legen Sie einen Standardstil für Anmerkungen fest und verwenden Sie ihn mit einem Tippen wieder.
-• Überarbeitete Dokument-Tabs, die auch beim Öffnen weiterer Dateien lesbar bleiben.
+NEUE WERKZEUGE
+• Fügen Sie Hyperlinks ins Web oder zu einer anderen Seite im Dokument ein.
+• Schneiden Sie platzierte Bilder und eingefügte Grafiken zu.
+• Sperren Sie Anmerkungen gegen versehentliche Änderungen und entsperren Sie sie bei Bedarf.
+• Jedes Bearbeitungswerkzeug hat jetzt ein Tastenkürzel.
+• Die Suche findet jetzt auch Text in Ihren Notizen und Anmerkungen.
 
-TEMPO
-• Schnelleres Rendering und geringerer Speicherverbrauch, mit den größten Vorteilen bei großen oder bildreichen Dateien.
+DARSTELLUNG
+• Überdrucken wird jetzt getreu dargestellt: druckorientierte PDFs mit Aussparungen und Schmuckfarben sehen so aus, wie sie gedruckt werden.
+• Seiten erscheinen schrittweise während des Renderns – deutlich schneller bei großen oder bildlastigen Dateien.
+• Zuletzt geöffnete Dateien können als Raster aus Seitenminiaturen angezeigt werden.
+• Verkleinern Sie PDFs beim Speichern verlustfrei.
 
-Vielen Dank, dass Sie DartPDF verwenden. Feedback und Fehlerberichte sind jederzeit willkommen.
+Vielen Dank, dass Sie DartPDF verwenden. Rückmeldungen und Fehlermeldungen sind jederzeit willkommen.

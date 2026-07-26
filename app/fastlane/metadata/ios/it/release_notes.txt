@@ -1,18 +1,23 @@
-Novità nella versione 3.0.0
+Novità della 3.1.0
 
-LINGUE
-• DartPDF è ora disponibile in 10 lingue, con layout completo da destra a sinistra per l'arabo.
+SCANSIONE E ACQUISIZIONE
+• Scansiona documenti cartacei direttamente in un PDF: crea un nuovo documento da una scansione o inserisci pagine nel file aperto.
+• Scatta una foto con la fotocamera e aggiungila al tuo documento.
 
-RENDERING
-• Rendering più preciso di sovrastampa, metodi di fusione e maschere morbide, così i PDF pensati per la stampa si avvicinano di più al risultato voluto.
-• I gruppi di trasparenza disegnati sotto un metodo di fusione ora vengono composti correttamente, eliminando i riquadri opachi indesiderati su alcuni file.
+TRANQUILLITÀ
+• Le modifiche non salvate vengono duplicate in background e ripristinate dopo un arresto anomalo: il tuo lavoro è al sicuro.
 
-MODIFICA
-• Tieni premuto Maiusc mentre disegni per vincolare inchiostro e linee a tratti dritti.
-• Imposta uno stile predefinito per le annotazioni e riutilizzalo con un tocco.
-• Schede dei documenti ridisegnate che restano leggibili man mano che apri altri file.
+NUOVI STRUMENTI
+• Aggiungi collegamenti ipertestuali al web o a un'altra pagina del documento.
+• Ritaglia le immagini posizionate e le immagini incollate.
+• Blocca le annotazioni per evitare modifiche accidentali e sbloccale quando serve.
+• Ogni strumento di modifica ha ora una scorciatoia da tastiera.
+• La ricerca trova anche il testo all'interno di note e annotazioni.
 
-VELOCITÀ
-• Rendering più veloce e minor uso di memoria, con i vantaggi maggiori sui file grandi o ricchi di immagini.
+RESO GRAFICO
+• La sovrastampa ora è resa fedelmente: i PDF pensati per la stampa, con riserve e tinte piatte, appaiono come in tipografia.
+• Le pagine appaiono progressivamente durante il rendering: molto più veloce con file grandi o ricchi di immagini.
+• I file recenti possono essere mostrati come griglia di miniature delle pagine.
+• Riduci le dimensioni di un PDF senza perdite durante il salvataggio.
 
-Grazie per aver scelto DartPDF. Feedback e segnalazioni di bug sono sempre benvenuti.
+Grazie per usare DartPDF. Commenti e segnalazioni di bug sono sempre benvenuti.

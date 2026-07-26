@@ -1,18 +1,23 @@
-Novedades de la versión 3.0.0
+Novedades de la 3.1.0
 
-IDIOMAS
-• DartPDF ya está disponible en 10 idiomas, con diseño completo de derecha a izquierda para el árabe.
+ESCANEAR Y CAPTURAR
+• Escanea documentos en papel directamente a un PDF: crea un documento nuevo a partir de un escaneo o inserta páginas en el archivo abierto.
+• Haz una foto con la cámara y añádela a tu documento.
 
-RENDERIZADO
-• Renderizado más preciso de la sobreimpresión, los modos de fusión y las máscaras suaves, para que los PDF pensados para imprimir se acerquen más al resultado previsto.
-• Los grupos de transparencia dibujados bajo un modo de fusión ahora se componen correctamente, lo que corrige los recuadros opacos que aparecían en algunos archivos.
+TRANQUILIDAD
+• Los cambios sin guardar se duplican en segundo plano y se restauran tras un fallo, para que no pierdas tu trabajo.
 
-EDICIÓN
-• Mantén Mayús mientras dibujas para limitar el trazo a mano alzada y las líneas a trazos rectos.
-• Define un estilo predeterminado para las anotaciones y reutilízalo con un solo toque.
-• Pestañas de documento rediseñadas que siguen siendo legibles a medida que abres más archivos.
+NUEVAS HERRAMIENTAS
+• Añade hipervínculos a la web o a otra página del documento.
+• Recorta imágenes colocadas e imágenes pegadas.
+• Bloquea anotaciones contra ediciones accidentales y desblóquealas cuando quieras.
+• Todas las herramientas de edición tienen ahora un atajo de teclado.
+• La búsqueda también encuentra texto dentro de tus notas y anotaciones.
 
-VELOCIDAD
-• Renderizado más rápido y menor uso de memoria, con las mayores mejoras en archivos grandes o con muchas imágenes.
+REPRESENTACIÓN
+• La sobreimpresión ahora se representa con fidelidad: los PDF orientados a imprenta con reservas y tintas directas se ven como se imprimen.
+• Las páginas se muestran progresivamente a medida que se renderizan: mucho más rápido en archivos grandes o con muchas imágenes.
+• Los archivos recientes pueden mostrarse como una cuadrícula de miniaturas.
+• Reduce el tamaño de un PDF sin pérdidas al guardarlo.
 
-Gracias por usar DartPDF. Siempre son bienvenidos los comentarios y los informes de errores.
+Gracias por usar DartPDF. Tus comentarios e informes de errores siempre son bienvenidos.

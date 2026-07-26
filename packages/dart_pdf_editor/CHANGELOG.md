@@ -1,12 +1,47 @@
 # Changelog
 
-## 3.0.0
+## 3.1.0
 
 - Overprint (§8.6.7) now renders faithfully: the interpreter resolves it in a
-  CMYK/spot colorant buffer and hands `CanvasPdfDevice` the composited colour,
-  so a neutral ink knocks a DeviceCMYK backdrop's process colorants out to grey
-  while a spot backdrop of the same colour survives. `CanvasPdfDevice`'s
-  `darken` approximation remains only for draws the buffer declines (#502).
+  CMYK/spot colorant buffer — including per-sample colorant readings from
+  images — and hands `CanvasPdfDevice` the composited colour, so a neutral ink
+  knocks a DeviceCMYK backdrop's process colorants out to grey while a spot
+  backdrop of the same colour survives. `CanvasPdfDevice`'s `darken`
+  approximation remains only for draws the buffer declines (#502, #604).
+
+- New tools: a **hyperlink tool** (`PdfEditTool.link`) authors external (URI)
+  and in-document (GoTo) links from a box drag or the current text selection,
+  via `PdfLinkTarget` and `showPdfAddLinkDialog` (#500); **crop** for placed
+  images and raster snapshots (`PdfImageCropOverlay`) (#504); annotation
+  **lock/unlock** with Acrobat/Bluebeam interop (#493); and keyboard shortcuts
+  for every editing tool through Shift-extension bindings (#497).
+- The annotation properties panel groups its controls into collapsible
+  sections (#543), and the search panel can search annotation contents
+  (note bodies, free-text boxes) alongside page text — `PdfSearchOptions`
+  gains `searchAnnotations` (on by default) (#495). Pages can be deleted from
+  the thumbnail strip and grid with Delete/Backspace (#498).
+
+- Rendering is dramatically faster on large or image-heavy documents, and now
+  **progressive**: `PdfViewer` starts a default render worker (#396), streams
+  partial records as they are produced and reveals pages top-down as content
+  arrives (on by default, native and web transports) (#564), resumes a
+  preempted page record instead of restarting (#530), decodes a page's images
+  concurrently (#454), extracts search text off the UI thread (#396), and
+  budgets the thumbnail record to its tile size off the platform thread
+  (#603). A page's image decodes are shared across its records, glyph
+  outlines are written once per record, the decoded-image cache is keyed by
+  resolution on every path, and the scheduler no longer grants a page a
+  second concurrent render (#451).
+
+- Annotation sync diffs against a cached baseline instead of re-opening the
+  previous revision's document (#416). Bundled editor fonts defer off cold
+  start (#569). The tune (style) button shows on the mobile toolbar (#584);
+  the image tool hides when no `imagePicker` is wired (#574); free-text
+  selection stays visible while the tune popup is open (#573); zoom is held,
+  not just scroll, when a side panel is resized (#509); overlay hover cursors
+  paint on their own repaint layer (#403).
+
+## 3.0.0
 
 - The keyboard-shortcuts editor (Settings → Keyboard shortcuts…) now groups
   tools under tool-category headers (Select, Draw, Shapes, Insert, Measure,

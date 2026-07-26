@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.1.0
+
+- Lossless structural compaction: new `CosCompactor`/`CosCompactionResult`
+  rewrite a document's reachable object graph, packing non-stream objects
+  into compressed object streams behind a PDF 1.5 xref stream and
+  re-deflating streams stored uncompressed (kept only when smaller).
+  `CosDocumentBuilder` gains an `objectStreams:` mode (W [1 4 2]). The
+  user-facing entry point is `PdfEditor.compress()` in `pdf_document` (#368).
+- JPX (JPEG 2000) resolution-level skip: decode at a reduced `cp_reduce`
+  level when an image is displayed far below its native size, instead of
+  decoding full resolution and downscaling (#525).
+- Cache decoded JBIG2 globals dictionaries across images on the same page -
+  scanned books with shared `/JBIG2Globals` decode once, not per image (#532).
+- Int-key the loaded-object cache so warm resolves allocate nothing (#522),
+  and drop the double copy of every inflated stream (#533).
+
 ## 3.0.0
 
 Lockstep major release: a breaking change in `dart_pdf_editor` moves the whole

@@ -1,18 +1,23 @@
-Nowości w 3.0.0
+Nowości w wersji 3.1.0
 
-JĘZYKI
-• DartPDF jest teraz dostępny w 10 językach, z pełną obsługą układu od prawej do lewej dla języka arabskiego.
+SKANOWANIE I PRZECHWYTYWANIE
+• Skanuj papierowe dokumenty prosto do pliku PDF — rozpocznij nowy dokument ze skanu lub wstaw strony do otwartego pliku.
+• Zrób zdjęcie aparatem i dodaj je do dokumentu.
+
+SPOKÓJ
+• Niezapisane zmiany są kopiowane w tle i przywracane po awarii, więc Twoja praca jest bezpieczna.
+
+NOWE NARZĘDZIA
+• Dodawaj hiperłącza do sieci lub do innej strony dokumentu.
+• Przycinaj umieszczone i wklejone obrazy.
+• Blokuj adnotacje przed przypadkowymi zmianami i odblokowuj je w razie potrzeby.
+• Każde narzędzie edycji ma teraz skrót klawiszowy.
+• Wyszukiwanie znajduje teraz także tekst w notatkach i adnotacjach.
 
 RENDEROWANIE
-• Dokładniejsze renderowanie nadruku, trybów mieszania i miękkich masek, dzięki czemu pliki PDF przygotowane do druku wyglądają bliżej zamierzonego efektu.
-• Grupy przezroczystości rysowane w trybie mieszania są teraz poprawnie komponowane, co usuwa przypadkowe nieprzezroczyste prostokąty w niektórych plikach.
+• Nadruk jest teraz renderowany wiernie — pliki PDF przygotowane do druku, z podbiciami i kolorami dodatkowymi, wyglądają jak wydrukowane.
+• Strony pojawiają się stopniowo w trakcie renderowania — znacznie szybciej przy dużych lub pełnych obrazów plikach.
+• Ostatnie pliki mogą być wyświetlane jako siatka miniaturek stron.
+• Zmniejsz rozmiar pliku PDF bezstratnie podczas zapisu.
 
-EDYCJA
-• Przytrzymaj Shift podczas rysowania, aby ograniczyć rysunek odręczny i linie do prostych pociągnięć.
-• Ustaw domyślny styl adnotacji i użyj go ponownie jednym dotknięciem.
-• Przeprojektowane karty dokumentów pozostają czytelne w miarę otwierania kolejnych plików.
-
-SZYBKOŚĆ
-• Szybsze renderowanie i mniejsze zużycie pamięci, z największymi korzyściami w dużych plikach lub plikach z wieloma obrazami.
-
-Dziękujemy za korzystanie z DartPDF. Zawsze czekamy na opinie i zgłoszenia błędów.
+Dziękujemy za korzystanie z DartPDF. Opinie i zgłoszenia błędów są zawsze mile widziane.
