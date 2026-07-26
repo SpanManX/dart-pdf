@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.1.1
+
+- Fix intermittent frame drops while scrolling large or visually dense
+  documents. Page recording and raster work now keep the frame scheduler
+  awake between cooperative slices, visible thumbnails yield to page renders,
+  and repeated wheel events retain the low-resolution preview cache until the
+  gesture has genuinely settled.
+- Bound speculative thumbnail warming on web and add command budgets to vector
+  thumbnail previews, keeping long documents responsive without blanking pages
+  during fast scrolling.
+
 ## 3.1.0
 
 - Overprint (§8.6.7) now renders faithfully: the interpreter resolves it in a

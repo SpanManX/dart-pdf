@@ -1,23 +1,6 @@
-3.1.0'daki yenilikler
+3.1.1’deki yenilikler
 
-TARAMA VE ÇEKİM
-• Kâğıt belgeleri doğrudan PDF'ye tarayın: bir taramadan yeni belge başlatın veya açık dosyaya sayfalar ekleyin.
-• Kamerayla fotoğraf çekin ve belgenize ekleyin.
-
-İÇİNİZ RAHAT
-• Kaydedilmemiş değişiklikler arka planda yansıtılır ve bir çökmeden sonra geri yüklenir; çalışmanız güvende.
-
-YENİ ARAÇLAR
-• Web'e veya belgedeki başka bir sayfaya köprüler ekleyin.
-• Yerleştirilmiş ve yapıştırılmış görüntüleri kırpın.
-• Açıklamaları yanlışlıkla düzenlemeye karşı kilitleyin, gerektiğinde kilidini açın.
-• Her düzenleme aracının artık bir klavye kısayolu var.
-• Arama artık notlarınızın ve açıklamalarınızın içindeki metni de bulur.
-
-İŞLEME
-• Overprint artık gerçeğine uygun işleniyor: vuruşlar ve spot mürekkepler içeren baskı odaklı PDF'ler basıldığı gibi görünür.
-• Sayfalar işlendikçe aşamalı olarak görünür — büyük veya görüntü ağırlıklı dosyalarda çok daha hızlı.
-• Son dosyalar sayfa küçük resimlerinden oluşan bir ızgara olarak gösterilebilir.
-• Kaydederken PDF'nin boyutunu kayıpsız küçültün.
-
-DartPDF kullandığınız için teşekkürler. Geri bildirimlerinizi ve hata raporlarınızı her zaman bekliyoruz.
+DAHA AKICI KAYDIRMA
+• Büyük veya görsel açıdan yoğun PDF’ler hızlı kaydırma sırasında artık daha iyi tepki veriyor.
+• Belgede hızla ilerlerken sayfa önizlemeleri görünür kalır, ardından tam ayrıntılı ve net biçimde işlenir.
+• İşleme görevleri daha dengeli planlanarak aralıklı kare kayıpları azaltıldı.

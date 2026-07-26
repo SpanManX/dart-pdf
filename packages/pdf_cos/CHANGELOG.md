@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1
+
+- Lockstep patch release to align the dart-pdf package suite at 3.1.1. No
+  public `pdf_cos` API changes since 3.1.0.
+
 ## 3.1.0
 
 - Lossless structural compaction: new `CosCompactor`/`CosCompactionResult`

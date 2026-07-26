@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1
+
+- Lockstep patch release to align the dart-pdf package suite at 3.1.1. No
+  public `pdf_graphics` API changes since 3.1.0.
+
 ## 3.1.0
 
 - Render overprint (`/OP`, `/op`, `/OPM`, §8.6.7) faithfully, as the

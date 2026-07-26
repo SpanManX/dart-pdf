@@ -1,23 +1,6 @@
-Novidades da 3.1.0
+Novidades da 3.1.1
 
-DIGITALIZAR E CAPTURAR
-• Digitalize documentos em papel diretamente para um PDF: comece um novo documento a partir de uma digitalização ou insira páginas no arquivo aberto.
-• Tire uma foto com a câmera e adicione-a ao seu documento.
-
-TRANQUILIDADE
-• Alterações não salvas são espelhadas em segundo plano e restauradas após uma falha — seu trabalho está protegido.
-
-NOVAS FERRAMENTAS
-• Adicione hiperlinks para a web ou para outra página do documento.
-• Corte imagens inseridas e imagens coladas.
-• Bloqueie anotações contra edições acidentais e desbloqueie quando precisar.
-• Todas as ferramentas de edição agora têm atalho de teclado.
-• A busca agora também encontra texto dentro das suas notas e anotações.
-
-RENDERIZAÇÃO
-• O overprint agora é renderizado fielmente: PDFs voltados à impressão, com reservas e cores especiais, aparecem como impressos.
-• As páginas aparecem progressivamente durante a renderização — muito mais rápido em arquivos grandes ou com muitas imagens.
-• Os arquivos recentes podem ser exibidos como grade de miniaturas das páginas.
-• Reduza o tamanho de um PDF sem perdas ao salvar.
-
-Obrigado por usar o DartPDF. Comentários e relatórios de erros são sempre bem-vindos.
+ROLAGEM MAIS SUAVE
+• PDFs grandes ou visualmente densos agora respondem melhor durante a rolagem rápida.
+• As prévias continuam visíveis enquanto você percorre o documento e depois voltam com todos os detalhes.
+• O trabalho de renderização é distribuído de forma mais uniforme, reduzindo perdas ocasionais de quadros.

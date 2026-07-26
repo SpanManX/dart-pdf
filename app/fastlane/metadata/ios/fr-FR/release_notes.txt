@@ -1,23 +1,6 @@
-Nouveautés de la 3.1.0
+Nouveautés de la 3.1.1
 
-NUMÉRISATION ET CAPTURE
-• Numérisez des documents papier directement en PDF : créez un nouveau document à partir d'une numérisation ou insérez des pages dans le fichier ouvert.
-• Prenez une photo avec l'appareil photo et ajoutez-la à votre document.
-
-TRANQUILLITÉ D'ESPRIT
-• Les modifications non enregistrées sont mises en miroir en arrière-plan puis restaurées après un plantage : votre travail est préservé.
-
-NOUVEAUX OUTILS
-• Ajoutez des hyperliens vers le web ou vers une autre page du document.
-• Recadrez les images placées et les images collées.
-• Verrouillez les annotations contre les modifications accidentelles, puis déverrouillez-les au besoin.
-• Chaque outil d'édition possède désormais un raccourci clavier.
-• La recherche trouve aussi le texte contenu dans vos notes et annotations.
-
-RENDU
-• La surimpression est désormais rendue fidèlement : les PDF destinés à l'impression, avec réserve et tons directs, s'affichent comme ils s'impriment.
-• Les pages se révèlent progressivement pendant le rendu — bien plus rapide sur les fichiers volumineux ou riches en images.
-• Les fichiers récents peuvent s'afficher sous forme de grille de vignettes.
-• Réduisez la taille d'un PDF sans perte lors de l'enregistrement.
-
-Merci d'utiliser DartPDF. Vos retours et rapports de bogues sont toujours les bienvenus.
+DÉFILEMENT PLUS FLUIDE
+• Les PDF volumineux ou visuellement denses restent plus réactifs pendant le défilement rapide.
+• Les aperçus restent visibles lorsque vous parcourez rapidement un document, puis retrouvent tous leurs détails.
+• Le travail de rendu est mieux réparti afin de réduire les pertes d’images intermittentes.

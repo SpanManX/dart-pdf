@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1
+
+- Lockstep patch release to align the dart-pdf package suite at 3.1.1. No
+  public `pdf_document` API changes since 3.1.0.
+
 ## 3.1.0
 
 - Add `PdfEditor.compress()`/`PdfCompressionResult`: lossless file-size

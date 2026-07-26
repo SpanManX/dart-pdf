@@ -1,23 +1,6 @@
-Baru di 3.1.0
+Baru di 3.1.1
 
-PINDAI DAN AMBIL
-• Pindai dokumen kertas langsung menjadi PDF — mulai dokumen baru dari hasil pindai atau sisipkan halaman ke file yang terbuka.
-• Ambil foto dengan kamera dan tambahkan ke dokumen Anda.
-
-TENANG
-• Perubahan yang belum disimpan dicadangkan di latar belakang dan dipulihkan setelah mogok, sehingga pekerjaan Anda aman.
-
-ALAT BARU
-• Tambahkan tautan ke web atau ke halaman lain dalam dokumen.
-• Potong gambar yang ditempatkan dan gambar yang ditempel.
-• Kunci anotasi agar tidak terubah secara tidak sengaja, dan buka kembali bila perlu.
-• Setiap alat edit kini memiliki pintasan keyboard.
-• Pencarian kini juga menemukan teks di dalam catatan dan anotasi Anda.
-
-RENDER
-• Overprint kini dirender dengan akurat, sehingga PDF untuk cetakan dengan knockout dan tinta spot tampil seperti hasil cetaknya.
-• Halaman muncul bertahap saat dirender — jauh lebih cepat pada file besar atau sarat gambar.
-• File terbaru dapat ditampilkan sebagai kisi miniatur halaman.
-• Kecilkan ukuran PDF tanpa kehilangan data saat menyimpan.
-
-Terima kasih telah menggunakan DartPDF. Masukan dan laporan bug selalu kami nantikan.
+PENGGULIRAN LEBIH MULUS
+• PDF besar atau padat visual kini lebih responsif saat digulir dengan cepat.
+• Pratinjau halaman tetap terlihat saat Anda bergerak cepat, lalu kembali tampil dengan detail penuh.
+• Pekerjaan render dijadwalkan lebih merata untuk mengurangi frame yang sesekali terlewat.

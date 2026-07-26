@@ -1,23 +1,6 @@
-Neu in 3.1.0
+Neu in 3.1.1
 
-SCANNEN UND AUFNEHMEN
-• Scannen Sie Papierdokumente direkt in ein PDF – beginnen Sie ein neues Dokument aus einem Scan oder fügen Sie Seiten in die geöffnete Datei ein.
-• Fotografieren Sie mit der Kamera und fügen Sie das Bild Ihrem Dokument hinzu.
-
-SICHERHEIT
-• Ungespeicherte Änderungen werden im Hintergrund gespiegelt und nach einem Absturz wiederhergestellt – Ihre Arbeit bleibt erhalten.
-
-NEUE WERKZEUGE
-• Fügen Sie Hyperlinks ins Web oder zu einer anderen Seite im Dokument ein.
-• Schneiden Sie platzierte Bilder und eingefügte Grafiken zu.
-• Sperren Sie Anmerkungen gegen versehentliche Änderungen und entsperren Sie sie bei Bedarf.
-• Jedes Bearbeitungswerkzeug hat jetzt ein Tastenkürzel.
-• Die Suche findet jetzt auch Text in Ihren Notizen und Anmerkungen.
-
-DARSTELLUNG
-• Überdrucken wird jetzt getreu dargestellt: druckorientierte PDFs mit Aussparungen und Schmuckfarben sehen so aus, wie sie gedruckt werden.
-• Seiten erscheinen schrittweise während des Renderns – deutlich schneller bei großen oder bildlastigen Dateien.
-• Zuletzt geöffnete Dateien können als Raster aus Seitenminiaturen angezeigt werden.
-• Verkleinern Sie PDFs beim Speichern verlustfrei.
-
-Vielen Dank, dass Sie DartPDF verwenden. Rückmeldungen und Fehlermeldungen sind jederzeit willkommen.
+FLÜSSIGERES SCROLLEN
+• Große und visuell dichte PDFs reagieren jetzt besser beim schnellen Scrollen.
+• Seitenvorschauen bleiben sichtbar und werden danach sauber in voller Detailtiefe dargestellt.
+• Renderaufgaben werden gleichmäßiger verteilt, wodurch Bildaussetzer reduziert werden.

@@ -95,6 +95,24 @@
     <!-- Generated from app/fastlane/metadata/android/en-US/changelogs/ and
          app/release-notes/. Newest first; keep the top entry in sync with the
          version the Flatpak/AUR packages pin. -->
+    <release version="3.1.1" date="2026-07-26">
+      <description>
+        <ul>
+          <li>Smoother scrolling in large and visually dense PDFs, with fewer frame drops.</li>
+          <li>Page previews stay visible during fast scrolling and settle cleanly into full-detail renders.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.1.0" date="2026-07-26">
+      <description>
+        <ul>
+          <li>Scan paper documents straight into a PDF or capture a photo with the camera.</li>
+          <li>Unsaved changes are mirrored and restored after a crash.</li>
+          <li>New tools for hyperlinks, image cropping, annotation locking, and lossless PDF compaction.</li>
+          <li>Faithful overprint rendering and faster progressive page display.</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.0.0" date="2026-07-23">
       <description>
         <ul>

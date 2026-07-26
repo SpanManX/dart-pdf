@@ -1,23 +1,6 @@
-Novedades de la 3.1.0
+Novedades de la 3.1.1
 
-ESCANEAR Y CAPTURAR
-• Escanea documentos en papel directamente a un PDF: crea un documento nuevo a partir de un escaneo o inserta páginas en el archivo abierto.
-• Haz una foto con la cámara y añádela a tu documento.
-
-TRANQUILIDAD
-• Los cambios sin guardar se duplican en segundo plano y se restauran tras un fallo, para que no pierdas tu trabajo.
-
-NUEVAS HERRAMIENTAS
-• Añade hipervínculos a la web o a otra página del documento.
-• Recorta imágenes colocadas e imágenes pegadas.
-• Bloquea anotaciones contra ediciones accidentales y desblóquealas cuando quieras.
-• Todas las herramientas de edición tienen ahora un atajo de teclado.
-• La búsqueda también encuentra texto dentro de tus notas y anotaciones.
-
-REPRESENTACIÓN
-• La sobreimpresión ahora se representa con fidelidad: los PDF orientados a imprenta con reservas y tintas directas se ven como se imprimen.
-• Las páginas se muestran progresivamente a medida que se renderizan: mucho más rápido en archivos grandes o con muchas imágenes.
-• Los archivos recientes pueden mostrarse como una cuadrícula de miniaturas.
-• Reduce el tamaño de un PDF sin pérdidas al guardarlo.
-
-Gracias por usar DartPDF. Tus comentarios e informes de errores siempre son bienvenidos.
+DESPLAZAMIENTO MÁS FLUIDO
+• Los PDF grandes o visualmente densos responden mejor durante el desplazamiento rápido.
+• Las vistas previas permanecen visibles mientras recorres el documento y después recuperan todos los detalles.
+• El trabajo de renderizado se distribuye de forma más uniforme para reducir los saltos de imagen.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.1
+
+- Smoother scrolling on large and visually dense PDFs, with the page renderer
+  staying responsive through rapid mouse-wheel gestures.
+- Page previews remain visible during fast scrolling and settle cleanly into
+  full-detail renders, with fewer dropped frames.
+
 ## 3.1.0
 
 - Scan documents straight into a PDF: scan to a new document or insert a scan

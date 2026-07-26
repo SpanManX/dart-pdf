@@ -1,23 +1,6 @@
-Nieuw in 3.1.0
+Nieuw in 3.1.1
 
-SCANNEN EN VASTLEGGEN
-• Scan papieren documenten rechtstreeks naar een pdf: begin een nieuw document vanuit een scan of voeg pagina's in aan het geopende bestand.
-• Maak een foto met de camera en voeg die aan je document toe.
-
-GERUSTHEID
-• Niet-opgeslagen wijzigingen worden op de achtergrond gespiegeld en na een crash hersteld, zodat je werk behouden blijft.
-
-NIEUWE GEREEDSCHAPPEN
-• Voeg hyperlinks toe naar het web of naar een andere pagina in het document.
-• Snijd geplaatste afbeeldingen en geplakte afbeeldingen bij.
-• Vergrendel annotaties tegen onbedoelde wijzigingen en ontgrendel ze wanneer nodig.
-• Elk bewerkingsgereedschap heeft nu een sneltoets.
-• Zoeken vindt nu ook tekst in je notities en annotaties.
-
-WEERGAVE
-• Overprint wordt nu getrouw weergegeven: pdf's voor drukwerk met vrijvallen en steunkleuren zien er uit zoals ze worden afgedrukt.
-• Pagina's verschijnen geleidelijk tijdens het renderen — veel sneller bij grote of beeldrijke bestanden.
-• Recent geopende bestanden kunnen worden getoond als een raster van paginaminiaturen.
-• Verklein een pdf verliesvrij bij het opslaan.
-
-Bedankt voor het gebruik van DartPDF. Feedback en bugrapporten zijn altijd welkom.
+SOEPELER SCROLLEN
+• Grote of visueel complexe pdf’s blijven nu beter reageren tijdens snel scrollen.
+• Paginavoorbeelden blijven zichtbaar terwijl je snel door een document beweegt en worden daarna scherp op volledig detail weergegeven.
+• Rendertaken worden gelijkmatiger gepland, waardoor er minder frames verloren gaan.

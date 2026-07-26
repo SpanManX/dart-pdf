@@ -1,23 +1,6 @@
-Mới trong 3.1.0
+Mới trong 3.1.1
 
-QUÉT VÀ CHỤP
-• Quét tài liệu giấy thẳng thành PDF — tạo tài liệu mới từ bản quét hoặc chèn trang vào tệp đang mở.
-• Chụp ảnh bằng máy ảnh và thêm vào tài liệu của bạn.
-
-YÊN TÂM
-• Các thay đổi chưa lưu được sao lưu trong nền và khôi phục sau sự cố, giúp công việc của bạn được bảo toàn.
-
-CÔNG CỤ MỚI
-• Thêm siêu liên kết đến web hoặc đến trang khác trong tài liệu.
-• Cắt ảnh đã đặt và ảnh đã dán.
-• Khóa chú thích để tránh chỉnh sửa nhầm, và mở khóa khi cần.
-• Mọi công cụ chỉnh sửa giờ đều có phím tắt.
-• Tìm kiếm giờ cũng tìm thấy văn bản trong ghi chú và chú thích của bạn.
-
-HIỂN THỊ
-• Overprint giờ được hiển thị trung thực, nên các PDF dùng cho in ấn với knockout và mực spot trông giống bản in.
-• Trang hiện dần khi được kết xuất — nhanh hơn nhiều với tệp lớn hoặc nhiều hình ảnh.
-• Tệp gần đây có thể hiển thị dạng lưới hình thu nhỏ của trang.
-• Giảm kích thước tệp PDF không mất dữ liệu khi lưu.
-
-Cảm ơn bạn đã dùng DartPDF. Mọi góp ý và báo lỗi đều luôn được hoan nghênh.
+CUỘN MƯỢT HƠN
+• Các tệp PDF lớn hoặc có nhiều chi tiết giờ phản hồi tốt hơn khi cuộn nhanh.
+• Bản xem trước trang vẫn hiển thị khi bạn di chuyển nhanh qua tài liệu, sau đó trở lại sắc nét với đầy đủ chi tiết.
+• Công việc kết xuất được lên lịch đều hơn, giúp giảm hiện tượng giật khung hình không thường xuyên.
