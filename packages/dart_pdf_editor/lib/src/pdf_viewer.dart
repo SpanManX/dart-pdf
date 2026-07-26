@@ -1579,7 +1579,10 @@ class _PdfViewerState extends State<PdfViewer>
   /// even a slow drift must keep heavyweight page/detail renders held back.
   bool _trackpadGestureActive = false;
 
-  bool get _motionRenderHoldActive =>
+  /// Direct gestures and animations that should defer even the cheap vector
+  /// preview replay. A list/wheel scroll is deliberately not included: its
+  /// command-limited vector preview is what keeps fast-scrolled pages visible.
+  bool get _directMotionRenderHoldActive =>
       _trackpadGestureActive ||
       _grabPanning ||
       _touchPanning ||
@@ -1588,6 +1591,19 @@ class _PdfViewerState extends State<PdfViewer>
       _hBounceController.isAnimating ||
       _zoomAnimator.isAnimating ||
       (_motionHoldReleaseTimer?.isActive ?? false);
+
+  /// Full page/thumbnail rasters also stay held for the scroll quiet window.
+  bool get _motionRenderHoldActive =>
+      _directMotionRenderHoldActive ||
+      (_scrollSettleTimer?.isActive ?? false);
+
+  /// A wheel signal also leaves InteractiveViewer's short release timer
+  /// active, but the live scroll timer distinguishes that case from a direct
+  /// transform gesture. Allow the command-limited vector preview through while
+  /// the list is scrolling; full page and thumbnail rasters remain held.
+  bool get _previewUiMustDefer =>
+      _directMotionRenderHoldActive &&
+      !(_scrollSettleTimer?.isActive ?? false);
 
   void _settleRenderHold() {
     _renderScheduler.holding = _motionRenderHoldActive || !widget.active;
@@ -2093,14 +2109,18 @@ class _PdfViewerState extends State<PdfViewer>
     });
   }
 
-  /// Debounced scroll-settle: scrolling moves pages under a deep-zoom
-  /// detail patch, so the patch must follow once movement stops.
+  /// Debounced scroll-settle: scrolling moves pages under a deep-zoom detail
+  /// patch, so the patch must follow once movement stops. Keep the inexpensive
+  /// preview on screen for a full 500 ms quiet window. A worker transfer or
+  /// CanvasKit frame can delay a wheel acknowledgement beyond the old 250 ms
+  /// window; releasing then started a 200-500 ms CAD raster in the middle of
+  /// an otherwise continuous wheel stream.
   void _onScrollForDetail() {
     _trackScrollVelocity();
     // the scheduler drains held pages nearest the viewport first
     _renderScheduler.focus = _jumpFocusPage ?? _controller.currentPage;
     _scrollSettleTimer?.cancel();
-    _scrollSettleTimer = Timer(const Duration(milliseconds: 250), () {
+    _scrollSettleTimer = Timer(const Duration(milliseconds: 500), () {
       _scrollSamples.clear();
       _vectorFirstPrefetch = false;
       _jumpFocusPage = null;
@@ -2172,7 +2192,7 @@ class _PdfViewerState extends State<PdfViewer>
             commandLimit: vectorOnly ? _jumpPreviewOperationLimit : null,
             deferUiWork: vectorOnly
                 ? () {
-                    final defer = !mounted || _motionRenderHoldActive;
+                    final defer = !mounted || _previewUiMustDefer;
                     deferredPreview |= defer;
                     return defer;
                   }

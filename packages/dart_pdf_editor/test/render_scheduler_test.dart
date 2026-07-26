@@ -247,6 +247,31 @@ void main() {
     expect(scheduler.busy, isFalse);
   });
 
+  testWidgets('busy stays true through an async render replay/raster',
+      (tester) async {
+    final scheduler = PdfPageRenderScheduler();
+    addTearDown(scheduler.dispose);
+    final gate = Completer<void>();
+    var pings = 0;
+    scheduler.activity.addListener(() => pings++);
+
+    scheduler.request('page', 0, () async {
+      await gate.future;
+    });
+    await tester.pump();
+
+    expect(scheduler.hasPending, isFalse,
+        reason: 'the page has already been granted');
+    expect(scheduler.busy, isTrue,
+        reason: 'its async replay/raster is still in flight');
+
+    gate.complete();
+    await tester.pump();
+    expect(scheduler.busy, isFalse);
+    expect(pings, greaterThanOrEqualTo(3),
+        reason: 'queued, granted/in-flight, and settled transitions notify');
+  });
+
   testWidgets('a parked viewer reads idle however much it is holding',
       (tester) async {
     // PdfViewer.active false (the full-area page grid overlaid it) holds every

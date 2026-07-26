@@ -3,6 +3,7 @@ import 'dart:developer' show TimelineTask;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -463,6 +464,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
       worker: widget.renderWorker,
       priority: 3,
       skipIfWorkerDeclines: true,
+      deferUiWork: _viewerRenderBusy,
       reason: 'warm',
       disk: controller.pageRenderStamp(index) == 0 ? cache.disk : null,
     );
@@ -553,12 +555,23 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
     // alone still lets it land on the frame the visible page needs (#603).
     _cache.bindForegroundGate(
         widget.viewerController.pageRenderActivity, _viewerRenderBusy);
-    _cache.setWarm(
-      this,
-      controller.document.pageCount,
-      '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
-      (index) => _warmRender(index, pixelWidth),
-    );
+    if (pdfShouldWarmThumbnails(controller.document.pageCount)) {
+      _cache.setWarm(
+        this,
+        controller.document.pageCount,
+        '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
+        (index) => _warmRender(index, pixelWidth),
+      );
+    } else {
+      // On web, rasterizing even a 128 px thumbnail replays the entire vector
+      // picture through CanvasKit and can monopolize the platform thread for
+      // hundreds of milliseconds. Long documents use on-demand tiles plus
+      // the viewer's already-cached soft previews instead of speculatively
+      // paying that cost for every off-screen page.
+      _cache.clearWarm(this);
+      _cache.bindForegroundGate(
+          widget.viewerController.pageRenderActivity, _viewerRenderBusy);
+    }
     // pages a shift-click would select from the current hover - painted as
     // a ghost of the selection chip while Shift is held
     final rangePreview = _rangePreview;
@@ -1348,6 +1361,7 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
       worker: widget.renderWorker,
       priority: 3,
       skipIfWorkerDeclines: true,
+      deferUiWork: _viewerRenderBusy,
       reason: 'warm',
       disk: controller.pageRenderStamp(index) == 0 ? cache.disk : null,
     );
@@ -1376,12 +1390,18 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
     // see the strip's copy: the warm stands down while the viewer renders
     _cache.bindForegroundGate(
         widget.viewerController.pageRenderActivity, _viewerRenderBusy);
-    _cache.setWarm(
-      this,
-      controller.document.pageCount,
-      '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
-      (index) => _warmRender(index, pixelWidth),
-    );
+    if (pdfShouldWarmThumbnails(controller.document.pageCount)) {
+      _cache.setWarm(
+        this,
+        controller.document.pageCount,
+        '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
+        (index) => _warmRender(index, pixelWidth),
+      );
+    } else {
+      _cache.clearWarm(this);
+      _cache.bindForegroundGate(
+          widget.viewerController.pageRenderActivity, _viewerRenderBusy);
+    }
     // the scrollbar overlays the grid's right edge; keep content clear of it
     const barClearance = PdfScrollbar.hitExtent;
     return LayoutBuilder(builder: (context, constraints) {
@@ -2587,6 +2607,18 @@ String thumbnailKey(PdfEditingController controller, int pageIndex,
     '$pageIndex|${controller.pageRenderStamp(pageIndex)}'
     '|${pageColor.toARGB32()}|$pixelWidth${annotations ? '' : '|noannots'}';
 
+/// Whole-document thumbnail warming policy.
+///
+/// Native platforms can rasterize tile-sized pictures away from the Flutter
+/// web platform-thread bottleneck. On web, a dense vector page still costs
+/// hundreds of milliseconds in CanvasKit even at 128 px, so proactively
+/// warming every page of a long document creates periodic frame drops before
+/// the user ever visits those pages. Such documents render visible tiles on
+/// demand and show the viewer's 200 px preview meanwhile.
+@visibleForTesting
+bool pdfShouldWarmThumbnails(int pageCount, {bool? web}) =>
+    !(web ?? kIsWeb) || pageCount <= 24;
+
 /// Raster widths snap to 64px steps so a resize drag doesn't re-render every
 /// page per pixel.
 int _thumbnailBucket(double px) => ((px / 64).ceil() * 64).clamp(64, 1024);
@@ -2622,6 +2654,7 @@ Future<ui.Image?> rasterizeThumbnail({
   required PdfRenderWorker? worker,
   int priority = 2,
   bool skipIfWorkerDeclines = false,
+  bool Function()? deferUiWork,
   String reason = 'tile',
   PdfRasterCache? disk,
 }) async {
@@ -2667,6 +2700,17 @@ Future<ui.Image?> rasterizeThumbnail({
         : null;
     final recordMs = sw.elapsedMicroseconds / 1000.0;
     if (commands != null) {
+      // A background warm may have started while the viewer was idle, then
+      // received its worker result after scrolling began. Do not turn that
+      // result into a picture/raster on the platform thread now: the page's
+      // visible tile already has a soft viewer preview, and foreground motion
+      // wins. The warm pass may leave this page for its on-demand tile render.
+      if (deferUiWork?.call() ?? false) {
+        trace.instant('defer ui replay', arguments: {'ms': recordMs});
+        PdfPerfLog.log('thumbnail page=$pageIndex $reason px=$pixelWidth '
+            'defer ui replay record=${_traceMs(recordMs)}');
+        return null;
+      }
       trace.instant('worker.record',
           arguments: {'ms': recordMs, 'commands': commands.length});
       sw.reset();
@@ -2685,6 +2729,17 @@ Future<ui.Image?> rasterizeThumbnail({
       final replayMs = sw.elapsedMicroseconds / 1000.0;
       sw.reset();
       try {
+        // pictureFromCommands can yield while resolving resources. Re-check
+        // before the much more expensive CanvasKit raster in case scrolling
+        // began during that replay.
+        if (deferUiWork?.call() ?? false) {
+          trace.instant('defer ui raster',
+              arguments: {'recordMs': recordMs, 'replayMs': replayMs});
+          PdfPerfLog.log('thumbnail page=$pageIndex $reason px=$pixelWidth '
+              'defer ui raster record=${_traceMs(recordMs)} '
+              'replay=${_traceMs(replayMs)}');
+          return null;
+        }
         final image = await PdfPageRenderer.rasterize(picture, size, ratio);
         final rasterMs = sw.elapsedMicroseconds / 1000.0;
         trace.instant('rasterize', arguments: {'ms': rasterMs});

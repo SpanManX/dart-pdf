@@ -55,7 +55,8 @@ class PdfPageRenderScheduler {
   Listenable get activity => _activity;
 
   /// Whether the viewer still has foreground page work in flight: a scroll is
-  /// holding renders back, or pages are queued for their first interpret.
+  /// holding renders back, pages are queued for their first interpret, or a
+  /// granted page is still replaying/rasterizing.
   ///
   /// This is the *platform-thread* gate. The render worker's own priorities
   /// order the isolate's queue, but the picture build and rasterization that
@@ -67,7 +68,8 @@ class PdfPageRenderScheduler {
   /// by another view and will not render any of it, so it is not competing for
   /// anything. Without that the full-area page grid - which parks the viewer
   /// it covers - would gate its own thumbnails behind a hold that never lifts.
-  bool get busy => !_parked && (_holding || _pending.isNotEmpty);
+  bool get busy =>
+      !_parked && (_holding || _pending.isNotEmpty || _inFlight.isNotEmpty);
 
   bool _parked = false;
 
@@ -176,6 +178,10 @@ class PdfPageRenderScheduler {
         PdfPerfLog.log('scheduler grant page=${next.priority} '
             'focus=$_focus remaining=${_pending.length}');
         _inFlight[next.token] = null;
+        // A granted async render has left the pending queue but still owns the
+        // platform thread for its replay/raster phase. Background thumbnail
+        // work must keep treating the viewer as busy through that window.
+        _activity.ping();
         try {
           // starts one page render this frame; the callback returns at its
           // first await, so this does not block the pacing below
@@ -211,11 +217,14 @@ class PdfPageRenderScheduler {
   /// the re-request that arrived while it was running, if any.
   void _settle(Object token) {
     final queued = _inFlight.remove(token);
-    if (queued == null || _disposed) return;
-    _pending.add(queued);
-    _scheduleDrain();
-    // re-queueing makes the viewer busy again (#603) - the thumbnail warm
-    // must stand down for it, exactly as it would for a fresh request
+    if (_disposed) return;
+    if (queued != null) {
+      _pending.add(queued);
+      _scheduleDrain();
+    }
+    // Finishing the last in-flight render may make the viewer idle; if a
+    // repeat was queued it remains busy. Either transition must wake the
+    // foreground gate so thumbnail work can re-read [busy].
     _activity.ping();
   }
 

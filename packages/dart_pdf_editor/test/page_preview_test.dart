@@ -603,6 +603,9 @@ void main() {
       await tester.runAsync(
           () => Future<void>.delayed(const Duration(milliseconds: 10)));
     }
+    // The fast-scroll hold now waits for a full 500 ms of quiet before the
+    // sharp render starts. No preview should appear while that timer runs.
+    await tester.pump(const Duration(milliseconds: 550));
     expect(controller.debugPreviewCache!.has(6), isFalse);
     expect(previewRaster, findsNothing);
     for (var i = 0; i < 50 && fullRaster.evaluate().isEmpty; i++) {

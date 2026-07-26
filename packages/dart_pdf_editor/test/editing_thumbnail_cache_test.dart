@@ -7,6 +7,7 @@ import 'package:dart_pdf_editor/src/editing/thumbnail_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf_document/pdf_document.dart';
+import 'package:pdf_graphics/pdf_graphics.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,6 +17,13 @@ void main() {
       Future<void>.delayed(const Duration(milliseconds: 50));
 
   group('PdfThumbnailCache scheduler', () {
+    test('long web documents skip speculative whole-document warming', () {
+      expect(pdfShouldWarmThumbnails(24, web: true), isTrue);
+      expect(pdfShouldWarmThumbnails(25, web: true), isFalse);
+      expect(pdfShouldWarmThumbnails(138, web: true), isFalse);
+      expect(pdfShouldWarmThumbnails(138, web: false), isTrue);
+    });
+
     test('serves the pending task nearest the focus first', () async {
       final cache = PdfThumbnailCache();
       addTearDown(cache.dispose);
@@ -83,6 +91,30 @@ void main() {
         await tester.pump();
       }
       expect(warmed, [0, 1, 2]);
+    });
+
+    testWidgets('visible tile renders also stand down for the viewer',
+        (tester) async {
+      final cache = PdfThumbnailCache();
+      addTearDown(cache.dispose);
+      final activity = _TestActivity();
+      var viewerBusy = true;
+      cache.bindForegroundGate(activity, () => viewerBusy);
+
+      final rendered = <int>[];
+      cache.request(Object(), 4, () async => rendered.add(4));
+      for (var i = 0; i < 5; i++) {
+        await tester.pump();
+      }
+      expect(rendered, isEmpty,
+          reason: 'the soft viewer preview stays visible during motion');
+
+      viewerBusy = false;
+      activity.ping();
+      for (var i = 0; i < 5; i++) {
+        await tester.pump();
+      }
+      expect(rendered, [4]);
     });
 
     testWidgets('an unbound cache warms exactly as before', (tester) async {
@@ -306,6 +338,33 @@ void main() {
       expect(rendered, isNull);
     });
 
+    testWidgets('a warm worker result defers its UI replay during motion',
+        (tester) async {
+      final bytes = buildMultiPagePdf(1);
+      final controller = PdfEditingController(bytes);
+      final worker = _ImmediateWorker();
+      addTearDown(controller.dispose);
+      addTearDown(worker.dispose);
+
+      ui.Image? rendered;
+      await tester.runAsync(() async {
+        rendered = await rasterizeThumbnail(
+          controller: controller,
+          pageIndex: 0,
+          pageColor: const Color(0xFFFFFFFF),
+          annotations: true,
+          pixelWidth: 128,
+          worker: worker,
+          deferUiWork: () => true,
+          reason: 'warm',
+        );
+      });
+
+      expect(rendered, isNull,
+          reason: 'a worker reply must not start CanvasKit replay/raster '
+              'after the viewer begins scrolling');
+    });
+
     testWidgets('a rendered thumbnail writes through to disk and reloads',
         (tester) async {
       final store = PdfMemoryCacheStore();
@@ -385,4 +444,33 @@ class _TestActivity implements Listenable {
       callback();
     }
   }
+}
+
+/// Deterministic worker seam for the UI-deferral test: a non-null command
+/// buffer proves rasterizeThumbnail reached the worker-result branch without
+/// spawning an isolate whose lifetime can outlive flutter_test's fake clock.
+class _ImmediateWorker extends PdfRenderWorker {
+  bool _active = true;
+
+  @override
+  bool get isActive => _active;
+
+  @override
+  Future<List<PdfRenderCommand>?> record(
+    int pageIndex, {
+    bool annotations = true,
+    int priority = 0,
+    double? imagePixelRatio,
+    bool decodeImages = true,
+    int? commandLimit,
+    PdfRect? imageDecodeRegion,
+    PdfPartialRecordSink? onPartial,
+  }) async =>
+      [PdfSaveCommand(), PdfRestoreCommand()];
+
+  @override
+  void cancel(int pageIndex, {int priority = 0}) {}
+
+  @override
+  void dispose() => _active = false;
 }

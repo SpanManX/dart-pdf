@@ -97,10 +97,22 @@ class PdfThumbnailCache {
   void bindForegroundGate(Listenable? activity, bool Function()? isBusy) {
     if (_disposed) return;
     _gateBusy = isBusy;
-    if (identical(_gateActivity, activity)) return;
-    _gateActivity?.removeListener(_kickWarm);
+    if (identical(_gateActivity, activity)) {
+      _onGateActivity();
+      return;
+    }
+    _gateActivity?.removeListener(_onGateActivity);
     _gateActivity = activity;
-    _gateActivity?.addListener(_kickWarm);
+    _gateActivity?.addListener(_onGateActivity);
+    _onGateActivity();
+  }
+
+  /// Reconsiders both queues whenever the viewer's platform-thread work may
+  /// have changed. Visible tiles already have a soft page-preview placeholder,
+  /// so their sharp raster must wait just like the background warm instead of
+  /// stealing a scrolling frame.
+  void _onGateActivity() {
+    _scheduleDrain();
     _kickWarm();
   }
 
@@ -152,7 +164,7 @@ class PdfThumbnailCache {
       _pending.removeWhere((task) => identical(task.token, token));
 
   void _scheduleDrain() {
-    if (_draining || _disposed || _pending.isEmpty) return;
+    if (_draining || _disposed || _pending.isEmpty || _viewerBusy) return;
     _draining = true;
     // off the current build/layout stack (requests fire from build) so the
     // first grant lands after this frame rather than blocking it
@@ -162,6 +174,10 @@ class PdfThumbnailCache {
   Future<void> _drain() async {
     try {
       while (!_disposed && _pending.isNotEmpty) {
+        // The tile stays on its viewer-provided soft preview while the main
+        // page is scrolling/replaying/rasterizing. The activity listener
+        // restarts this queue as soon as the viewer is genuinely idle.
+        if (_viewerBusy) return;
         var pick = 0;
         var best = _rank(_pending.first);
         for (var i = 1; i < _pending.length; i++) {
@@ -190,6 +206,7 @@ class PdfThumbnailCache {
       }
     } finally {
       _draining = false;
+      if (_pending.isNotEmpty && !_viewerBusy) _scheduleDrain();
       // a tile that just finished may have been the last thing holding the
       // warm pass back
       _kickWarm();
@@ -335,7 +352,7 @@ class PdfThumbnailCache {
     _disposed = true;
     _pending.clear();
     _warmRenderer = null;
-    _gateActivity?.removeListener(_kickWarm);
+    _gateActivity?.removeListener(_onGateActivity);
     _gateActivity = null;
     _gateBusy = null;
     _images.dispose(); // clears every raster and unregisters from the registry
