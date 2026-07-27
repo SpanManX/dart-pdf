@@ -15,6 +15,7 @@ import 'page_number_field.dart';
 import 'performance_policy.dart';
 import 'pdf_reflow_view.dart';
 import 'pdf_viewer.dart';
+import 'preview_cache.dart';
 import 'progressive_source.dart';
 import 'raster_cache.dart';
 import 'search_panel.dart';
@@ -142,6 +143,7 @@ class PdfReader extends StatefulWidget {
     this.viewerTheme,
     this.rasterCache,
     this.textCache,
+    this.pageRasterCachePolicy = const PdfPageRasterCachePolicy(),
   })  : source = null,
         options = const PdfSourceLoadOptions(firstPaintPages: 1),
         onProgress = null,
@@ -186,6 +188,7 @@ class PdfReader extends StatefulWidget {
     this.viewerTheme,
     this.rasterCache,
     this.textCache,
+    this.pageRasterCachePolicy = const PdfPageRasterCachePolicy(),
   }) : bytes = null;
 
   /// The PDF to show. Replacing it (by identity) opens the new
@@ -222,6 +225,10 @@ class PdfReader extends StatefulWidget {
   /// by [documentId], so reopening a document searches it without re-walking
   /// every page's content stream.
   final PdfPageTextCache? textCache;
+
+  /// Memory policy for exact full-resolution rasters of previously visited
+  /// pages. See [PdfViewer.pageRasterCachePolicy].
+  final PdfPageRasterCachePolicy pageRasterCachePolicy;
 
   /// A stable identifier for this document, used to remember its scroll
   /// position and zoom across sessions (persisted in [preferences]). Null
@@ -540,6 +547,7 @@ class _PdfReaderState extends State<PdfReader> {
                           performance: _performance,
                           rasterCache: widget.rasterCache,
                           textCache: widget.textCache,
+                          pageRasterCachePolicy: widget.pageRasterCachePolicy,
                           documentId: _documentKey,
                         ),
                 ),

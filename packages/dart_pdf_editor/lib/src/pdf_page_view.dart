@@ -489,6 +489,11 @@ class _PdfPageViewState extends State<PdfPageView>
   Rect? _tileFraction;
   double? _tileDesiredRatio;
 
+  /// The retained scene whose heavy region index this page has asked a worker
+  /// to build. Keeps repeated zoom settles from attaching duplicate completion
+  /// handlers while that one build is in flight.
+  PdfRetainedScene? _regionIndexWarmScene;
+
   /// Clone of this page's cached low-res preview; painted while no full
   /// raster exists, dropped (to free the buffer) the moment one lands.
   ui.Image? _preview;
@@ -798,6 +803,9 @@ class _PdfPageViewState extends State<PdfPageView>
   }) {
     _scene?.dispose();
     _scene = scene;
+    if (!identical(_regionIndexWarmScene, scene)) {
+      _regionIndexWarmScene = null;
+    }
     _sceneHasImageDraws =
         scene != null && PdfPageRenderer.hasImageDraws(scene.commands);
     _sceneFromWorker = scene != null && fromWorker;
@@ -2049,8 +2057,21 @@ class _PdfPageViewState extends State<PdfPageView>
     // _refreshTileGeometry returns false and we fall through to the single-patch
     // path below, which covers an arbitrarily large region in one raster
     // without thrashing the shared pyramid (issues #314/#360).
-    if (_useTilePath && _refreshTileGeometry()) {
-      return true;
+    // _refreshTileGeometry also bootstraps a dense scene's worker-built region
+    // index. Do not guard this call on _useTilePath: that gate cannot become
+    // true until the very warm-up this call starts has completed.
+    if (PdfPageView.tileStoreDetail) {
+      if (_refreshTileGeometry()) return true;
+      // A worker-built grid takes a few hundred milliseconds on the dense CAD
+      // pages that need it. Keep the already-visible capped base raster during
+      // that one warm-up instead of launching a competing full-viewport detail
+      // record which will be obsolete before it can rasterize.
+      if (_tilePathStatus == 'index-warming') {
+        PdfPerfLog.log(
+          'detail waits for region-index page=${widget.previewIndex}',
+        );
+        return true;
+      }
     }
 
     // A Slug page picture is already transform-sharp for text and vector
@@ -2119,7 +2140,7 @@ class _PdfPageViewState extends State<PdfPageView>
       'strip=$stripDetail vectorOnly=$_sceneIsVectorOnly '
       // scene/tiles: why this page does or does not get reusable tiles instead
       // of a fresh full-viewport raster on every pan step.
-      'scene=${heldScene != null} tiles=$_useTilePath',
+      'scene=${heldScene != null} tiles=$_tilePathStatus',
     );
     final workerStripFuture = stripDetail
         ? _detailStripImageFromWorker(
@@ -2484,10 +2505,16 @@ class _PdfPageViewState extends State<PdfPageView>
   /// [_tileCanRasterize] vetoes the regions an image draw intersects, which
   /// keep the fallback/base raster and heal automatically if the full record
   /// later replaces the scene.
-  bool get _useTilePath {
-    if (!PdfPageView.tileStoreDetail) return false;
+  bool get _useTilePath => _tilePathStatus == 'active';
+
+  /// Diagnostic state for the tile gate. The old boolean trace could only say
+  /// `tiles=false`, leaving patch mode, a missing/warming spatial index, and an
+  /// unsupported scene indistinguishable in field traces.
+  String get _tilePathStatus {
+    if (!PdfPageView.tileStoreDetail) return 'off';
+    if (!PdfPageView.retainedZoomReplay) return 'replay-off';
     final scene = PdfPageView.retainedZoomReplay ? _scene : null;
-    if (scene == null) return false;
+    if (scene == null) return 'no-scene';
     // A dense (grid-escalated) page's region index is a ~O(commands) build
     // (~210ms on the CAD probe, issue #384). Never pay it synchronously on the
     // UI isolate: defer the tile path until the warmed index is resident (built
@@ -2495,9 +2522,9 @@ class _PdfPageViewState extends State<PdfPageView>
     // Until then the base raster / single detail patch covers the view. Pages
     // below the grid ceiling keep the cheap synchronous linear build.
     if (scene.regionIndexBuildIsHeavy && !scene.debugHasRegionReplayIndex) {
-      return false;
+      return 'index-warming';
     }
-    return scene.supportsRegionRaster;
+    return scene.supportsRegionRaster ? 'active' : 'unsupported-scene';
   }
 
   /// Kicks the region-replay index build onto the render worker when the page
@@ -2511,18 +2538,68 @@ class _PdfPageViewState extends State<PdfPageView>
     final scene = PdfPageView.retainedZoomReplay ? _scene : null;
     if (scene == null ||
         scene.debugHasRegionReplayIndex ||
-        !scene.regionIndexBuildIsHeavy) {
+        !scene.regionIndexBuildIsHeavy ||
+        identical(_regionIndexWarmScene, scene)) {
       return;
     }
     final worker = _sceneFromWorker ? widget.renderWorker : null;
-    final warming = scene;
-    scene
-        .warmRegionIndex(worker, pageIndex: widget.previewIndex)
-        .then((_) {
+    final pageIndex = widget.previewIndex;
+    _regionIndexWarmScene = scene;
+    final clock = Stopwatch()..start();
+    PdfPerfLog.log(
+      'region-index warm page=$pageIndex '
+      'commands=${scene.commands.length} '
+      'requested=${worker != null && worker.isActive ? 'worker' : 'local'}',
+    );
+    unawaited(_completeRegionIndexWarm(scene, worker, pageIndex, clock));
+  }
+
+  Future<void> _completeRegionIndexWarm(
+    PdfRetainedScene scene,
+    PdfRenderWorker? worker,
+    int pageIndex,
+    Stopwatch clock,
+  ) async {
+    try {
+      final index = await scene.warmRegionIndex(
+        worker,
+        pageIndex: pageIndex,
+      );
+      PdfPerfLog.log(
+        'region-index ready page=$pageIndex '
+        'supported=${index.supported} units=${index.units.length} '
+        'bytes=${index.estimatedBytes} elapsed=${clock.elapsedMilliseconds}ms',
+      );
       // Only refresh if this is still the adopted scene and we're mounted; a
       // document swap or scroll-away may have replaced it while the worker ran.
-      if (mounted && identical(_scene, warming)) _refreshTileGeometry();
-    });
+      if (mounted && identical(_scene, scene)) {
+        final tiling = _refreshTileGeometry();
+        PdfPerfLog.log(
+          'region-index route page=$pageIndex '
+          'gate=$_tilePathStatus tiling=$tiling',
+        );
+        // A fallback detail request may have started while the index was
+        // warming. Once tiles can cover this view, invalidate that generation
+        // so its multi-megapixel worker picture is dropped instead of rastered.
+        if (tiling) {
+          _renderSession.invalidateDetail();
+        } else {
+          // Unsupported grouped scenes and views too large for the tile budget
+          // still need the legacy detail patch. Re-enter now that the gate has
+          // a final verdict; _updateDetail will no longer take the warming wait.
+          _render();
+        }
+      }
+    } catch (error) {
+      PdfPerfLog.log(
+        'region-index failed page=$pageIndex '
+        'elapsed=${clock.elapsedMilliseconds}ms error=$error',
+      );
+    } finally {
+      if (identical(_regionIndexWarmScene, scene)) {
+        _regionIndexWarmScene = null;
+      }
+    }
   }
 
   /// Per-tile veto for the tile store while the scene is vector-only: a tile
@@ -2617,9 +2694,20 @@ class _PdfPageViewState extends State<PdfPageView>
         pageSize: size,
         desiredRatio: desired,
         visibleFraction: fraction,
-        rasterize: (region, ratio) =>
-            scene.rasterizeRegion(region, pixelRatio: ratio),
+        rasterize: (region, ratio) => scene.rasterizeRegion(
+          region,
+          pixelRatio: ratio,
+          tracePage: widget.previewIndex,
+        ),
         canRasterize: _tileCanRasterize,
+        // A grid-indexed CAD scene can select tens of thousands of commands
+        // across one viewport slab. replayRegion records those commands
+        // synchronously before toImage yields, so batching every missing tile
+        // made the whole slab one UI-frame stall (271ms in the field trace).
+        // Admit one tile per paint instead. A tile completion repaints the
+        // layer and advances the center-out fill; ordinary scenes retain the
+        // lower-overhead batched path.
+        maxNewTilesPerPaint: scene.regionIndexBuildIsHeavy ? 1 : null,
       ),
     );
   }
