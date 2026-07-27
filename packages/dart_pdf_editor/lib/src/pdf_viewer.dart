@@ -1090,9 +1090,11 @@ class PdfViewer extends StatefulWidget {
   ///
   /// This covers the desktop right-click **text** menu even without [editing]
   /// (reader mode), plus - when [editing] is set - the right-click and
-  /// long-press **annotation** menus and the floating selection chip's "More"
-  /// button. The long-press annotation menu and selection-chip button require
-  /// [editing]; the desktop text menu does not.
+  /// long-press **annotation** menus. It also hides the floating touch
+  /// selection chip (Copy / Select all / Markup) entirely; the selection
+  /// itself and its drag handles stay, so the host can offer those actions
+  /// in its own chrome. The long-press annotation menu requires [editing];
+  /// the desktop text menu does not.
   final bool contextMenuEnabled;
 
   /// Fires when the user requests a context menu (desktop right-click on
@@ -4692,7 +4694,10 @@ class _PdfViewerState extends State<PdfViewer>
       startRightToLeft: isStart && first.isRightToLeft,
       endRect: isEnd ? last.bounds : null,
       endRightToLeft: isEnd && last.isRightToLeft,
-      chip: isEnd && !_handleDragging,
+      // The chip is a popup menu in all but name, so it goes away with
+      // the rest of them when the host owns context menus. Handles stay:
+      // they are selection manipulation, not a menu.
+      chip: widget.contextMenuEnabled && isEnd && !_handleDragging,
       onDragStart: _onHandleDragStart,
       onDragUpdate: _onHandleDragUpdate,
       onDragEnd: _onHandleDragEnd,

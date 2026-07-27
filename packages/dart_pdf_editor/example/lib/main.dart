@@ -41,7 +41,7 @@ const _sampleRemotePdfUrl =
 /// the user has disabled the stock context menu. The host owns the strings
 /// and labels, so a different action set per annotation type fits here
 /// naturally.
-enum _DemoAnnotAction { copy, note, sendTo }
+enum _DemoAnnotAction { copy, highlight, note, sendTo }
 
 /// Test seam: builds the byte source a remote open reads from. Defaults to a
 /// real [PdfHttpByteSource]; tests swap in an in-memory source so no network
@@ -256,9 +256,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   bool _contextMenuEnabled = false;
 
   /// Demo of [PdfViewer.onContextMenuRequested]: when the stock menu is
-  /// off, this handler renders the demo app's own menu (a custom Copy
-  /// row plus a "Send to…" action) using the gesture position the
-  /// viewer passes in. App-wide.
+  /// off, this handler renders the demo app's own menu (a custom Copy row,
+  /// Highlight and Add-note actions that write real annotations, plus a
+  /// "Send to…" action) using the gesture position the viewer passes in.
+  /// App-wide.
   Future<void> _onContextMenuRequested(
     Offset globalPosition,
     int pageIndex, {
@@ -294,6 +295,15 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ),
         ),
         const PopupMenuItem<_DemoAnnotAction>(
+          value: _DemoAnnotAction.highlight,
+          child: ListTile(
+            leading: Icon(Icons.brush_outlined),
+            title: Text('Highlight (custom)'),
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        const PopupMenuItem<_DemoAnnotAction>(
           value: _DemoAnnotAction.note,
           child: ListTile(
             leading: Icon(Icons.sticky_note_2_outlined),
@@ -315,17 +325,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
     );
 
     if (picked == null || !mounted) return;
-    final l10n = appL10n(context); // capture before the switch
-    // tab / editing / (x, y) are declared above; reuse them here.
 
-    // The viewer has already added the annotation under the press to
-    // the selection by the time this callback fires
-    // (see _maybeAnnotationMenu / _onMenuLongPress in pdf_viewer.dart
-    // and editing_overlay.dart). Read the slot from the controller
-    // instead of re-running a hit test on pagePoint - re-hit-test can
-    // miss when the viewport has shifted during the await showMenu
-    // window, and fall back to selectableAnnotationAt for plain-text
-    // entries where the viewer didn't pre-select anything.
     PdfAnnotation? annotation;
     if (editing != null) {
       for (final slot in editing.selectedAnnotationSlots) {
@@ -340,23 +340,59 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
     switch (picked) {
       case _DemoAnnotAction.copy:
-        // Sticky notes / free text carry their body in /Contents; falling
-        // back to empty string keeps the clipboard call legal even if
-        // the annotation has no text body.
-        final text = tab?.viewer!.selectedText;  // 用 controller 的 selectedText
-        print(text);
-        print(_active);
-        await Clipboard.setData(ClipboardData(text: text.toString()));
-        _toast(l10n.exCopiedToClipboard);
+        final text = tab?.viewer!.selectedText;
+        _toast(text!);
+      case _DemoAnnotAction.highlight:
+        // The stock chip's Markup button, host-side: the selection geometry
+        // is public API, so any menu can turn the live selection into a
+        // /Highlight. A cross-page selection yields one markup per page.
+        // The colour and opacity come from `editing.color`/`editing.opacity`;
+        // useMarkupStyleScope gives markup its own remembered pair (the
+        // classic highlighter that stays yellow) instead of the armed
+        // tool's.
+        final viewer = tab?.viewer;
+        if (editing == null || viewer == null || !viewer.hasSelection) {
+          _toast('Select some text first');
+          return;
+        }
+        editing.useMarkupStyleScope();
+        editing.addMarkup(PdfMarkupKind.highlight, {
+          for (final page in viewer.selectionPages)
+            page: viewer.selectionRectsOn(page),
+        });
+        viewer.clearSelection();
       case _DemoAnnotAction.note:
-        // Wire this to your app's note-insertion flow. The demo just
-        // surfaces where the gesture landed so the host can verify the
-        // page coordinates it received.
-        _toast('Add note at page ${pageIndex + 1} ($x, $y)');
+        // pagePoint is already in PDF page space - exactly what addNote
+        // wants for the sticky note's top-left corner (page rotation is
+        // folded in for us).
+        if (editing == null) return;
+        final field = TextEditingController();
+        final noteText = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Add note'),
+            content: TextField(
+              controller: field,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'Note text'),
+              onSubmitted: (value) => Navigator.pop(ctx, value),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, field.text),
+                child: const Text('Add'),
+              ),
+            ],
+          ),
+        );
+        field.dispose();
+        if (noteText == null || noteText.isEmpty || !mounted) return;
+        editing.addNote(pageIndex, x, y, noteText);
       case _DemoAnnotAction.sendTo:
-        // Wire this to your app's send/share flow. The demo surfaces
-        // the resolved annotation so the host can verify what the
-        // host-takeover callback delivered.
         _toast('Send page ${pageIndex + 1}'
             '${annotation != null ? " (${annotation.subtype})" : ""}');
     }
