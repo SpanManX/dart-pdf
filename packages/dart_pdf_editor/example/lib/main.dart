@@ -41,7 +41,7 @@ const _sampleRemotePdfUrl =
 /// the user has disabled the stock context menu. The host owns the strings
 /// and labels, so a different action set per annotation type fits here
 /// naturally.
-enum _DemoAnnotAction { copy, highlight, note, sendTo }
+enum _DemoAnnotAction { copy, highlight, sendTo }
 
 /// Test seam: builds the byte source a remote open reads from. Defaults to a
 /// real [PdfHttpByteSource]; tests swap in an in-memory source so no network
@@ -304,15 +304,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ),
         ),
         const PopupMenuItem<_DemoAnnotAction>(
-          value: _DemoAnnotAction.note,
-          child: ListTile(
-            leading: Icon(Icons.sticky_note_2_outlined),
-            title: Text('Add note…'),
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-        const PopupMenuItem<_DemoAnnotAction>(
           value: _DemoAnnotAction.sendTo,
           child: ListTile(
             leading: Icon(Icons.send),
@@ -343,38 +334,33 @@ class _ViewerScreenState extends State<ViewerScreen> {
         final text = tab?.viewer!.selectedText;
         _toast(text!);
       case _DemoAnnotAction.highlight:
-        // The stock chip's Markup button, host-side: the selection geometry
-        // is public API, so any menu can turn the live selection into a
-        // /Highlight. A cross-page selection yields one markup per page.
-        // The colour and opacity come from `editing.color`/`editing.opacity`;
-        // useMarkupStyleScope gives markup its own remembered pair (the
-        // classic highlighter that stays yellow) instead of the armed
-        // tool's.
+        // Highlight the live selection, then write the optional note as
+        // the highlight's own /Contents (not a reply, not a /FreeText
+        // box - what Adobe/Foxit show as the highlight's first comment).
         final viewer = tab?.viewer;
         if (editing == null || viewer == null || !viewer.hasSelection) {
           _toast('Select some text first');
           return;
         }
-        editing.useMarkupStyleScope();
-        editing.addMarkup(PdfMarkupKind.highlight, {
+        final quadsByPage = {
           for (final page in viewer.selectionPages)
             page: viewer.selectionRectsOn(page),
-        });
-        viewer.clearSelection();
-      case _DemoAnnotAction.note:
-        // pagePoint is already in PDF page space - exactly what addNote
-        // wants for the sticky note's top-left corner (page rotation is
-        // folded in for us).
-        if (editing == null) return;
+        };
+        editing.useMarkupStyleScope();
+        editing.addMarkup(PdfMarkupKind.highlight, quadsByPage);
+
         final field = TextEditingController();
         final noteText = await showDialog<String>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('Add note'),
+            title: const Text('Highlight note'),
             content: TextField(
               controller: field,
               autofocus: true,
-              decoration: const InputDecoration(hintText: 'Note text'),
+              maxLines: 3,
+              minLines: 1,
+              decoration:
+                  const InputDecoration(hintText: 'Note text (optional)'),
               onSubmitted: (value) => Navigator.pop(ctx, value),
             ),
             actions: [
@@ -384,14 +370,27 @@ class _ViewerScreenState extends State<ViewerScreen> {
               ),
               TextButton(
                 onPressed: () => Navigator.pop(ctx, field.text),
-                child: const Text('Add'),
+                child: const Text('Save'),
               ),
             ],
           ),
         );
         field.dispose();
-        if (noteText == null || noteText.isEmpty || !mounted) return;
-        editing.addNote(pageIndex, x, y, noteText);
+        if (!mounted) return;
+        if (noteText != null && noteText.isNotEmpty) {
+          final firstPage = quadsByPage.keys.first;
+          final page = editing.document.page(firstPage);
+          final highlight = page.annotations.lastWhere(
+            (a) => a.subtype == 'Highlight',
+            orElse: () => throw StateError(
+              'highlight annotation not found on page $firstPage',
+            ),
+          );
+          editing.apply(
+            (e) => e.setAnnotationContents(firstPage, highlight, noteText),
+          );
+        }
+        viewer.clearSelection();
       case _DemoAnnotAction.sendTo:
         _toast('Send page ${pageIndex + 1}'
             '${annotation != null ? " (${annotation.subtype})" : ""}');
