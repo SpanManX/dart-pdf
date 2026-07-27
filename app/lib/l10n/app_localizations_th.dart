@@ -432,6 +432,18 @@ class AppLocalizationsTh extends AppLocalizations {
   String get editorMenuSaveAs => 'บันทึกเป็น…';
 
   @override
+  String get editorMenuScanDocument => 'สแกนเป็นเอกสารใหม่…';
+
+  @override
+  String get editorMenuInsertScan => 'แทรกสแกน…';
+
+  @override
+  String get editorScanFailed => 'ไม่สามารถสแกนเอกสารได้';
+
+  @override
+  String get editorInsertedScan => 'แทรกหน้าที่สแกนแล้ว';
+
+  @override
   String get editorMenuSettings => 'การตั้งค่า';
 
   @override
@@ -513,6 +525,18 @@ class AppLocalizationsTh extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'กู้คืนการเปลี่ยนแปลงที่ยังไม่ได้บันทึกใน $count เอกสารจากเซสชันล่าสุดแล้ว',
+      one: 'กู้คืนการเปลี่ยนแปลงที่ยังไม่ได้บันทึกจากเซสชันล่าสุดแล้ว',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'นำลายเซ็นออกแล้ว';
 
   @override
@@ -556,6 +580,31 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'ภายหลัง';
+
+  @override
+  String get updateInstallNow => 'อัปเดตทันที';
+
+  @override
+  String get updateDownloadingTitle => 'กำลังดาวน์โหลดการอัปเดต';
+
+  @override
+  String get updatePreparing => 'กำลังเตรียม…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'กำลังดาวน์โหลด… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'กำลังรีสตาร์ทเพื่อสิ้นสุดการอัปเดต…';
+
+  @override
+  String get updateHandedOff => 'ดาวน์โหลดการอัปเดตแล้ว กำลังเปิดตัวติดตั้ง…';
+
+  @override
+  String updateFailed(String error) {
+    return 'การอัปเดตล้มเหลว: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'ดูแท็บทั้งหมด';
@@ -919,4 +968,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get appSigErrorNoCertificateFound => 'ไม่พบใบรับรอง X.509';
+
+  @override
+  String get imageSourceTakePhoto => 'ถ่ายภาพ';
+
+  @override
+  String get imageSourceChooseFile => 'เลือกไฟล์';
+
+  @override
+  String get imageSourceCameraFailed => 'ถ่ายภาพไม่สำเร็จ';
 }

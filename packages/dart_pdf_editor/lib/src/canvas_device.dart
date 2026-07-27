@@ -147,9 +147,14 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
   @visibleForTesting
   static bool debugDrawSimpleLines = true;
 
-  /// Overprint compositing kill switch (the A/B baseline is "off"). Off,
-  /// [setOverprint] still records the state but fills/strokes composite
+  /// Overprint fallback-compositing kill switch (the A/B baseline is "off").
+  /// Off, [setOverprint] still records the state but fills/strokes composite
   /// normally, exactly as before overprint was consumed.
+  ///
+  /// This governs only the RGB stand-in below. Faithful overprint is resolved
+  /// upstream in the interpreter's colorant buffer (issue #502), which hands
+  /// this device an already-composited colour with the overprint flag cleared;
+  /// `PdfInterpreter.debugResolveOverprint` is that path's switch.
   @visibleForTesting
   static bool debugOverprintCompositing = true;
 
@@ -229,26 +234,32 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
   @override
   void setOverprint(
       {required bool fill, required bool stroke, required int mode}) {
-    // [mode] (OPM 0/1) only distinguishes which DeviceCMYK components a
-    // colorant buffer would write; the RGB `darken` approximation below cannot
-    // act on it, so it is intentionally not stored. Empirically (issue #502)
-    // no fixed RGB blend that keys off OPM beats darken-always here: gating
-    // OPM-0 to a knockout fixes the "over CMYK" patches but reintroduces the
-    // fail-marker on the "over spot" patches (a separation colorant must
-    // survive the knockout), and vice-versa - the two only diverge in colorant
-    // space. See doc/dev-log/2026-07-23-overprint-rgb-ceiling.md.
+    // [mode] (OPM 0/1) only distinguishes which DeviceCMYK components are
+    // written, which is a colorant-space question: it is acted on by
+    // PdfOverprintCompositor upstream and cannot be acted on here, so it is
+    // intentionally not stored. Empirically (issue #502) no fixed RGB blend
+    // that keys off OPM beats darken-always in this device: gating OPM-0 to a
+    // knockout fixes the "over CMYK" patches but reintroduces the fail-marker
+    // on the "over spot" patches (a separation colorant must survive the
+    // knockout), and vice-versa. See
+    // doc/dev-log/2026-07-23-overprint-rgb-ceiling.md.
     _fillOverprint = fill;
     _strokeOverprint = stroke;
   }
 
   /// Overprint (§8.6.7) is a subtractive colorant operation this RGB canvas
-  /// cannot reproduce exactly. While the nonstroking flag (/op) is set, a fill
-  /// composites with [BlendMode.darken] (per-channel min): over a coloured
-  /// backdrop it preserves the darker colorant channels and clips the lighter
-  /// ones - a passable stand-in for "the ink darkens what it covers instead of
-  /// knocking it out" - and over white it is a no-op, so pages that set
-  /// overprint defensively over the page background are unaffected. An explicit
-  /// blend mode (/BM) or a knockout group takes precedence.
+  /// cannot reproduce exactly, so it is normally resolved before reaching here:
+  /// the interpreter's colorant buffer composites the draw in ink space and
+  /// delivers the resulting colour with the flag cleared (issue #502).
+  ///
+  /// The flag only survives to this device when the buffer declined - the
+  /// backdrop was an image, a gradient, a transparency group, or a colour space
+  /// with no colorant reading. Then the historical stand-in applies: the fill
+  /// composites with [BlendMode.darken] (per-channel min), which over a
+  /// coloured backdrop preserves the darker colorant channels and clips the
+  /// lighter ones, and over white is a no-op, so pages that set overprint
+  /// defensively over the page background are unaffected. An explicit blend
+  /// mode (/BM) or a knockout group takes precedence.
   BlendMode get _fillElementBlend {
     if (_knockoutActive) return BlendMode.src;
     if (debugOverprintCompositing &&
@@ -728,17 +739,31 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
     // Per-glyph composition (#454) applies only to plain fills of simple-script
     // runs; a gradient, a stroke, or complex text keeps whole-run shaping so the
     // fresh gradient/stroke painters and the layout stay width-consistent.
+    // Edge whitespace (a leading/trailing space carrying a large Tw to reach a
+    // table column) must open a real gap, not stretch the visible glyphs.
+    // TextPainter drops leading/trailing whitespace from both placement and
+    // layout.width, so paint a run trimmed to its visible core and shift it
+    // right by the leading-whitespace advance; the original run's
+    // width/transform stay full so extraction still sees the true gap. The
+    // common no-edge-whitespace run is used as-is.
+    final paintRun = run.leadingSpace != 0 || run.visibleWidth != null
+        ? _trimmedForPaint(run)
+        : run;
+
     final compose = perGlyphSubstitutedText &&
-        run.gradient == null &&
-        run.strokeColor == null &&
-        _composableRun(run.text);
-    final layout = _measureLayout(run, compose: compose);
+        paintRun.gradient == null &&
+        paintRun.strokeColor == null &&
+        paintRun.letterSpacing == 0 &&
+        paintRun.wordSpacing == 0 &&
+        _composableRun(paintRun.text);
+    final layout = _measureLayout(paintRun, compose: compose);
 
     canvas.save();
     canvas.transform(_toFloat64(run.transform));
-    // unflip: the page transform is y-up, text rasterizes y-down
-    final targetWidth = run.width * renderSize;
-    final scaleX = run.width > 0 && layout.width > 0
+    // unflip: the page transform is y-up, text rasterizes y-down.
+    if (run.leadingSpace != 0) canvas.translate(run.leadingSpace, 0);
+    final targetWidth = paintRun.width * renderSize;
+    final scaleX = paintRun.width > 0 && layout.width > 0
         ? targetWidth / layout.width
         : 1.0;
 
@@ -747,8 +772,8 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
     // shader, which can't be cached because the shader depends on this run's
     // own transform. The cached/composed layout serves every plain fill.
     TextPainter? gradientFill;
-    if (run.fill) {
-      final gradient = run.gradient;
+    if (paintRun.fill) {
+      final gradient = paintRun.gradient;
       if (gradient != null) {
         final localToPage =
             PdfMatrix.scaled(scaleX / renderSize, -1 / renderSize)
@@ -757,9 +782,9 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
         if (pageToLocal != null) {
           gradientFill = TextPainter(
             text: TextSpan(
-                text: run.text,
+                text: paintRun.text,
                 style: _styleFor(
-                    run,
+                    paintRun,
                     foreground: Paint()
                       ..shader = _shaderFor(gradient,
                           transform: gradient.transform.concat(pageToLocal))
@@ -774,18 +799,18 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
     // The line width is page-space; map it into the painter's 100px-per-em
     // space (canvas is scaled by run.transform then 1/renderSize).
     TextPainter? strokePainter;
-    if (run.strokeColor != null) {
+    if (paintRun.strokeColor != null) {
       final ts = run.transform.scaleFactor;
-      final w = run.strokeWidth > 0 ? run.strokeWidth : ts / renderSize;
+      final w = paintRun.strokeWidth > 0 ? paintRun.strokeWidth : ts / renderSize;
       strokePainter = TextPainter(
         text: TextSpan(
-          text: run.text,
+          text: paintRun.text,
           style: _styleFor(
-            run,
+            paintRun,
             foreground: Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = ts > 0 ? w * renderSize / ts : w
-              ..color = _toColor(run.strokeColor!, 1)
+              ..color = _toColor(paintRun.strokeColor!, 1)
               ..blendMode = _elementBlend,
           ),
         ),
@@ -794,7 +819,7 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
     }
 
     canvas.scale(scaleX / renderSize, -1 / renderSize);
-    if (run.fill) {
+    if (paintRun.fill) {
       if (gradientFill != null) {
         gradientFill.paint(canvas, Offset(0, -layout.baseline));
       } else {
@@ -805,6 +830,36 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
     canvas.restore();
   }
 
+  /// A copy of [run] trimmed to its visible core for painting: edge whitespace
+  /// removed from the text, and the width reduced to the visible-glyph advance
+  /// (`visibleWidth - leadingSpace`). [leadingSpace] itself is applied by the
+  /// caller as a canvas translation, so it is zeroed here. Everything else -
+  /// transform, colour, spacing, stroke, gradient - is carried through unchanged.
+  static PdfTextRun _trimmedForPaint(PdfTextRun run) {
+    final core = _trimEdges(run.text);
+    final coreWidth = (run.visibleWidth ?? run.width) - run.leadingSpace;
+    return PdfTextRun(
+      text: core,
+      transform: run.transform,
+      color: run.color,
+      width: coreWidth,
+      gradient: run.gradient,
+      fontName: run.fontName,
+      fontSize: run.fontSize,
+      fill: run.fill,
+      strokeColor: run.strokeColor,
+      strokeWidth: run.strokeWidth,
+      letterSpacing: run.letterSpacing,
+      wordSpacing: run.wordSpacing,
+      mcid: run.mcid,
+    );
+  }
+
+  /// Strips leading and trailing Unicode whitespace, matching the interpreter's
+  /// `text.trim().isNotEmpty` visibility test that produced leadingSpace /
+  /// visibleWidth.
+  static String _trimEdges(String s) => s.trim();
+
   /// A laid-out painter (+ width/baseline) for a substituted-font run, served
   /// from the process-wide cache. The key is (text, font, colour) — everything
   /// [_styleFor] reads — so the cached painter and its metrics are exact.
@@ -814,7 +869,8 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
     if (compose) return _composeLayout(run);
     final c = run.color;
     final key = '${run.text} ${run.fontName ?? ''} '
-        '${c.red},${c.green},${c.blue}';
+        '${c.red},${c.green},${c.blue} '
+        '${run.letterSpacing},${run.wordSpacing}';
     if (!PdfPerfLog.enabled) {
       return _textCache.getOrAdd(key, () => _shapeLayout(run));
     }
@@ -1031,8 +1087,14 @@ class CanvasPdfDevice implements PdfDevice, PdfTiledCellSink {
       fontStyle: name.contains('Italic') || name.contains('Oblique')
           ? FontStyle.italic
           : FontStyle.normal,
-      // metric scaling handles placement; kill extra spacing sources
-      letterSpacing: 0,
+      // Reproduce the PDF's Tc/Tw as real tracking/word spacing (em → the 100px
+      // render em) so the substitute's own advances match run.width. Without
+      // this the layout is tight and run.width's spacing is recovered by
+      // stretching the glyph shapes - which explodes when a space carries a
+      // large Tw (issue: over-wide table digits). letterSpacing/wordSpacing 0
+      // (the common case) is a no-op, so unspaced runs are unchanged.
+      letterSpacing: run.letterSpacing * 100,
+      wordSpacing: run.wordSpacing * 100,
       height: 1,
     );
   }

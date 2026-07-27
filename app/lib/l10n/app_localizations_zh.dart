@@ -424,6 +424,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorMenuSaveAs => '另存为…';
 
   @override
+  String get editorMenuScanDocument => '扫描为新文档…';
+
+  @override
+  String get editorMenuInsertScan => '插入扫描件…';
+
+  @override
+  String get editorScanFailed => '无法扫描文档。';
+
+  @override
+  String get editorInsertedScan => '已插入扫描的页面。';
+
+  @override
   String get editorMenuSettings => '设置';
 
   @override
@@ -505,6 +517,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已恢复上次会话中 $count 个文档的未保存更改。',
+      one: '已恢复上次会话中未保存的更改。',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => '已移除签名';
 
   @override
@@ -547,6 +570,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editorUpdateLater => '稍后';
+
+  @override
+  String get updateInstallNow => '立即更新';
+
+  @override
+  String get updateDownloadingTitle => '正在下载更新';
+
+  @override
+  String get updatePreparing => '正在准备…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return '正在下载… $percent%';
+  }
+
+  @override
+  String get updateRestarting => '正在重启以完成更新…';
+
+  @override
+  String get updateHandedOff => '更新已下载。正在打开安装程序…';
+
+  @override
+  String updateFailed(String error) {
+    return '更新失败：$error';
+  }
 
   @override
   String get editorViewAllTabs => '查看所有标签页';
@@ -900,6 +948,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get appSigErrorNoCertificateFound => '未找到 X.509 证书。';
+
+  @override
+  String get imageSourceTakePhoto => '拍照';
+
+  @override
+  String get imageSourceChooseFile => '选择文件';
+
+  @override
+  String get imageSourceCameraFailed => '无法拍照';
 }
 
 /// The translations for Chinese, using the Han script (`zh_Hant`).
@@ -1322,6 +1379,18 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get editorMenuSaveAs => '另存新檔…';
 
   @override
+  String get editorMenuScanDocument => '掃描為新文件…';
+
+  @override
+  String get editorMenuInsertScan => '插入掃描件…';
+
+  @override
+  String get editorScanFailed => '無法掃描文件。';
+
+  @override
+  String get editorInsertedScan => '已插入掃描的頁面。';
+
+  @override
   String get editorMenuSettings => '設定';
 
   @override
@@ -1403,6 +1472,17 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已復原上次工作階段中 $count 份文件的未儲存變更。',
+      one: '已復原上次工作階段中未儲存的變更。',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => '已移除簽名';
 
   @override
@@ -1445,6 +1525,31 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get editorUpdateLater => '稍後';
+
+  @override
+  String get updateInstallNow => '立即更新';
+
+  @override
+  String get updateDownloadingTitle => '正在下載更新';
+
+  @override
+  String get updatePreparing => '正在準備…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return '正在下載… $percent%';
+  }
+
+  @override
+  String get updateRestarting => '正在重新啟動以完成更新…';
+
+  @override
+  String get updateHandedOff => '更新已下載。正在開啟安裝程式…';
+
+  @override
+  String updateFailed(String error) {
+    return '更新失敗：$error';
+  }
 
   @override
   String get editorViewAllTabs => '檢視所有分頁';
@@ -1799,4 +1904,13 @@ class AppLocalizationsZhHant extends AppLocalizationsZh {
 
   @override
   String get appSigErrorNoCertificateFound => '找不到 X.509 憑證。';
+
+  @override
+  String get imageSourceTakePhoto => '拍照';
+
+  @override
+  String get imageSourceChooseFile => '選擇檔案';
+
+  @override
+  String get imageSourceCameraFailed => '無法拍照';
 }

@@ -438,6 +438,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get editorMenuSaveAs => 'Enregistrer sous…';
 
   @override
+  String get editorMenuScanDocument => 'Numériser vers un nouveau document…';
+
+  @override
+  String get editorMenuInsertScan => 'Insérer une numérisation…';
+
+  @override
+  String get editorScanFailed => 'Impossible de numériser le document.';
+
+  @override
+  String get editorInsertedScan => 'Pages numérisées insérées.';
+
+  @override
   String get editorMenuSettings => 'Paramètres';
 
   @override
@@ -520,6 +532,19 @@ class AppLocalizationsFr extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Modifications non enregistrées récupérées dans $count documents depuis la dernière session.',
+      one:
+          'Modifications non enregistrées récupérées depuis la dernière session.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Signature retirée';
 
   @override
@@ -563,6 +588,32 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Plus tard';
+
+  @override
+  String get updateInstallNow => 'Mettre à jour maintenant';
+
+  @override
+  String get updateDownloadingTitle => 'Téléchargement de la mise à jour';
+
+  @override
+  String get updatePreparing => 'Préparation…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Téléchargement… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Redémarrage pour terminer la mise à jour…';
+
+  @override
+  String get updateHandedOff =>
+      'Mise à jour téléchargée. Ouverture du programme d’installation…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Échec de la mise à jour : $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Afficher tous les onglets';
@@ -937,4 +988,13 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get appSigErrorNoCertificateFound =>
       'Aucun certificat X.509 n\'a été trouvé.';
+
+  @override
+  String get imageSourceTakePhoto => 'Prendre une photo';
+
+  @override
+  String get imageSourceChooseFile => 'Choisir un fichier';
+
+  @override
+  String get imageSourceCameraFailed => 'Impossible de prendre une photo';
 }

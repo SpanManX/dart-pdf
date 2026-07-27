@@ -1,5 +1,50 @@
 # Changelog
 
+## 3.1.1
+
+- Smoother scrolling on large and visually dense PDFs, with the page renderer
+  staying responsive through rapid mouse-wheel gestures.
+- Page previews remain visible during fast scrolling and settle cleanly into
+  full-detail renders, with fewer dropped frames.
+
+## 3.1.0
+
+- Scan documents straight into a PDF: scan to a new document or insert a scan
+  into the open one, and take a photo with the camera on mobile.
+- Never lose work to a crash: unsaved changes are mirrored in the background
+  and restored when the document is reopened.
+- New editing tools: hyperlinks (web and in-document), cropping for placed
+  images, annotation lock/unlock, and keyboard shortcuts for every tool.
+- Faithful overprint rendering — print-oriented PDFs that rely on overprint
+  (knockouts, spot inks) now display the way they print.
+- Pages reveal progressively as they render, and rendering is much faster on
+  large or image-heavy files; search text is extracted in the background.
+- Recent files can show as a grid of page thumbnails.
+- Shrink a PDF's file size losslessly from the save flow.
+- The app updates itself in place on desktop — "Update now" downloads and
+  applies the new version without a browser visit.
+
+## 3.0.0
+
+- The app is now available in 10 languages, with full right-to-left layout
+  for Arabic.
+- More accurate overprint, blend-mode and soft-mask rendering.
+- Hold Shift to draw straight lines, and set a default style for annotations.
+- Redesigned, smoother document tabs.
+- Faster rendering and lower memory use on large files.
+
+## 2.1.0
+
+- Reflow reading view: read a document as flowing text instead of fixed
+  pages, with lazy scrolling, quick navigation, a remembered reading
+  position, and a figure viewer for images and diagrams.
+- Faster opening and rendering, especially on large or image-heavy files;
+  saving an edit is proportional to the size of the change, and very wide
+  drawings use less memory.
+- Crisper hairlines, so fine linework stays legible when zoomed out.
+- Better colour on gradients and indexed images; Symbol and ZapfDingbats
+  characters render instead of empty boxes.
+
 ## 2.0.0
 
 - Deep zoom now shows crisp detail on every platform: zoom past the normal

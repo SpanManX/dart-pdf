@@ -434,6 +434,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorMenuSaveAs => 'Save as…';
 
   @override
+  String get editorMenuScanDocument => 'Scan to new document…';
+
+  @override
+  String get editorMenuInsertScan => 'Insert scan…';
+
+  @override
+  String get editorScanFailed => 'Couldn\'t scan the document.';
+
+  @override
+  String get editorInsertedScan => 'Inserted scanned pages.';
+
+  @override
   String get editorMenuSettings => 'Settings';
 
   @override
@@ -515,6 +527,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Recovered unsaved changes in $count documents from your last session.',
+      one: 'Recovered unsaved changes from your last session.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Signature removed';
 
   @override
@@ -557,6 +581,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Later';
+
+  @override
+  String get updateInstallNow => 'Update now';
+
+  @override
+  String get updateDownloadingTitle => 'Downloading update';
+
+  @override
+  String get updatePreparing => 'Preparing…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Downloading… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Restarting to finish the update…';
+
+  @override
+  String get updateHandedOff => 'Update downloaded. Opening the installer…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Update failed: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'View all tabs';
@@ -922,4 +971,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get appSigErrorNoCertificateFound =>
       'No X.509 certificates were found.';
+
+  @override
+  String get imageSourceTakePhoto => 'Take photo';
+
+  @override
+  String get imageSourceChooseFile => 'Choose file';
+
+  @override
+  String get imageSourceCameraFailed => 'Couldn\'t take a photo';
 }

@@ -449,6 +449,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get editorMenuSaveAs => 'حفظ باسم…';
 
   @override
+  String get editorMenuScanDocument => 'مسح إلى مستند جديد…';
+
+  @override
+  String get editorMenuInsertScan => 'إدراج مسح ضوئي…';
+
+  @override
+  String get editorScanFailed => 'تعذّر مسح المستند.';
+
+  @override
+  String get editorInsertedScan => 'تمت إضافة الصفحات الممسوحة ضوئيًا.';
+
+  @override
   String get editorMenuSettings => 'الإعدادات';
 
   @override
@@ -533,6 +545,18 @@ class AppLocalizationsAr extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'تمت استعادة التغييرات غير المحفوظة في $count مستندات من جلستك الأخيرة.',
+      one: 'تمت استعادة التغييرات غير المحفوظة من جلستك الأخيرة.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'تمت إزالة التوقيع';
 
   @override
@@ -578,6 +602,31 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'لاحقًا';
+
+  @override
+  String get updateInstallNow => 'التحديث الآن';
+
+  @override
+  String get updateDownloadingTitle => 'جارٍ تنزيل التحديث';
+
+  @override
+  String get updatePreparing => 'جارٍ التحضير…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'جارٍ التنزيل… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'جارٍ إعادة التشغيل لإكمال التحديث…';
+
+  @override
+  String get updateHandedOff => 'تم تنزيل التحديث. جارٍ فتح المُثبِّت…';
+
+  @override
+  String updateFailed(String error) {
+    return 'فشل التحديث: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'عرض جميع علامات التبويب';
@@ -950,4 +999,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get appSigErrorNoCertificateFound => 'لم يُعثر على أي شهادات X.509.';
+
+  @override
+  String get imageSourceTakePhoto => 'التقاط صورة';
+
+  @override
+  String get imageSourceChooseFile => 'اختيار ملف';
+
+  @override
+  String get imageSourceCameraFailed => 'تعذّر التقاط صورة';
 }

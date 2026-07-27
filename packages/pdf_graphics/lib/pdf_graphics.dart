@@ -5,6 +5,8 @@ library;
 
 export 'src/color.dart';
 export 'src/color_space.dart';
+export 'src/colorants.dart';
+export 'src/overprint_compositor.dart';
 export 'src/calibrated_color.dart';
 export 'src/document_ai.dart';
 export 'package:pdf_cos/pdf_cos.dart'
@@ -13,6 +15,8 @@ export 'src/device.dart';
 export 'src/font_info.dart';
 export 'src/function.dart';
 export 'src/icc.dart';
+export 'src/image_colorants.dart';
+export 'src/image_decode_cache.dart';
 export 'src/image_pixels.dart';
 export 'src/interpreter.dart';
 export 'src/shading.dart';

@@ -587,6 +587,22 @@
   "@editorMenuSaveAs": {
     "description": "App menu item to save the document under a new name/location."
   },
+  "editorMenuScanDocument": "Scan to new document…",
+  "@editorMenuScanDocument": {
+    "description": "App menu item (mobile/tablet) to scan pages with the device camera into a new document."
+  },
+  "editorMenuInsertScan": "Insert scan…",
+  "@editorMenuInsertScan": {
+    "description": "App menu item (mobile/tablet) to scan pages with the device camera and insert them into the open document."
+  },
+  "editorScanFailed": "Couldn't scan the document.",
+  "@editorScanFailed": {
+    "description": "Toast shown when a device document scan fails."
+  },
+  "editorInsertedScan": "Inserted scanned pages.",
+  "@editorInsertedScan": {
+    "description": "Toast shown after scanned pages are inserted into the open document."
+  },
   "editorMenuSettings": "Settings",
   "@editorMenuSettings": {
     "description": "App menu item to open the settings screen."
@@ -701,6 +717,15 @@
   "@editorPreviewPdf": {
     "description": "Tab preview placeholder label for a generic PDF with no rendered preview."
   },
+  "editorRecoveredUnsavedChanges": "{count, plural, =1{Recovered unsaved changes from your last session.} other{Recovered unsaved changes in {count} documents from your last session.}}",
+  "@editorRecoveredUnsavedChanges": {
+    "description": "Toast shown at launch when documents with unsaved edits were restored after a crash.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "editorSignatureRemoved": "Signature removed",
   "@editorSignatureRemoved": {
     "description": "Toast confirming a just-placed signature was undone."
@@ -760,6 +785,44 @@
   "editorUpdateLater": "Later",
   "@editorUpdateLater": {
     "description": "Update banner action to dismiss the update notice for now."
+  },
+  "updateInstallNow": "Update now",
+  "@updateInstallNow": {
+    "description": "Button that downloads and installs the newer release in place (desktop), instead of opening a browser download."
+  },
+  "updateDownloadingTitle": "Downloading update",
+  "@updateDownloadingTitle": {
+    "description": "Title of the dialog shown while an in-app update is downloading."
+  },
+  "updatePreparing": "Preparing…",
+  "@updatePreparing": {
+    "description": "Status shown before download progress is known."
+  },
+  "updateDownloadingPercent": "Downloading… {percent}%",
+  "@updateDownloadingPercent": {
+    "description": "Download progress line with the percentage complete.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "updateRestarting": "Restarting to finish the update…",
+  "@updateRestarting": {
+    "description": "Status shown after the AppImage is replaced, just before the app relaunches."
+  },
+  "updateHandedOff": "Update downloaded. Opening the installer…",
+  "@updateHandedOff": {
+    "description": "Snackbar shown after a macOS/Windows update is downloaded and handed to the OS installer."
+  },
+  "updateFailed": "Update failed: {error}",
+  "@updateFailed": {
+    "description": "Snackbar shown when an in-app update download or install fails.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
   },
   "editorViewAllTabs": "View all tabs",
   "@editorViewAllTabs": {
@@ -1221,5 +1284,17 @@
   "appSigErrorNoCertificateFound": "No X.509 certificates were found.",
   "@appSigErrorNoCertificateFound":   {
       "description": "Signing error: the chosen files contained no X.509 certificate."
+  },
+  "imageSourceTakePhoto": "Take photo",
+  "@imageSourceTakePhoto":   {
+      "description": "Bottom-sheet option (mobile only) that photographs the picture to insert with the device camera."
+  },
+  "imageSourceChooseFile": "Choose file",
+  "@imageSourceChooseFile":   {
+      "description": "Bottom-sheet option (mobile only) that picks the picture to insert from a file instead of the camera."
+  },
+  "imageSourceCameraFailed": "Couldn't take a photo",
+  "@imageSourceCameraFailed":   {
+      "description": "Toast shown when the camera cannot be opened - no camera on the device, or access refused."
   }
 }

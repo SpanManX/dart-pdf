@@ -438,6 +438,18 @@ class AppLocalizationsId extends AppLocalizations {
   String get editorMenuSaveAs => 'Simpan sebagai…';
 
   @override
+  String get editorMenuScanDocument => 'Pindai ke dokumen baru…';
+
+  @override
+  String get editorMenuInsertScan => 'Sisipkan pindaian…';
+
+  @override
+  String get editorScanFailed => 'Tidak dapat memindai dokumen.';
+
+  @override
+  String get editorInsertedScan => 'Halaman pindaian disisipkan.';
+
+  @override
   String get editorMenuSettings => 'Pengaturan';
 
   @override
@@ -519,6 +531,18 @@ class AppLocalizationsId extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Perubahan yang belum disimpan pada $count dokumen dari sesi terakhir telah dipulihkan.',
+      one: 'Perubahan yang belum disimpan dari sesi terakhir telah dipulihkan.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Tanda tangan dihapus';
 
   @override
@@ -562,6 +586,31 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Nanti';
+
+  @override
+  String get updateInstallNow => 'Perbarui sekarang';
+
+  @override
+  String get updateDownloadingTitle => 'Mengunduh pembaruan';
+
+  @override
+  String get updatePreparing => 'Menyiapkan…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Mengunduh… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Memulai ulang untuk menyelesaikan pembaruan…';
+
+  @override
+  String get updateHandedOff => 'Pembaruan diunduh. Membuka penginstal…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Pembaruan gagal: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Lihat semua tab';
@@ -928,4 +977,13 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get appSigErrorNoCertificateFound =>
       'Tidak ada sertifikat X.509 yang ditemukan.';
+
+  @override
+  String get imageSourceTakePhoto => 'Ambil foto';
+
+  @override
+  String get imageSourceChooseFile => 'Pilih berkas';
+
+  @override
+  String get imageSourceCameraFailed => 'Tidak dapat mengambil foto';
 }

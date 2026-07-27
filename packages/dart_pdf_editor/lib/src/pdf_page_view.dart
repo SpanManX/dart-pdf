@@ -356,6 +356,23 @@ class PdfPageView extends StatefulWidget {
   /// never charged a second worker job.
   static int earlyPrefixMinContentBytes = 512 * 1024;
 
+  /// Progressively reveals a dense page top-down (#564): the vector-first record
+  /// streams the growing linework prefix the worker records, and each prefix is
+  /// rasterized into the preview slot, so the page fills in as it records instead
+  /// of appearing all at once when the whole-page walk finishes. This replaces
+  /// the single bounded [earlyPrefixPaint] on a dense page - a growing sequence
+  /// of prefixes rather than one snapshot - and lands *before* the vector-first
+  /// full raster, so it is strictly more information sooner.
+  ///
+  /// Default **on**: both backends stream (isolate and web worker), and the
+  /// reveal measured ~25% faster first ink than the bounded prefix it replaces
+  /// on a dense sheet in real Chrome (`tool/perf.sh web open-diagram` vs
+  /// `open-diagram-progressive`). Gated on the same [earlyPrefixMinContentBytes]
+  /// density proxy, so an ordinary page is untouched. Backends that don't stream
+  /// (the null worker) make it a no-op - the page renders exactly as before.
+  /// Set false to fall back to the single bounded [earlyPrefixPaint] snapshot.
+  static bool progressiveStreamingPaint = true;
+
   /// Composite deep-zoom detail from the [PdfTileStore] zoom-bucket pyramid
   /// instead of the single unbudgeted detail patch. When true (and the page
   /// retains a region-cullable scene), the visible slice is tiled: panning at
@@ -414,6 +431,11 @@ class PdfPageView extends StatefulWidget {
   /// Region-detail speculations that were stale, cancelled, or declined.
   static int debugSpeculativeDetailMisses = 0;
 
+  /// Single-patch scroll settles satisfied by the raster's retained guard
+  /// band instead of issuing another region render.
+  @visibleForTesting
+  static int debugDetailPatchReuses = 0;
+
   static void debugResetSpeculativeStats() {
     debugSpeculativePlanHits = 0;
     debugSpeculativePlanMisses = 0;
@@ -456,6 +478,8 @@ class _PdfPageViewState extends State<PdfPageView>
 
   ui.Image? _detailImage;
   Rect? _detailFraction; // patch placement as fractions of the page
+  double? _detailPixelRatio;
+  PdfPageRenderIntent? _detailIntent;
 
   /// Visible slice (fraction of the page) and desired ratio for the
   /// [PdfPageView.tileStoreDetail] tile layer, recomputed on each settle in
@@ -468,6 +492,19 @@ class _PdfPageViewState extends State<PdfPageView>
   /// Clone of this page's cached low-res preview; painted while no full
   /// raster exists, dropped (to free the buffer) the moment one lands.
   ui.Image? _preview;
+
+  /// Monotonic sequence assigned to each streamed progressive partial (#564),
+  /// never reset - so partials from a newer render pass always outrank an older
+  /// pass's, not just later partials within one record. Two `_renderNow` passes
+  /// for one page can briefly overlap on first interpret (see the generation
+  /// note in `_renderNow`); a shared, ever-increasing counter plus the
+  /// generation guard in [_paintProgressivePartial] keeps the reveal ordered.
+  int _progressiveSeqCounter = 0;
+
+  /// Highest progressive-partial sequence actually painted into [_preview], so
+  /// an out-of-order async rasterize of an earlier partial can't clobber a later
+  /// one. Only advances; a partial applies only if its seq exceeds this.
+  int _progressiveAppliedSeq = 0;
 
   // Full-page rasters stay within GPU texture limits and sane memory:
   // at most ~16.7M px (64 MB RGBA) and 8192 px per side. Past these caps
@@ -806,12 +843,41 @@ class _PdfPageViewState extends State<PdfPageView>
   void _dropDetail() {
     _invalidateTiles();
     _renderSession.invalidateDetail();
-    if (_detailImage != null) {
-      _detailImage?.dispose();
-      _detailImage = null;
-      _detailFraction = null;
-      if (mounted) setState(() {});
+    final hadImage = _detailImage != null;
+    _detailImage?.dispose();
+    _detailImage = null;
+    _detailFraction = null;
+    _detailPixelRatio = null;
+    _detailIntent = null;
+    if (hadImage && mounted) setState(() {});
+  }
+
+  void _adoptDetail(
+    ui.Image image,
+    Rect fraction,
+    double pixelRatio,
+  ) {
+    _detailImage?.dispose();
+    _detailImage = image;
+    _detailFraction = fraction;
+    _detailPixelRatio = pixelRatio;
+    _detailIntent = _renderIntent(widget);
+  }
+
+  bool _detailContentIsCurrent() {
+    final intent = _detailIntent;
+    if (intent == null ||
+        intent.pageIndex != widget.previewIndex ||
+        intent.pageEpoch != widget.pageEpoch ||
+        intent.contentStamp != widget.contentStamp ||
+        intent.destructiveStamp != widget.destructiveStamp ||
+        intent.trustContentStamp != widget.trustContentStamp ||
+        intent.rotation != widget.rotation ||
+        intent.pageColor != widget.pageColor ||
+        intent.showAnnotations != widget.showAnnotations) {
+      return false;
     }
+    return widget.trustContentStamp || identical(intent.page, widget.page);
   }
 
   /// The uncapped resolution at an explicit [scale], so speculation can price
@@ -1339,6 +1405,73 @@ class _PdfPageViewState extends State<PdfPageView>
         'limit=${PdfPageView.earlyPrefixCommandLimit}${PdfPerfLog.rssSuffix()}');
   }
 
+  /// Rasterizes one streamed linework prefix ([commands]) into [_preview] as the
+  /// vector-first record walks the page (#564), giving a top-down reveal before
+  /// that record's own full raster lands. [seq] is the partial's monotonic order
+  /// within this record; the guards keep the newest applied and drop anything a
+  /// landed full raster ([_image]) or a superseded render has overtaken. Each
+  /// partial is a superset of the last, so replacing the preview outright is
+  /// correct.
+  Future<void> _paintProgressivePartial(
+    int generation,
+    int pageIndex,
+    List<PdfRenderCommand> commands,
+    int seq,
+  ) async {
+    if (!PdfPageView.progressiveStreamingPaint) return;
+    // Bail on anything that outranks a preview in the paint stack, matching
+    // _paintEarlyPrefix: a landed full raster (_image), a slug picture, or a
+    // superseded/recycled render. _superseded (not just _abandoned) also drops
+    // an older overlapping pass so its smaller prefix can't flicker over a
+    // newer pass's larger one.
+    if (commands.isEmpty ||
+        _superseded(generation, pageIndex) ||
+        _renderPaused ||
+        _image != null ||
+        _slugPicture != null ||
+        seq <= _progressiveAppliedSeq) {
+      return;
+    }
+    final picture = await PdfPageRenderer.pictureFromCommandsWithPlan(
+      widget.page,
+      commands,
+      _renderPlan,
+      includeImages: false,
+    );
+    // Re-check after each await: the full raster or a slug may have landed, the
+    // page may have been recycled, or a newer partial may already be applied.
+    if (_superseded(generation, pageIndex) ||
+        _renderPaused ||
+        _image != null ||
+        _slugPicture != null ||
+        seq <= _progressiveAppliedSeq) {
+      picture.dispose();
+      return;
+    }
+    final image = await PdfPageRenderer.rasterize(
+      picture,
+      PdfPageRenderer.pageSize(widget.page, rotation: widget.rotation),
+      _vectorFirstRatio(),
+    );
+    picture.dispose();
+    if (!mounted ||
+        _superseded(generation, pageIndex) ||
+        _renderPaused ||
+        _image != null ||
+        _slugPicture != null ||
+        seq <= _progressiveAppliedSeq) {
+      image.dispose();
+      return;
+    }
+    _progressiveAppliedSeq = seq;
+    setState(() {
+      _preview?.dispose();
+      _preview = image;
+    });
+    PdfPerfLog.log('progressive-partial page=$pageIndex seq=$seq '
+        'commands=${commands.length}${PdfPerfLog.rssSuffix()}');
+  }
+
   Future<Completer<bool>?> _paintVectorFirst(
       int generation, int pageIndex) async {
     final worker = widget.renderWorker;
@@ -1353,14 +1486,28 @@ class _PdfPageViewState extends State<PdfPageView>
         ? widget.renderPriority - 100
         : widget.renderPriority;
     // On a dense sheet the full record below is a multi-second wait on blank
-    // paper; put a bounded prefix on screen first. No-ops on ordinary pages.
-    await _paintEarlyPrefix(generation, pageIndex, worker, priority);
-    if (_superseded(generation, pageIndex) || _renderPaused) return null;
+    // paper. Progressive streaming (#564) reveals the growing linework prefix as
+    // the record walks the page - a sequence of prefixes that supersedes the
+    // single bounded early prefix, so skip that when it is on. Otherwise put one
+    // bounded prefix on screen first. Both no-op on ordinary pages.
+    final progressive = PdfPageView.progressiveStreamingPaint &&
+        widget.page.rawContentLength >= PdfPageView.earlyPrefixMinContentBytes;
+    if (!progressive) {
+      await _paintEarlyPrefix(generation, pageIndex, worker, priority);
+      if (_superseded(generation, pageIndex) || _renderPaused) return null;
+    }
     final commands = await worker.record(
       pageIndex,
       annotations: widget.showAnnotations,
       priority: priority,
       decodeImages: false,
+      onPartial: !progressive
+          ? null
+          : (partial) {
+              final seq = ++_progressiveSeqCounter;
+              unawaited(
+                  _paintProgressivePartial(generation, pageIndex, partial, seq));
+            },
     );
     if (_superseded(generation, pageIndex) ||
         _renderPaused ||
@@ -1925,6 +2072,37 @@ class _PdfPageViewState extends State<PdfPageView>
     final region = detailGeometry.region;
     final ratio = detailGeometry.pixelRatio;
 
+    // The single-patch fallback deliberately rasterizes half a viewport of
+    // headroom on every side. Keep using those pixels while they still cover
+    // the live viewport instead of rebuilding an almost-identical 3-6 MP
+    // raster after every wheel-scroll settle. This is the fallback for pages
+    // that cannot use the reusable tile pyramid, so without this coverage
+    // check the guard band was pure extra work.
+    //
+    // Content identity is checked separately: additive edits intentionally
+    // leave the old patch painted until its replacement lands, but that stale
+    // patch must never satisfy this fast path. A higher-density request (zoom
+    // in, or a smaller cap-bound region) also gets a fresh raster.
+    final existingFraction = _detailFraction;
+    final existingRatio = _detailPixelRatio;
+    if (_detailImage != null &&
+        existingFraction != null &&
+        existingRatio != null &&
+        _detailContentIsCurrent() &&
+        existingRatio >= ratio * 0.99 &&
+        _detailPatchCovers(
+          existingFraction,
+          detailGeometry.visibleFraction,
+        )) {
+      PdfPageView.debugDetailPatchReuses++;
+      onPaint?.call();
+      PdfPerfLog.log(
+        'detail reuse page=${widget.previewIndex} '
+        'ratio=${existingRatio.toStringAsFixed(2)}',
+      );
+      return true;
+    }
+
     // Dense strip-routed pages ask for one combined worker result: commands
     // whose images were decoded for this region plus the StripPlan binned
     // from those exact commands. That keeps the flat strip replay, restores
@@ -1994,9 +2172,7 @@ class _PdfPageViewState extends State<PdfPageView>
           _renderSession.acceptsDetail(generation) &&
           !_renderPaused) {
         setState(() {
-          _detailImage?.dispose();
-          _detailImage = vectorImage;
-          _detailFraction = fraction;
+          _adoptDetail(vectorImage, fraction, ratio);
         });
         onPaint?.call();
         progressiveReady = true;
@@ -2026,9 +2202,7 @@ class _PdfPageViewState extends State<PdfPageView>
     }
     if (workerStripImage != null) {
       setState(() {
-        _detailImage?.dispose();
-        _detailImage = workerStripImage;
-        _detailFraction = fraction;
+        _adoptDetail(workerStripImage, fraction, ratio);
       });
       onPaint?.call();
       _logDetailPaintAfterFrame(
@@ -2064,9 +2238,7 @@ class _PdfPageViewState extends State<PdfPageView>
         return false;
       }
       setState(() {
-        _detailImage?.dispose();
-        _detailImage = image;
-        _detailFraction = fraction;
+        _adoptDetail(image, fraction, ratio);
       });
       onPaint?.call();
       _logDetailPaintAfterFrame(
@@ -2164,9 +2336,7 @@ class _PdfPageViewState extends State<PdfPageView>
       return false;
     }
     setState(() {
-      _detailImage?.dispose();
-      _detailImage = image;
-      _detailFraction = fraction;
+      _adoptDetail(image, fraction, ratio);
     });
     onPaint?.call();
     _logDetailPaintAfterFrame(generation, detailClock, source: 'local');
@@ -2265,20 +2435,22 @@ class _PdfPageViewState extends State<PdfPageView>
     // 50% per-side panning headroom. The progressive region-first request is
     // deliberately tighter: its job is to beat the still-warming full page,
     // and a large guard band would re-decode most of that page again.
-    final fraction = Rect.fromLTRB(
-      ((visible.left - pageRect.left - visible.width * inflation) /
-              pageRect.width)
-          .clamp(0.0, 1.0),
-      ((visible.top - pageRect.top - visible.height * inflation) /
-              pageRect.height)
-          .clamp(0.0, 1.0),
-      ((visible.right - pageRect.left + visible.width * inflation) /
-              pageRect.width)
-          .clamp(0.0, 1.0),
-      ((visible.bottom - pageRect.top + visible.height * inflation) /
-              pageRect.height)
-          .clamp(0.0, 1.0),
-    );
+    Rect fractionAt(double amount) => Rect.fromLTRB(
+          ((visible.left - pageRect.left - visible.width * amount) /
+                  pageRect.width)
+              .clamp(0.0, 1.0),
+          ((visible.top - pageRect.top - visible.height * amount) /
+                  pageRect.height)
+              .clamp(0.0, 1.0),
+          ((visible.right - pageRect.left + visible.width * amount) /
+                  pageRect.width)
+              .clamp(0.0, 1.0),
+          ((visible.bottom - pageRect.top + visible.height * amount) /
+                  pageRect.height)
+              .clamp(0.0, 1.0),
+        );
+    final visibleFraction = fractionAt(0);
+    final fraction = fractionAt(inflation);
     final size = _renderPlan.pageSize(widget.page);
     final region = Rect.fromLTRB(
       fraction.left * size.width,
@@ -2297,7 +2469,7 @@ class _PdfPageViewState extends State<PdfPageView>
       ratio,
       _maxDimension / math.max(region.width, region.height),
     );
-    return _DetailGeometry(fraction, region, ratio);
+    return _DetailGeometry(fraction, visibleFraction, region, ratio);
   }
 
   /// Whether the [PdfPageView.tileStoreDetail] tile path drives deep-zoom
@@ -2953,11 +3125,29 @@ class _SpeculativeStripPlan {
 }
 
 class _DetailGeometry {
-  const _DetailGeometry(this.fraction, this.region, this.pixelRatio);
+  const _DetailGeometry(
+    this.fraction,
+    this.visibleFraction,
+    this.region,
+    this.pixelRatio,
+  );
 
   final Rect fraction;
+  final Rect visibleFraction;
   final Rect region;
   final double pixelRatio;
+}
+
+/// Whether a retained detail patch fully covers the current visible slice.
+///
+/// Fractions come from independent render-tree projections and can differ by
+/// a few ulps at a shared edge, hence the tiny tolerance.
+bool _detailPatchCovers(Rect patch, Rect visible) {
+  const epsilon = 1e-9;
+  return patch.left <= visible.left + epsilon &&
+      patch.top <= visible.top + epsilon &&
+      patch.right + epsilon >= visible.right &&
+      patch.bottom + epsilon >= visible.bottom;
 }
 
 /// A combined region-detail job issued from the translated live viewport.

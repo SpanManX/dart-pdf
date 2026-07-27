@@ -17,12 +17,16 @@ import 'signature_raster.dart';
 const double _signatureLogoOpacity = 0.2;
 
 /// The Acrobat-style signing date the signed box renders, so the preview
-/// matches it: `2026.07.18 05:40:17 +00'00'`, in UTC.
+/// matches it: `2026.07.18 15:40:17 +10'00'`. The signer's local offset is
+/// preserved (mirroring `_displaySignDate` in signature_editor.dart); a UTC
+/// input renders `+00'00'`.
 String _acrobatSignDate(DateTime time) {
-  final utc = time.toUtc();
   String two(int v) => v.toString().padLeft(2, '0');
-  return '${utc.year}.${two(utc.month)}.${two(utc.day)} '
-      "${two(utc.hour)}:${two(utc.minute)}:${two(utc.second)} +00'00'";
+  final off = time.timeZoneOffset;
+  final sign = off.isNegative ? '-' : '+';
+  return '${time.year}.${two(time.month)}.${two(time.day)} '
+      '${two(time.hour)}:${two(time.minute)}:${two(time.second)} '
+      "$sign${two(off.abs().inHours)}'${two(off.abs().inMinutes % 60)}'";
 }
 
 // `label` is the localized file-dialog filter name; the caller resolves it.
@@ -47,9 +51,10 @@ typedef DigitalSignaturePrivateKeyPicker = Future<XFile?> Function();
 typedef DigitalSignatureCertificatePicker = Future<List<XFile>> Function();
 
 /// Supplies PNG or JPEG bytes for the signature box's logo backdrop
-/// ([PdfSignatureAppearance.backgroundImage]) - typically a file picker.
-/// Returns null to cancel.
-typedef SignatureLogoPicker = Future<Uint8List?> Function();
+/// ([PdfSignatureAppearance.backgroundImage]) - typically a file picker, or a
+/// source sheet on mobile, which is why it is handed the dialog's own
+/// [BuildContext] to present from. Returns null to cancel.
+typedef SignatureLogoPicker = Future<Uint8List?> Function(BuildContext context);
 
 /// The page and rectangle (PDF user space) a visible signature box will be
 /// drawn into - handed to the dialog by the signature-box placement tool.
@@ -501,7 +506,7 @@ class _DigitalSignatureDialogState extends State<DigitalSignatureDialog> {
   Future<void> _pickLogo() async {
     final picker = widget.logoPicker;
     if (picker == null) return;
-    final bytes = await picker();
+    final bytes = await picker(context);
     if (bytes == null || !mounted) return;
     // fail early on a format the embedder can't take, rather than at sign time
     try {

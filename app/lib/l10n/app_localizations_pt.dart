@@ -436,6 +436,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String get editorMenuSaveAs => 'Salvar como…';
 
   @override
+  String get editorMenuScanDocument => 'Digitalizar para novo documento…';
+
+  @override
+  String get editorMenuInsertScan => 'Inserir digitalização…';
+
+  @override
+  String get editorScanFailed => 'Não foi possível digitalizar o documento.';
+
+  @override
+  String get editorInsertedScan => 'Páginas digitalizadas inseridas.';
+
+  @override
   String get editorMenuSettings => 'Configurações';
 
   @override
@@ -518,6 +530,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Alterações não guardadas em $count documentos da última sessão recuperadas.',
+      one: 'Alterações não guardadas da última sessão recuperadas.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Assinatura removida';
 
   @override
@@ -562,6 +586,31 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Depois';
+
+  @override
+  String get updateInstallNow => 'Atualizar agora';
+
+  @override
+  String get updateDownloadingTitle => 'Baixando atualização';
+
+  @override
+  String get updatePreparing => 'Preparando…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Baixando… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Reiniciando para concluir a atualização…';
+
+  @override
+  String get updateHandedOff => 'Atualização baixada. Abrindo o instalador…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Falha na atualização: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Ver todas as abas';
@@ -934,4 +983,13 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get appSigErrorNoCertificateFound =>
       'Nenhum certificado X.509 foi encontrado.';
+
+  @override
+  String get imageSourceTakePhoto => 'Tirar foto';
+
+  @override
+  String get imageSourceChooseFile => 'Escolher arquivo';
+
+  @override
+  String get imageSourceCameraFailed => 'Não foi possível tirar a foto';
 }

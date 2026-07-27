@@ -14,6 +14,13 @@ import 'l10n/app_localizations.dart';
 import 'app.dart' deferred as app;
 import 'app_info.dart' deferred as app_info;
 
+/// The git commit this build was compiled from, or `unknown` for a build that
+/// did not pass one. Supplied by the build scripts as
+/// `--dart-define=PDF_BUILD_COMMIT=$(git rev-parse --short HEAD)`; a plain
+/// `flutter run` leaves it unset, which is honest rather than misleading.
+const kBuildCommit =
+    String.fromEnvironment('PDF_BUILD_COMMIT', defaultValue: 'unknown');
+
 /// On Windows and Linux the OS launches the app with the opened file as a
 /// command-line argument; the Flutter runner forwards it here.
 Future<void> main(List<String> args) async {
@@ -26,6 +33,11 @@ Future<void> main(List<String> args) async {
   // with `?perf=1`. Off otherwise - it's verbose and adds per-line print
   // overhead. `Uri.base` carries the page URL on web (and is harmless on
   // native, where there's no query string), so no `package:web` import.
+  // Stamp the build unconditionally, so it is already set whichever way the
+  // trace is later turned on - `?perf=1` here, or the devtools toggle, which
+  // is how a trace is usually captured on a device. Setting it does nothing on
+  // its own; PdfPerfLog emits it as the first line only once logging is on.
+  PdfPerfLog.buildTag = 'commit=$kBuildCommit';
   if (Uri.base.queryParameters['perf'] == '1') {
     PdfPerfLog.enabled = true;
   }

@@ -438,6 +438,18 @@ class AppLocalizationsUk extends AppLocalizations {
   String get editorMenuSaveAs => 'Зберегти як…';
 
   @override
+  String get editorMenuScanDocument => 'Сканувати в новий документ…';
+
+  @override
+  String get editorMenuInsertScan => 'Вставити скан…';
+
+  @override
+  String get editorScanFailed => 'Не вдалося відсканувати документ.';
+
+  @override
+  String get editorInsertedScan => 'Відскановані сторінки вставлено.';
+
+  @override
   String get editorMenuSettings => 'Налаштування';
 
   @override
@@ -519,6 +531,18 @@ class AppLocalizationsUk extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Незбережені зміни у $count документах з минулого сеансу відновлено.',
+      one: 'Незбережені зміни з минулого сеансу відновлено.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Підпис вилучено';
 
   @override
@@ -564,6 +588,31 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Пізніше';
+
+  @override
+  String get updateInstallNow => 'Оновити зараз';
+
+  @override
+  String get updateDownloadingTitle => 'Завантаження оновлення';
+
+  @override
+  String get updatePreparing => 'Підготовка…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Завантаження… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Перезапуск для завершення оновлення…';
+
+  @override
+  String get updateHandedOff => 'Оновлення завантажено. Відкриття інсталятора…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Не вдалося оновити: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Переглянути всі вкладки';
@@ -944,4 +993,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get appSigErrorNoCertificateFound => 'Сертифікатів X.509 не знайдено.';
+
+  @override
+  String get imageSourceTakePhoto => 'Зробити знімок';
+
+  @override
+  String get imageSourceChooseFile => 'Вибрати файл';
+
+  @override
+  String get imageSourceCameraFailed => 'Не вдалося зробити знімок';
 }

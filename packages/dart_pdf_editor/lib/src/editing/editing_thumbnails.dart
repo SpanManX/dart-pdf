@@ -3,6 +3,7 @@ import 'dart:developer' show TimelineTask;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -419,6 +420,11 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
     if (mounted) setState(() {});
   }
 
+  /// The gate the shared cache's background warm consults: true while the
+  /// viewer still has foreground page work in flight. See
+  /// [PdfThumbnailCache.bindForegroundGate].
+  bool _viewerRenderBusy() => widget.viewerController.isPageRenderBusy;
+
   /// Pushes the strip's scroll position into the shared cache as the render
   /// focus, so the tiles nearest the visible band render before the rest.
   void _onScroll() {
@@ -458,6 +464,7 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
       worker: widget.renderWorker,
       priority: 3,
       skipIfWorkerDeclines: true,
+      deferUiWork: _viewerRenderBusy,
       reason: 'warm',
       disk: controller.pageRenderStamp(index) == 0 ? cache.disk : null,
     );
@@ -543,12 +550,28 @@ class _PdfThumbnailSidebarState extends State<PdfThumbnailSidebar> {
     // yields to every visible tile, so it never delays one.
     final pixelWidth =
         _thumbnailBucket(_tileWidth * MediaQuery.devicePixelRatioOf(context));
-    _cache.setWarm(
-      this,
-      controller.document.pageCount,
-      '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
-      (index) => _warmRender(index, pixelWidth),
-    );
+    // ...and hold it off entirely while the viewer is rendering: the warm's
+    // replay/rasterize run on the platform thread, so a lower worker priority
+    // alone still lets it land on the frame the visible page needs (#603).
+    _cache.bindForegroundGate(
+        widget.viewerController.pageRenderActivity, _viewerRenderBusy);
+    if (pdfShouldWarmThumbnails(controller.document.pageCount)) {
+      _cache.setWarm(
+        this,
+        controller.document.pageCount,
+        '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
+        (index) => _warmRender(index, pixelWidth),
+      );
+    } else {
+      // On web, rasterizing even a 128 px thumbnail replays the entire vector
+      // picture through CanvasKit and can monopolize the platform thread for
+      // hundreds of milliseconds. Long documents use on-demand tiles plus
+      // the viewer's already-cached soft previews instead of speculatively
+      // paying that cost for every off-screen page.
+      _cache.clearWarm(this);
+      _cache.bindForegroundGate(
+          widget.viewerController.pageRenderActivity, _viewerRenderBusy);
+    }
     // pages a shift-click would select from the current hover - painted as
     // a ghost of the selection chip while Shift is held
     final rangePreview = _rangePreview;
@@ -1180,6 +1203,11 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
     if (mounted) setState(() {});
   }
 
+  /// The gate the shared cache's background warm consults: true while the
+  /// viewer still has foreground page work in flight. See
+  /// [PdfThumbnailCache.bindForegroundGate].
+  bool _viewerRenderBusy() => widget.viewerController.isPageRenderBusy;
+
   /// Pushes the grid's scroll position into the shared cache as the render
   /// focus, so the rows on screen render before the rest of the document and
   /// scrolling re-prioritizes toward what just came into view.
@@ -1333,6 +1361,7 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
       worker: widget.renderWorker,
       priority: 3,
       skipIfWorkerDeclines: true,
+      deferUiWork: _viewerRenderBusy,
       reason: 'warm',
       disk: controller.pageRenderStamp(index) == 0 ? cache.disk : null,
     );
@@ -1358,12 +1387,21 @@ class _PdfThumbnailViewState extends State<PdfThumbnailView> {
     // paced loop that yields to every visible cell, so it never delays one.
     final pixelWidth = _thumbnailBucket(
         (tileWidth - 21) * MediaQuery.devicePixelRatioOf(context));
-    _cache.setWarm(
-      this,
-      controller.document.pageCount,
-      '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
-      (index) => _warmRender(index, pixelWidth),
-    );
+    // see the strip's copy: the warm stands down while the viewer renders
+    _cache.bindForegroundGate(
+        widget.viewerController.pageRenderActivity, _viewerRenderBusy);
+    if (pdfShouldWarmThumbnails(controller.document.pageCount)) {
+      _cache.setWarm(
+        this,
+        controller.document.pageCount,
+        '$pixelWidth|${widget.pageColor.toARGB32()}|${widget.showAnnotations}',
+        (index) => _warmRender(index, pixelWidth),
+      );
+    } else {
+      _cache.clearWarm(this);
+      _cache.bindForegroundGate(
+          widget.viewerController.pageRenderActivity, _viewerRenderBusy);
+    }
     // the scrollbar overlays the grid's right edge; keep content clear of it
     const barClearance = PdfScrollbar.hitExtent;
     return LayoutBuilder(builder: (context, constraints) {
@@ -2569,6 +2607,18 @@ String thumbnailKey(PdfEditingController controller, int pageIndex,
     '$pageIndex|${controller.pageRenderStamp(pageIndex)}'
     '|${pageColor.toARGB32()}|$pixelWidth${annotations ? '' : '|noannots'}';
 
+/// Whole-document thumbnail warming policy.
+///
+/// Native platforms can rasterize tile-sized pictures away from the Flutter
+/// web platform-thread bottleneck. On web, a dense vector page still costs
+/// hundreds of milliseconds in CanvasKit even at 128 px, so proactively
+/// warming every page of a long document creates periodic frame drops before
+/// the user ever visits those pages. Such documents render visible tiles on
+/// demand and show the viewer's 200 px preview meanwhile.
+@visibleForTesting
+bool pdfShouldWarmThumbnails(int pageCount, {bool? web}) =>
+    !(web ?? kIsWeb) || pageCount <= 24;
+
 /// Raster widths snap to 64px steps so a resize drag doesn't re-render every
 /// page per pixel.
 int _thumbnailBucket(double px) => ((px / 64).ceil() * 64).clamp(64, 1024);
@@ -2604,6 +2654,7 @@ Future<ui.Image?> rasterizeThumbnail({
   required PdfRenderWorker? worker,
   int priority = 2,
   bool skipIfWorkerDeclines = false,
+  bool Function()? deferUiWork,
   String reason = 'tile',
   PdfRasterCache? disk,
 }) async {
@@ -2649,14 +2700,46 @@ Future<ui.Image?> rasterizeThumbnail({
         : null;
     final recordMs = sw.elapsedMicroseconds / 1000.0;
     if (commands != null) {
+      // A background warm may have started while the viewer was idle, then
+      // received its worker result after scrolling began. Do not turn that
+      // result into a picture/raster on the platform thread now: the page's
+      // visible tile already has a soft viewer preview, and foreground motion
+      // wins. The warm pass may leave this page for its on-demand tile render.
+      if (deferUiWork?.call() ?? false) {
+        trace.instant('defer ui replay', arguments: {'ms': recordMs});
+        PdfPerfLog.log('thumbnail page=$pageIndex $reason px=$pixelWidth '
+            'defer ui replay record=${_traceMs(recordMs)}');
+        return null;
+      }
       trace.instant('worker.record',
           arguments: {'ms': recordMs, 'commands': commands.length});
       sw.reset();
-      final picture = await PdfPageRenderer.pictureFromCommands(page, commands,
-          pageColor: pageColor);
+      // The replay is the one part of a thumbnail that CANNOT leave the
+      // platform thread, so it gets the tile's own resolution too: any image
+      // the worker's codec declined arrives un-decoded, and without the cap it
+      // would decode at native size here - a 10-megapixel scan run through the
+      // pure-Dart codec to fill a 256px tile (#603). Sliced into the timeline
+      // as its own span so a trace attributes it to the thumbnail rather than
+      // to whatever frame it lands in.
+      final picture = await _timedReplay(
+          pageIndex,
+          reason,
+          () => PdfPageRenderer.pictureFromCommands(page, commands,
+              pageColor: pageColor, maxImagePixelRatio: ratio));
       final replayMs = sw.elapsedMicroseconds / 1000.0;
       sw.reset();
       try {
+        // pictureFromCommands can yield while resolving resources. Re-check
+        // before the much more expensive CanvasKit raster in case scrolling
+        // began during that replay.
+        if (deferUiWork?.call() ?? false) {
+          trace.instant('defer ui raster',
+              arguments: {'recordMs': recordMs, 'replayMs': replayMs});
+          PdfPerfLog.log('thumbnail page=$pageIndex $reason px=$pixelWidth '
+              'defer ui raster record=${_traceMs(recordMs)} '
+              'replay=${_traceMs(replayMs)}');
+          return null;
+        }
         final image = await PdfPageRenderer.rasterize(picture, size, ratio);
         final rasterMs = sw.elapsedMicroseconds / 1000.0;
         trace.instant('rasterize', arguments: {'ms': rasterMs});
@@ -2700,6 +2783,25 @@ Future<ui.Image?> rasterizeThumbnail({
 }
 
 String _traceMs(double v) => '${v.toStringAsFixed(1)}ms';
+
+/// Wraps a thumbnail's command replay in its own async timeline slice.
+///
+/// The replay builds a `ui.Picture` on the platform thread - the same thread
+/// the visible page's build needs - so in a DevTools capture it is otherwise
+/// indistinguishable from foreground work. A named slice per page/reason is
+/// what lets a trace say "this frame went to warming page 47's thumbnail"
+/// (#603). Free when nothing is recording.
+Future<T> _timedReplay<T>(
+    int pageIndex, String reason, Future<T> Function() replay) async {
+  final flow = TimelineTask()
+    ..start('thumbnail replay',
+        arguments: {'page': pageIndex, 'reason': reason});
+  try {
+    return await replay();
+  } finally {
+    flow.finish();
+  }
+}
 
 /// Marks the viewer's viewport on a thumbnail: [region] is the visible
 /// part of the page as fractions of its area.
