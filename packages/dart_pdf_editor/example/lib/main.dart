@@ -253,7 +253,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// Demo of [PdfViewer.contextMenuEnabled]: when off, right-click and
   /// long-press annotation menus are suppressed. App-wide.
-  bool _contextMenuEnabled = false;
+  bool _contextMenuEnabled = true;
 
   /// Demo of [PdfViewer.onContextMenuRequested]: when the stock menu is
   /// off, this handler renders the demo app's own menu (a custom Copy row,
