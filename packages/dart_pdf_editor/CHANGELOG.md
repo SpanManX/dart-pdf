@@ -10,6 +10,19 @@
 - Bound speculative thumbnail warming on web and add command budgets to vector
   thumbnail previews, keeping long documents responsive without blanking pages
   during fast scrolling.
+- Add `PdfPageRasterCachePolicy` to configure the in-memory byte budget and
+  per-page limit for exact rasters of previously visited pages. The existing
+  32 MiB total / 16 MiB per-page defaults are unchanged; `PdfViewer`,
+  `PdfReader`, and `PdfEditorView` can now opt into a much larger desktop
+  working set. Retained full-page rasters participate in process-wide cache
+  accounting and memory-pressure cleanup, so multiple viewers share the
+  coordinated host ceiling. Performance traces now report exact-raster policy,
+  hit, miss, admission rejection, store, and budget-eviction events, while
+  cache diagnostics expose lifetime hit/miss/eviction counters. Dense
+  deep-zoom scenes now bootstrap their worker-built spatial index correctly
+  instead of remaining on repeated full-viewport detail rasters indefinitely;
+  the capped base remains visible during that warm-up rather than launching an
+  obsolete fallback record, and traces split tile replay/raster/slicing costs.
 
 ## 3.1.0
 
