@@ -38,9 +38,10 @@ const _sampleRemotePdfUrl =
     'compressed.tracemonkey-pldi-09.pdf';
 
 /// Custom actions for the host-takeover demo menu shown in the app when
-/// the user has disabled the stock context menu. The labels are in
-/// Simplified Chinese to demonstrate that the host owns the strings.
-enum _DemoAnnotAction { copy, note, sendTo }
+/// the user has disabled the stock context menu. The host owns the strings
+/// and labels, so a different action set per annotation type fits here
+/// naturally.
+enum _DemoAnnotAction { copy, highlight, sendTo }
 
 /// Test seam: builds the byte source a remote open reads from. Defaults to a
 /// real [PdfHttpByteSource]; tests swap in an in-memory source so no network
@@ -252,13 +253,14 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// Demo of [PdfViewer.contextMenuEnabled]: when off, right-click and
   /// long-press annotation menus are suppressed. App-wide.
-  bool _contextMenuEnabled = true;
+  bool _contextMenuEnabled = false;
 
-  /// Demo of [PdfViewer.onAnnotationMenuRequested]: when the stock menu is
-  /// off, this handler renders the demo app's own menu (a custom Copy
-  /// row plus a "Send to…" action) using the gesture position the
-  /// viewer passes in. App-wide.
-  Future<void> _onAnnotationMenuRequested(
+  /// Demo of [PdfViewer.onContextMenuRequested]: when the stock menu is
+  /// off, this handler renders the demo app's own menu (a custom Copy row,
+  /// Highlight and Add-note actions that write real annotations, plus a
+  /// "Send to…" action) using the gesture position the viewer passes in.
+  /// App-wide.
+  Future<void> _onContextMenuRequested(
     Offset globalPosition,
     int pageIndex, {
     (double, double) pagePoint = (0, 0),
@@ -271,6 +273,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
     // showMenu anchors at the tap point in the root overlay's coordinate
     // space; flip the global position to local with the root overlay's box.
     final local = overlay.globalToLocal(globalPosition);
+    final tab = _active;
+    final editing = tab?.session;
+    final (x, y) = pagePoint;
     final picked = await showMenu<_DemoAnnotAction>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -290,10 +295,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ),
         ),
         const PopupMenuItem<_DemoAnnotAction>(
-          value: _DemoAnnotAction.note,
+          value: _DemoAnnotAction.highlight,
           child: ListTile(
-            leading: Icon(Icons.sticky_note_2_outlined),
-            title: Text('Add note…'),
+            leading: Icon(Icons.brush_outlined),
+            title: Text('Highlight (custom)'),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),
@@ -309,12 +314,86 @@ class _ViewerScreenState extends State<ViewerScreen> {
         ),
       ],
     );
-    if (picked != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Page ${pageIndex + 1}: $picked '
-            '(at $pagePoint)'),
-        behavior: SnackBarBehavior.floating,
-      ));
+
+    if (picked == null || !mounted) return;
+
+    PdfAnnotation? annotation;
+    if (editing != null) {
+      for (final slot in editing.selectedAnnotationSlots) {
+        if (slot.$1 == pageIndex) {
+          annotation = editing.document.page(slot.$1).annotations[slot.$2];
+          break;
+        }
+      }
+      annotation ??=
+          editing.selectableAnnotationAt(pageIndex, x, y)?.$2;
+    }
+
+    switch (picked) {
+      case _DemoAnnotAction.copy:
+        final text = tab?.viewer!.selectedText;
+        _toast(text!);
+      case _DemoAnnotAction.highlight:
+        // Highlight the live selection, then write the optional note as
+        // the highlight's own /Contents (not a reply, not a /FreeText
+        // box - what Adobe/Foxit show as the highlight's first comment).
+        final viewer = tab?.viewer;
+        if (editing == null || viewer == null || !viewer.hasSelection) {
+          _toast('Select some text first');
+          return;
+        }
+        final quadsByPage = {
+          for (final page in viewer.selectionPages)
+            page: viewer.selectionRectsOn(page),
+        };
+        editing.useMarkupStyleScope();
+        editing.addMarkup(PdfMarkupKind.highlight, quadsByPage);
+
+        final field = TextEditingController();
+        final noteText = await showDialog<String>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Highlight note'),
+            content: TextField(
+              controller: field,
+              autofocus: true,
+              maxLines: 3,
+              minLines: 1,
+              decoration:
+                  const InputDecoration(hintText: 'Note text (optional)'),
+              onSubmitted: (value) => Navigator.pop(ctx, value),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, field.text),
+                child: const Text('Save'),
+              ),
+            ],
+          ),
+        );
+        field.dispose();
+        if (!mounted) return;
+        if (noteText != null && noteText.isNotEmpty) {
+          final firstPage = quadsByPage.keys.first;
+          final page = editing.document.page(firstPage);
+          final highlight = page.annotations.lastWhere(
+            (a) => a.subtype == 'Highlight',
+            orElse: () => throw StateError(
+              'highlight annotation not found on page $firstPage',
+            ),
+          );
+          editing.apply(
+            (e) => e.setAnnotationContents(firstPage, highlight, noteText),
+          );
+        }
+        viewer.clearSelection();
+      case _DemoAnnotAction.sendTo:
+        _toast('Send page ${pageIndex + 1}'
+            '${annotation != null ? " (${annotation.subtype})" : ""}');
     }
   }
 
@@ -1527,10 +1606,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
                                 textCache: _textCache,
                                 pageLayout: _pageLayout,
                                 contextMenuEnabled: _contextMenuEnabled,
-                                onAnnotationMenuRequested:
+                                onContextMenuRequested:
                                     _contextMenuEnabled
                                         ? null
-                                        : _onAnnotationMenuRequested,
+                                        : _onContextMenuRequested,
                                 onAction: _onAction,
                                 pageOverlayBuilder:
                                     tab.isDemo ? _demoOverlays : null,
@@ -1553,9 +1632,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
                                     tab.isDemo ? _demoOverlays : null,
                                 annotationMenuBuilder: _annotationMenuActions,
                                 contextMenuEnabled: _contextMenuEnabled,
-                                onAnnotationMenuRequested: _contextMenuEnabled
+                                onContextMenuRequested: _contextMenuEnabled
                                     ? null
-                                    : _onAnnotationMenuRequested,
+                                    : _onContextMenuRequested,
                                 formImagePicker: _pickFormImage,
                                 imagePicker: _pickImage,
                                 fontPicker: _pickFont,

@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: '3.44.4'
+  FLUTTER_VERSION: '3.44.8'
   APPIMAGETOOL_SHA256: a6d71e2b6cd66f8e8d16c37ad164658985e0cf5fcaa950c90a482890cb9d13e0
 
 jobs:
@@ -80,10 +80,14 @@ jobs:
           PY
           }
 
-          patch_gradle "$(find "$HOME/.pub-cache" -path '*/onnxruntime-*/android/build.gradle' -print -quit)"
-          patch_gradle "$(find "$HOME/.pub-cache" -path '*/irondash_engine_context-*/android/build.gradle' -print -quit)" dev.irondash.engine_context
+          # Patch EVERY match, not just the first: `-print -quit` can return a
+          # plugin's example/android/build.gradle instead of its own (find's
+          # order is filesystem-dependent), which leaves the real plugin
+          # unpatched and fails :onnxruntime:checkReleaseAarMetadata.
+          while IFS= read -r f; do patch_gradle "$f"; done < <(find "$HOME/.pub-cache" -path '*/onnxruntime-*/android/build.gradle')
+          while IFS= read -r f; do patch_gradle "$f" dev.irondash.engine_context; done < <(find "$HOME/.pub-cache" -path '*/irondash_engine_context-*/android/build.gradle')
           super_native_gradle="$(find "$HOME/.pub-cache" -path '*/super_native_extensions-*/android/build.gradle' -print -quit)"
-          patch_gradle "$super_native_gradle" com.superlist.super_native_extensions
+          while IFS= read -r f; do patch_gradle "$f" com.superlist.super_native_extensions; done < <(find "$HOME/.pub-cache" -path '*/super_native_extensions-*/android/build.gradle')
 
           if [[ -n "$super_native_gradle" ]]; then
             cargokit_gradle="$(dirname "$super_native_gradle")/../cargokit/gradle/plugin.gradle"

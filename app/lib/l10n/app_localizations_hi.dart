@@ -434,6 +434,18 @@ class AppLocalizationsHi extends AppLocalizations {
   String get editorMenuSaveAs => 'इस रूप में सहेजें…';
 
   @override
+  String get editorMenuScanDocument => 'नए दस्तावेज़ में स्कैन करें…';
+
+  @override
+  String get editorMenuInsertScan => 'स्कैन डालें…';
+
+  @override
+  String get editorScanFailed => 'दस्तावेज़ स्कैन नहीं किया जा सका।';
+
+  @override
+  String get editorInsertedScan => 'स्कैन किए गए पृष्ठ जोड़े गए।';
+
+  @override
   String get editorMenuSettings => 'सेटिंग्स';
 
   @override
@@ -515,6 +527,18 @@ class AppLocalizationsHi extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'पिछले सत्र के $count दस्तावेज़ों में सहेजे न गए बदलाव पुनर्प्राप्त किए गए।',
+      one: 'पिछले सत्र के सहेजे न गए बदलाव पुनर्प्राप्त किए गए।',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'हस्ताक्षर हटाया गया';
 
   @override
@@ -558,6 +582,32 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'बाद में';
+
+  @override
+  String get updateInstallNow => 'अभी अपडेट करें';
+
+  @override
+  String get updateDownloadingTitle => 'अपडेट डाउनलोड हो रहा है';
+
+  @override
+  String get updatePreparing => 'तैयार हो रहा है…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'डाउनलोड हो रहा है… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'अपडेट पूरा करने के लिए पुनरारंभ हो रहा है…';
+
+  @override
+  String get updateHandedOff =>
+      'अपडेट डाउनलोड हो गया. इंस्टॉलर खोला जा रहा है…';
+
+  @override
+  String updateFailed(String error) {
+    return 'अपडेट विफल: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'सभी टैब देखें';
@@ -923,4 +973,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get appSigErrorNoCertificateFound => 'कोई X.509 प्रमाणपत्र नहीं मिला।';
+
+  @override
+  String get imageSourceTakePhoto => 'फ़ोटो लें';
+
+  @override
+  String get imageSourceChooseFile => 'फ़ाइल चुनें';
+
+  @override
+  String get imageSourceCameraFailed => 'फ़ोटो नहीं ली जा सकी';
 }

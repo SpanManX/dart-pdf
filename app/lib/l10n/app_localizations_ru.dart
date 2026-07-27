@@ -439,6 +439,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get editorMenuSaveAs => 'Сохранить как…';
 
   @override
+  String get editorMenuScanDocument => 'Сканировать в новый документ…';
+
+  @override
+  String get editorMenuInsertScan => 'Вставить скан…';
+
+  @override
+  String get editorScanFailed => 'Не удалось отсканировать документ.';
+
+  @override
+  String get editorInsertedScan => 'Отсканированные страницы вставлены.';
+
+  @override
   String get editorMenuSettings => 'Настройки';
 
   @override
@@ -520,6 +532,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Несохранённые изменения в $count документах из прошлого сеанса восстановлены.',
+      one: 'Несохранённые изменения из прошлого сеанса восстановлены.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Подпись удалена';
 
   @override
@@ -563,6 +587,31 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Позже';
+
+  @override
+  String get updateInstallNow => 'Обновить сейчас';
+
+  @override
+  String get updateDownloadingTitle => 'Загрузка обновления';
+
+  @override
+  String get updatePreparing => 'Подготовка…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Загрузка… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Перезапуск для завершения обновления…';
+
+  @override
+  String get updateHandedOff => 'Обновление загружено. Открытие установщика…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Не удалось обновить: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Показать все вкладки';
@@ -941,4 +990,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get appSigErrorNoCertificateFound => 'Сертификаты X.509 не найдены.';
+
+  @override
+  String get imageSourceTakePhoto => 'Сделать снимок';
+
+  @override
+  String get imageSourceChooseFile => 'Выбрать файл';
+
+  @override
+  String get imageSourceCameraFailed => 'Не удалось сделать снимок';
 }

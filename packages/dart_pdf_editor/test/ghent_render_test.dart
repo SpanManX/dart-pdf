@@ -63,29 +63,44 @@ const _pixelRatio = 2.0;
 /// deviation. The dedicated JPX decode guard (pdf_graphics
 /// ghent_jpx_indexed_test.dart) pins both images to their palette colour so a
 /// regression back to the black square cannot hide behind this tolerance.
+///
+/// `GWG030_Gray_K_black_OP_X1` used to be here and is now pixel-enforced: the
+/// CMYK/spot colorant buffer (issue #502) makes overprint subtractive, so all
+/// twelve of its self-grading patches come out uniform - including the three
+/// where a neutral ink must knock a DeviceCMYK backdrop's process colorants out
+/// to grey while a spot backdrop of the same RGB colour survives, which no RGB
+/// compositor could separate. `overprint_render_test.dart` pins the per-patch
+/// result platform-independently.
+///
+/// The three `GWG19x_DeviceN_Overprint` pages left the set with issue #604,
+/// which gave a decoded raster the same colorant reading vector paint has: an
+/// overprinting image is now drawn as a substitute raster whose samples are the
+/// subtractive composite, so all four patches on each page (two vector, two
+/// image) come out uniform. `overprint_render_test.dart` pins those per patch
+/// too, alongside GWG031 - whose whole subject is an overprinting grayscale
+/// raster over a spot green, and which now matches its own "Correct" thumbnail
+/// rather than its "Wrong" one.
+///
+/// `GWG010_CMYK_OP` (never in this set) moved with the same change and was
+/// re-seeded: its "mask" patch draws an /Indexed-over-DeviceCMYK 50%-magenta
+/// raster over a rich-black X, and under OPM 1 that raster's zero components
+/// leave the backdrop's C/Y/K standing - so the X now shows through in the
+/// OPM-1 row and is still knocked out to flat pink in the OPM-0 row, which is
+/// the contrast the page exists to draw. (Its "image" patch straddles two
+/// backdrops at once and still declines; see the dev log.)
+///
+/// `GWG020_CMYKSpot_OP` stays in the set but was re-seeded: six more of its ten
+/// self-grading patches now pass - the two image and two shading patches (a
+/// uniform raster is a backdrop the buffer can composite against) and the two
+/// /ImageMask "mask" patches (a stencil paints the fill colour through its own
+/// alpha, so only that colour needs resolving). Its two *font* patches still
+/// show their marker, because the buffer marks a text run by its em box rather
+/// than its glyph outlines - issue #502's deliberate cost trade - so the page
+/// remains a tolerated deviation.
 const _knownBaselineDeviations = <String>{
   '1-CMYK/Ghent_PDF-Output-Test-V50_CMYK_X4.pdf',
-  '1-CMYK/GWG190_DeviceN_Overprint_Black_X1a.pdf',
-  '1-CMYK/GWG191_DeviceN_Overprint_Yellow_X1a.pdf',
-  '1-CMYK/GWG192_DeviceN_Overprint_White_X1a.pdf',
   '2-SPOT/Ghent_PDF-Output-Test-V50_SPOT_X4.pdf',
   '2-SPOT/GWG020_CMYKSpot_OP_x1a.pdf',
-  // GWG030 self-grades gray/K/separation overprint over spot/CMYK backgrounds
-  // (issue #502). Overprint is consumed: /op /OP fills and strokes darken
-  // (BlendMode.darken) onto the backdrop instead of knocking it out, which
-  // flattens the fail-marker "X" on every "over spot" patch and on the "over
-  // CMYK" patches whose neutral ink only darkens (K under OPM 1, separation
-  // black) - the darken approximation is the RGB optimum here (empirically no
-  // OPM-keyed blend beats it). Three patches remain non-uniform: 50% K over
-  // CMYK under OPM 0 (d) and 50% gray over CMYK under either mode (e, k), where
-  // a neutral ink knocks the DeviceCMYK backdrop's process colorants out to
-  // grey. Reproducing that - versus a spot backdrop of the same RGB colour that
-  // must survive - needs a colorant buffer this RGB compositor does not have,
-  // so the page stays out of pixel enforcement, same missing-feature class as
-  // the DeviceN GWG190/191/192 patches above. The per-patch behaviour (which
-  // markers flatten, which remain) is pinned platform-independently by
-  // overprint_render_test.dart; see doc/dev-log/2026-07-23-overprint-rgb-ceiling.md.
-  '2-SPOT/GWG030_Gray_K_black_OP_X1.pdf',
   '3-ICC-CMS/Ghent_PDF-Output-Test-V50_ICC-CMS_X4.pdf',
   '3-ICC-CMS/GWG172_JPEG2000_compression_ICCBasedRGB_x4.pdf',
   '3-ICC-CMS/GWG182_16Bit_Images_ICCbasedGray_x4.pdf',

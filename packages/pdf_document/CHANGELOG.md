@@ -1,5 +1,29 @@
 # Changelog
 
+## 3.1.1
+
+- Lockstep patch release to align the dart-pdf package suite at 3.1.1. No
+  public `pdf_document` API changes since 3.1.0.
+
+## 3.1.0
+
+- Add `PdfEditor.compress()`/`PdfCompressionResult`: lossless file-size
+  compaction on save. A whole-graph reachability pass drops the dead objects
+  incremental edits accumulate, non-stream objects pack into object streams,
+  and uncompressed streams are re-deflated (kept only when smaller). Never
+  returns a larger file, includes pending edits, and refuses encrypted
+  documents. Decoded stream content is preserved bit-for-bit (#368).
+- Hyperlink authoring: `addLinkToUri` / `addLinkToDestination` /
+  `addLinkToPage`, mirroring the text-markup creators' quad shape so a text
+  selection turns into a link. /Rect bounds the quads, each quad becomes an
+  active /QuadPoints region, /Border is suppressed by default, and an
+  underline or border decoration bakes an /AP (#500).
+- Crop placed images: the image-stamp appearance bakes a normalized crop
+  rect, read back via `PdfAnnotation.imageStampCrop`; opacity restyles and
+  resizes preserve the crop (#504).
+- Render digital-signature boxes in the signer's local timezone (#570).
+- Add `PdfAnnotation.isPrint` (§12.5.3 print-vs-screen visibility) (#546).
+
 ## 3.0.0
 
 Lockstep major release (a breaking change in `dart_pdf_editor` moves the whole

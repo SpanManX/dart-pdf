@@ -435,6 +435,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get editorMenuSaveAs => 'Farklı kaydet…';
 
   @override
+  String get editorMenuScanDocument => 'Yeni belgeye tara…';
+
+  @override
+  String get editorMenuInsertScan => 'Tarama ekle…';
+
+  @override
+  String get editorScanFailed => 'Belge taranamadı.';
+
+  @override
+  String get editorInsertedScan => 'Taranan sayfalar eklendi.';
+
+  @override
   String get editorMenuSettings => 'Ayarlar';
 
   @override
@@ -516,6 +528,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Son oturumdaki $count belgede kaydedilmemiş değişiklikler kurtarıldı.',
+      one: 'Son oturumdaki kaydedilmemiş değişiklikler kurtarıldı.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'İmza kaldırıldı';
 
   @override
@@ -558,6 +582,32 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Daha sonra';
+
+  @override
+  String get updateInstallNow => 'Şimdi güncelle';
+
+  @override
+  String get updateDownloadingTitle => 'Güncelleme indiriliyor';
+
+  @override
+  String get updatePreparing => 'Hazırlanıyor…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'İndiriliyor… $percent%';
+  }
+
+  @override
+  String get updateRestarting =>
+      'Güncellemeyi tamamlamak için yeniden başlatılıyor…';
+
+  @override
+  String get updateHandedOff => 'Güncelleme indirildi. Yükleyici açılıyor…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Güncelleme başarısız: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Tüm sekmeleri görüntüle';
@@ -924,4 +974,13 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get appSigErrorNoCertificateFound =>
       'Hiç X.509 sertifikası bulunamadı.';
+
+  @override
+  String get imageSourceTakePhoto => 'Fotoğraf çek';
+
+  @override
+  String get imageSourceChooseFile => 'Dosya seç';
+
+  @override
+  String get imageSourceCameraFailed => 'Fotoğraf çekilemedi';
 }

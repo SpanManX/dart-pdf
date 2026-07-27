@@ -227,7 +227,7 @@ class PdfEditorView extends StatefulWidget {
     this.pageOverlayBuilder,
     this.annotationMenuBuilder,
     this.contextMenuEnabled = true,
-    this.onAnnotationMenuRequested,
+    this.onContextMenuRequested,
     this.formImagePicker,
     this.imagePicker,
     this.systemImagePasteProvider,
@@ -305,7 +305,7 @@ class PdfEditorView extends StatefulWidget {
     this.pageOverlayBuilder,
     this.annotationMenuBuilder,
     this.contextMenuEnabled = true,
-    this.onAnnotationMenuRequested,
+    this.onContextMenuRequested,
     this.formImagePicker,
     this.imagePicker,
     this.systemImagePasteProvider,
@@ -452,13 +452,16 @@ class PdfEditorView extends StatefulWidget {
   /// See [PdfViewer.contextMenuEnabled].
   final bool contextMenuEnabled;
 
-  /// See [PdfViewer.onAnnotationMenuRequested].
-  final PdfAnnotationMenuHost? onAnnotationMenuRequested;
+  /// See [PdfViewer.onContextMenuRequested].
+  final PdfContextMenuHost? onContextMenuRequested;
 
   /// See [PdfViewer.formImagePicker].
   final PdfFormImagePicker? formImagePicker;
 
-  /// See [PdfViewer.imagePicker].
+  /// How the Insert group's image tool ([PdfEditTool.image]) sources a
+  /// picture to insert. Supply this to enable the tool; when null it is
+  /// hidden from the toolbar rather than left as a no-op button. See
+  /// [PdfViewer.imagePicker].
   final PdfImagePicker? imagePicker;
 
   /// See [PdfViewer.systemImagePasteProvider].
@@ -708,7 +711,7 @@ class _PdfEditorViewState extends State<PdfEditorView> {
         pageOverlayBuilder: widget.pageOverlayBuilder,
         annotationMenuBuilder: widget.annotationMenuBuilder,
         contextMenuEnabled: widget.contextMenuEnabled,
-        onAnnotationMenuRequested: widget.onAnnotationMenuRequested,
+        onContextMenuRequested: widget.onContextMenuRequested,
         formImagePicker: widget.formImagePicker,
         imagePicker: widget.imagePicker,
         systemImagePasteProvider: widget.systemImagePasteProvider,
@@ -1346,8 +1349,8 @@ class _PdfEditorViewState extends State<PdfEditorView> {
                         pageOverlayBuilder: widget.pageOverlayBuilder,
                         annotationMenuBuilder: widget.annotationMenuBuilder,
                         contextMenuEnabled: widget.contextMenuEnabled,
-                        onAnnotationMenuRequested:
-                            widget.onAnnotationMenuRequested,
+                        onContextMenuRequested:
+                            widget.onContextMenuRequested,
                         formImagePicker: widget.formImagePicker,
                         imagePicker: widget.imagePicker,
                         systemImagePasteProvider:

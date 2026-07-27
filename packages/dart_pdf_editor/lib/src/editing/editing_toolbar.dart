@@ -105,7 +105,13 @@ class PdfEditingToolbar extends StatefulWidget {
   /// rich-text overrides (colour, size, bold, italic).
   final PdfStyledTextPrompt styledTextPrompt;
 
-  /// How selected page-content images are replaced from the element strip.
+  /// How the image tool ([PdfEditTool.image]) sources a picture to insert,
+  /// and how selected page-content images are replaced from the element
+  /// strip. Typically a file picker returning PNG or JPEG bytes.
+  ///
+  /// When null the image tool is dropped from the Insert group (rather than
+  /// left as a button that no-ops) and the element strip's replace-image
+  /// action is hidden. See [PdfViewer.imagePicker].
   final PdfImagePicker? imagePicker;
 
   /// How the selected push-button field's toolbar action obtains an image.
@@ -450,7 +456,13 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
 
   bool _entryVisible(_GroupTool entry) {
     final tool = entry.tool;
-    if (tool != null) return _shows(tool);
+    if (tool != null) {
+      // The image tool can't insert anything without an [imagePicker] to
+      // source the picture, so drop it from the Insert group rather than
+      // show a button that silently no-ops. Wire [imagePicker] to offer it.
+      if (tool == PdfEditTool.image && widget.imagePicker == null) return false;
+      return _shows(tool);
+    }
     if (entry.markup != null) return widget.showMarkup;
     return true;
   }
@@ -2244,6 +2256,9 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
             visualDensity: VisualDensity.compact,
             onPressed: () => _editSelectedText(context),
           ),
+        // the tune popup restyles the selection (stroke/opacity/font/colour) -
+        // reachable from the dock, mirroring the desktop selection strip
+        ..._tuneTrailing(context, _selectionStyleFields()),
       ];
     }
     if (controller.selectedElement != null) {
@@ -2308,18 +2323,32 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
           ),
       ];
     }
+    final tune = _mobileTuneTrailing(context);
     if (widget.showColor && controller.toolUsesColor) {
-      return _mobileSwatches(context);
+      // The tune popup carries the full palette, so a couple of quick swatches
+      // beside it are enough - and dropping the third keeps the whole cluster
+      // (swatches + tune) inside the narrow dock without overflowing.
+      return [..._mobileSwatches(context, count: tune.isEmpty ? 3 : 2), ...tune];
     }
-    return const [];
+    return tune;
   }
 
-  /// The first three palette swatches, sized for the mobile dock.
-  List<Widget> _mobileSwatches(BuildContext context) {
+  /// The tune popup trigger for the mobile dock's armed tool, or empty when
+  /// no tool is armed or its controls carry nothing to tune. Mirrors the
+  /// desktop strip's [_tuneTrailing] so the same stroke/opacity/font sliders
+  /// are one tap away on a phone.
+  List<Widget> _mobileTuneTrailing(BuildContext context) {
+    final group = _groupForTool(controller.tool);
+    if (group == null) return const [];
+    return _tuneTrailing(context, _groupStyleFields(group));
+  }
+
+  /// The first [count] palette swatches, sized for the mobile dock.
+  List<Widget> _mobileSwatches(BuildContext context, {int count = 3}) {
     final scheme = Theme.of(context).colorScheme;
     var i = 0;
     return [
-      for (final color in widget.palette.take(3))
+      for (final color in widget.palette.take(count))
         Padding(
           key: ValueKey('pdf-mobile-swatch-${i++}'),
           padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -3280,12 +3309,17 @@ class _StyleMenuState extends State<_StyleMenu> {
     if (_holdingTextEditFocus || !controller.isEditingText) return;
     _holdingTextEditFocus = true;
     controller.beginEditingTextFocusHold();
+    // keep the in-place editor focused for the whole popup session so its
+    // selection highlight stays on - both when the popup opens and after each
+    // control tap, so the user can see (and keep restyling) the same run
+    controller.beginKeepEditingTextFocused();
   }
 
   void _endTextEditFocusHold() {
     if (!_holdingTextEditFocus) return;
     _holdingTextEditFocus = false;
     controller.endEditingTextFocusHold();
+    controller.endKeepEditingTextFocused();
   }
 
   void _setFont(PdfStandardFont font) {

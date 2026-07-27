@@ -787,6 +787,30 @@ abstract class AppLocalizations {
   /// **'Save as…'**
   String get editorMenuSaveAs;
 
+  /// App menu item (mobile/tablet) to scan pages with the device camera into a new document.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan to new document…'**
+  String get editorMenuScanDocument;
+
+  /// App menu item (mobile/tablet) to scan pages with the device camera and insert them into the open document.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert scan…'**
+  String get editorMenuInsertScan;
+
+  /// Toast shown when a device document scan fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t scan the document.'**
+  String get editorScanFailed;
+
+  /// Toast shown after scanned pages are inserted into the open document.
+  ///
+  /// In en, this message translates to:
+  /// **'Inserted scanned pages.'**
+  String get editorInsertedScan;
+
   /// App menu item to open the settings screen.
   ///
   /// In en, this message translates to:
@@ -913,6 +937,12 @@ abstract class AppLocalizations {
   /// **'PDF'**
   String get editorPreviewPdf;
 
+  /// Toast shown at launch when documents with unsaved edits were restored after a crash.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Recovered unsaved changes from your last session.} other{Recovered unsaved changes in {count} documents from your last session.}}'**
+  String editorRecoveredUnsavedChanges(int count);
+
   /// Toast confirming a just-placed signature was undone.
   ///
   /// In en, this message translates to:
@@ -972,6 +1002,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Later'**
   String get editorUpdateLater;
+
+  /// Button that downloads and installs the newer release in place (desktop), instead of opening a browser download.
+  ///
+  /// In en, this message translates to:
+  /// **'Update now'**
+  String get updateInstallNow;
+
+  /// Title of the dialog shown while an in-app update is downloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading update'**
+  String get updateDownloadingTitle;
+
+  /// Status shown before download progress is known.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing…'**
+  String get updatePreparing;
+
+  /// Download progress line with the percentage complete.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading… {percent}%'**
+  String updateDownloadingPercent(int percent);
+
+  /// Status shown after the AppImage is replaced, just before the app relaunches.
+  ///
+  /// In en, this message translates to:
+  /// **'Restarting to finish the update…'**
+  String get updateRestarting;
+
+  /// Snackbar shown after a macOS/Windows update is downloaded and handed to the OS installer.
+  ///
+  /// In en, this message translates to:
+  /// **'Update downloaded. Opening the installer…'**
+  String get updateHandedOff;
+
+  /// Snackbar shown when an in-app update download or install fails.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed: {error}'**
+  String updateFailed(String error);
 
   /// Tooltip on the desktop button that opens the all-tabs grid dialog.
   ///
@@ -1506,6 +1578,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No X.509 certificates were found.'**
   String get appSigErrorNoCertificateFound;
+
+  /// Bottom-sheet option (mobile only) that photographs the picture to insert with the device camera.
+  ///
+  /// In en, this message translates to:
+  /// **'Take photo'**
+  String get imageSourceTakePhoto;
+
+  /// Bottom-sheet option (mobile only) that picks the picture to insert from a file instead of the camera.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose file'**
+  String get imageSourceChooseFile;
+
+  /// Toast shown when the camera cannot be opened - no camera on the device, or access refused.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t take a photo'**
+  String get imageSourceCameraFailed;
 }
 
 class _AppLocalizationsDelegate

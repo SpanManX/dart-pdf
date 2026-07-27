@@ -432,6 +432,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get editorMenuSaveAs => 'Lưu thành…';
 
   @override
+  String get editorMenuScanDocument => 'Quét thành tài liệu mới…';
+
+  @override
+  String get editorMenuInsertScan => 'Chèn bản quét…';
+
+  @override
+  String get editorScanFailed => 'Không thể quét tài liệu.';
+
+  @override
+  String get editorInsertedScan => 'Đã chèn các trang đã quét.';
+
+  @override
   String get editorMenuSettings => 'Cài đặt';
 
   @override
@@ -513,6 +525,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Đã khôi phục các thay đổi chưa lưu trong $count tài liệu từ phiên trước.',
+      one: 'Đã khôi phục các thay đổi chưa lưu từ phiên trước.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Đã gỡ chữ ký';
 
   @override
@@ -556,6 +580,32 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Để sau';
+
+  @override
+  String get updateInstallNow => 'Cập nhật ngay';
+
+  @override
+  String get updateDownloadingTitle => 'Đang tải xuống bản cập nhật';
+
+  @override
+  String get updatePreparing => 'Đang chuẩn bị…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Đang tải xuống… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Đang khởi động lại để hoàn tất cập nhật…';
+
+  @override
+  String get updateHandedOff =>
+      'Đã tải xuống bản cập nhật. Đang mở trình cài đặt…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Cập nhật thất bại: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Xem tất cả các thẻ';
@@ -924,4 +974,13 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get appSigErrorNoCertificateFound =>
       'Không tìm thấy chứng chỉ X.509 nào.';
+
+  @override
+  String get imageSourceTakePhoto => 'Chụp ảnh';
+
+  @override
+  String get imageSourceChooseFile => 'Chọn tệp';
+
+  @override
+  String get imageSourceCameraFailed => 'Không thể chụp ảnh';
 }

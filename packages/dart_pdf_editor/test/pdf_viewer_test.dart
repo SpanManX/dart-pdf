@@ -1502,5 +1502,117 @@ void main() {
           find.byKey(const ValueKey('pdf-text-menu-select-all')),
           findsNothing);
     });
+
+    testWidgets(
+        'right-click hands the gesture to the host when '
+        'onContextMenuRequested is set', (tester) async {
+      final hostCalls = <(int, (double, double))>[];
+      final controller = PdfViewerController();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: PdfViewer(
+            initialFit: PdfViewerFit.width,
+            document: PdfDocument.open(buildMultiPagePdf(2)),
+            controller: controller,
+            contextMenuEnabled: false,
+            onContextMenuRequested: (globalPos, page,
+                {pagePoint = (0, 0)}) {
+              hostCalls.add((page, pagePoint));
+            },
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      await tester.tapAt(annotView(100, 720),
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(hostCalls, hasLength(1),
+          reason: 'host callback fires exactly once per right-click');
+      expect(hostCalls.first.$1, 0);
+      // page coordinates land near (100, 720).
+      final (x, y) = hostCalls.first.$2;
+      expect(x, closeTo(100, 0.001));
+      expect(y, closeTo(720, 0.001));
+      expect(find.byKey(const ValueKey('pdf-text-menu-copy')), findsNothing);
+    });
+
+    testWidgets(
+        'right-click does NOT hand off when contextMenuEnabled is true '
+        '(default menu owns the gesture)', (tester) async {
+      var hostCalls = 0;
+      final controller = PdfViewerController();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: PdfViewer(
+            initialFit: PdfViewerFit.width,
+            document: PdfDocument.open(buildMultiPagePdf(2)),
+            controller: controller,
+            // contextMenuEnabled defaults to true
+            onContextMenuRequested: (globalPos, page,
+                {pagePoint = (0, 0)}) {
+              hostCalls++;
+            },
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      await tester.tapAt(annotView(100, 720),
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(hostCalls, 0,
+          reason: 'host callback only fires when the default menu is off');
+      expect(find.byKey(const ValueKey('pdf-text-menu-copy')), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets(
+        'touch long-press on plain page text hands the gesture to the host '
+        'when contextMenuEnabled is false', (tester) async {
+      // Covers _onLongPressStart's host-takeover branch (sets up text
+      // selection, then hands the gesture to the host because the stock
+      // menu is suppressed). Reader mode - no editing controller.
+      final hostCalls = <(int, (double, double))>[];
+      final controller = PdfViewerController();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: PdfViewer(
+            initialFit: PdfViewerFit.width,
+            document: PdfDocument.open(buildMultiPagePdf(2)),
+            controller: controller,
+            contextMenuEnabled: false,
+            onContextMenuRequested: (globalPos, page,
+                {pagePoint = (0, 0)}) {
+              hostCalls.add((page, pagePoint));
+            },
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      // Hold a touch pointer past the long-press deadline on a word in
+      // 'Page 1' (baseline (72, 720), 24pt - mid-word of "Page" lands at
+      // ~view (100, 720)).
+      final gesture = await tester.startGesture(annotView(100, 720),
+          kind: PointerDeviceKind.touch);
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      expect(hostCalls, hasLength(1),
+          reason: 'host callback fires exactly once per long-press');
+      expect(hostCalls.first.$1, 0);
+      final (x, y) = hostCalls.first.$2;
+      expect(x, closeTo(100, 0.5));
+      expect(y, closeTo(720, 0.5));
+      // The stock text menu and selection chip must not appear; the host
+      // owns the popup.
+      expect(find.byKey(const ValueKey('pdf-text-menu-copy')), findsNothing);
+      expect(find.byKey(const ValueKey('pdf-text-menu-select-all')),
+          findsNothing);
+    });
   });
 }

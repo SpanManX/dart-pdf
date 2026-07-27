@@ -438,6 +438,18 @@ class AppLocalizationsNl extends AppLocalizations {
   String get editorMenuSaveAs => 'Opslaan als…';
 
   @override
+  String get editorMenuScanDocument => 'Scannen naar nieuw document…';
+
+  @override
+  String get editorMenuInsertScan => 'Scan invoegen…';
+
+  @override
+  String get editorScanFailed => 'Kan het document niet scannen.';
+
+  @override
+  String get editorInsertedScan => 'Gescande pagina\'s ingevoegd.';
+
+  @override
   String get editorMenuSettings => 'Instellingen';
 
   @override
@@ -520,6 +532,18 @@ class AppLocalizationsNl extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Niet-opgeslagen wijzigingen in $count documenten van de vorige sessie hersteld.',
+      one: 'Niet-opgeslagen wijzigingen van de vorige sessie hersteld.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Handtekening verwijderd';
 
   @override
@@ -563,6 +587,32 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Later';
+
+  @override
+  String get updateInstallNow => 'Nu bijwerken';
+
+  @override
+  String get updateDownloadingTitle => 'Update downloaden';
+
+  @override
+  String get updatePreparing => 'Voorbereiden…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Downloaden… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Opnieuw opstarten om de update te voltooien…';
+
+  @override
+  String get updateHandedOff =>
+      'Update gedownload. Installatieprogramma wordt geopend…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Bijwerken mislukt: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Alle tabbladen weergeven';
@@ -935,4 +985,13 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get appSigErrorNoCertificateFound =>
       'Er zijn geen X.509-certificaten gevonden.';
+
+  @override
+  String get imageSourceTakePhoto => 'Foto maken';
+
+  @override
+  String get imageSourceChooseFile => 'Bestand kiezen';
+
+  @override
+  String get imageSourceCameraFailed => 'Kan geen foto maken';
 }

@@ -134,7 +134,7 @@ class PdfReader extends StatefulWidget {
     this.onShareReflowImage,
     this.pageOverlayBuilder,
     this.contextMenuEnabled = true,
-    this.onAnnotationMenuRequested,
+    this.onContextMenuRequested,
     this.pageLayout = const PdfPageLayout.verticalContinuous(),
     this.initialFit = PdfViewerFit.page,
     this.backgroundColor,
@@ -178,7 +178,7 @@ class PdfReader extends StatefulWidget {
     this.onShareReflowImage,
     this.pageOverlayBuilder,
     this.contextMenuEnabled = true,
-    this.onAnnotationMenuRequested,
+    this.onContextMenuRequested,
     this.pageLayout = const PdfPageLayout.verticalContinuous(),
     this.initialFit = PdfViewerFit.page,
     this.backgroundColor,
@@ -263,8 +263,8 @@ class PdfReader extends StatefulWidget {
   /// See [PdfViewer.contextMenuEnabled].
   final bool contextMenuEnabled;
 
-  /// See [PdfViewer.onAnnotationMenuRequested].
-  final PdfAnnotationMenuHost? onAnnotationMenuRequested;
+  /// See [PdfViewer.onContextMenuRequested].
+  final PdfContextMenuHost? onContextMenuRequested;
 
   /// See [PdfViewer.pageLayout].
   final PdfPageLayout pageLayout;
@@ -528,8 +528,8 @@ class _PdfReaderState extends State<PdfReader> {
                           onLaunchUrl: widget.onLaunchUrl,
                           pageOverlayBuilder: widget.pageOverlayBuilder,
                           contextMenuEnabled: widget.contextMenuEnabled,
-                          onAnnotationMenuRequested:
-                              widget.onAnnotationMenuRequested,
+                          onContextMenuRequested:
+                              widget.onContextMenuRequested,
                           pageLayout: widget.pageLayout,
                           initialFit: widget.initialFit,
                           backgroundColor: widget.backgroundColor,

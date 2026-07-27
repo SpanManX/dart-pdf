@@ -437,6 +437,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get editorMenuSaveAs => 'Guardar como…';
 
   @override
+  String get editorMenuScanDocument => 'Escanear a un nuevo documento…';
+
+  @override
+  String get editorMenuInsertScan => 'Insertar escaneo…';
+
+  @override
+  String get editorScanFailed => 'No se pudo escanear el documento.';
+
+  @override
+  String get editorInsertedScan => 'Páginas escaneadas insertadas.';
+
+  @override
   String get editorMenuSettings => 'Configuración';
 
   @override
@@ -519,6 +531,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Se recuperaron los cambios sin guardar de $count documentos de la última sesión.',
+      one: 'Se recuperaron los cambios sin guardar de la última sesión.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => 'Firma eliminada';
 
   @override
@@ -562,6 +586,32 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get editorUpdateLater => 'Más tarde';
+
+  @override
+  String get updateInstallNow => 'Actualizar ahora';
+
+  @override
+  String get updateDownloadingTitle => 'Descargando actualización';
+
+  @override
+  String get updatePreparing => 'Preparando…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return 'Descargando… $percent%';
+  }
+
+  @override
+  String get updateRestarting => 'Reiniciando para completar la actualización…';
+
+  @override
+  String get updateHandedOff =>
+      'Actualización descargada. Abriendo el instalador…';
+
+  @override
+  String updateFailed(String error) {
+    return 'Error en la actualización: $error';
+  }
 
   @override
   String get editorViewAllTabs => 'Ver todas las pestañas';
@@ -936,4 +986,13 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get appSigErrorNoCertificateFound =>
       'No se encontraron certificados X.509.';
+
+  @override
+  String get imageSourceTakePhoto => 'Hacer foto';
+
+  @override
+  String get imageSourceChooseFile => 'Elegir archivo';
+
+  @override
+  String get imageSourceCameraFailed => 'No se pudo hacer la foto';
 }

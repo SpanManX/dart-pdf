@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.1.1
+
+- Lockstep patch release to align the dart-pdf package suite at 3.1.1. No
+  fixture API changes since 3.1.0.
+
+## 3.1.0
+
+- Add a scanned-book fixture profile with shared /JBIG2Globals across pages,
+  exercising the JBIG2 globals cache and concurrent image decode paths (#557).
+
 ## 3.0.0
 
 - Lockstep major release to align with `dart_pdf_editor` 3.0.0. No public API

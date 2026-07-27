@@ -7,18 +7,22 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf_document/pdf_document.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'app_info.dart';
+import 'autosave.dart';
 import 'devtools.dart';
 import 'devtools_panel.dart';
 import 'digital_signature.dart';
+import 'doc_scan.dart';
 import 'document_tab.dart';
 import 'file_io.dart';
 import 'image_clipboard.dart';
 import 'image_export.dart';
+import 'image_source_picker.dart';
 import 'incoming_file.dart';
 import 'keyless_identity_cache.dart';
 import 'keyless_signing.dart';
@@ -33,7 +37,12 @@ import 'recent_thumbnails.dart';
 import 'recents.dart';
 import 'session_store.dart';
 import 'settings_screen.dart';
+import 'unsaved_changes.dart';
+import 'unsaved_changes_store.dart';
 import 'update.dart';
+import 'update_install_flow.dart';
+import 'update_installer.dart';
+import 'update_platform.dart';
 import 'web_launch.dart';
 import 'welcome_screen.dart';
 
@@ -75,6 +84,7 @@ class EditorScreen extends StatefulWidget {
     this.launchArgs = const [],
     this.initialDocument,
     this.updateService,
+    this.updateInstaller,
     this.autoCheckUpdates = false,
     this.printDocument,
     this.digitalSignatureOptionsProvider,
@@ -85,6 +95,8 @@ class EditorScreen extends StatefulWidget {
     this.imageClipboardWriter,
     this.imageClipboardReader,
     this.textClipboardReader,
+    this.unsavedChangesStore,
+    this.documentScanner,
   });
 
   final PdfEditingPreferences prefs;
@@ -100,6 +112,10 @@ class EditorScreen extends StatefulWidget {
   /// An update checker to use instead of the one the screen builds itself -
   /// the seam tests use to inject a fake without real network.
   final UpdateService? updateService;
+
+  /// The in-app updater used to download and apply a newer release (desktop).
+  /// Injected by tests with fake platform ops / HTTP; defaults to a real one.
+  final UpdateInstaller? updateInstaller;
 
   /// Whether to check for a newer release on startup (and show a banner if one
   /// is found). The host (production) sets this true; it defaults to false so
@@ -163,6 +179,19 @@ class EditorScreen extends StatefulWidget {
   /// `Clipboard.getData`).
   final TextClipboardReader? textClipboardReader;
 
+  /// Overrides the crash-recovery mirror for unsaved changes. Tests inject an
+  /// in-memory store to drive recovery without a real filesystem or IndexedDB;
+  /// production leaves this null and the screen opens the platform store
+  /// ([openUnsavedChangesStore]).
+  final UnsavedChangesStore? unsavedChangesStore;
+
+  /// Overrides the device document scanner behind "Scan to new document" and
+  /// "Insert scan". Tests inject a fake that returns a known PDF so the menu
+  /// wiring can run without the native ML Kit / VisionKit channels. Production
+  /// leaves this null and the screen uses the platform scanner on mobile
+  /// ([scanDocumentToPdf]); where scanning isn't supported the entries hide.
+  final DocumentScanner? documentScanner;
+
   @override
   State<EditorScreen> createState() => _EditorScreenState();
 }
@@ -171,9 +200,24 @@ class _EditorScreenState extends State<EditorScreen>
     with WidgetsBindingObserver {
   PdfEditingPreferences get _prefs => widget.prefs;
 
+  /// The device document scanner, or null where scanning isn't available. An
+  /// injected fake wins; otherwise the platform scanner is used on mobile
+  /// (and nothing on desktop/web). Drives whether the scan menu entries show.
+  late final DocumentScanner? _documentScanner = widget.documentScanner ??
+      (documentScanSupported ? scanDocumentToPdf : null);
+
+  bool get _canScan => _documentScanner != null;
+
   final _recents = RecentsStore();
   final _recentThumbnails = RecentThumbnailCache();
   final _session = SessionStore();
+
+  /// Mirrors dirty documents to durable storage (a private directory on
+  /// native, IndexedDB on the web) so a crash never costs unsaved work, and
+  /// hands back whatever a previous run lost. See autosave.dart.
+  late final AutosaveController _autosave = AutosaveController(
+      store: widget.unsavedChangesStore ?? openUnsavedChangesStore());
+
   final _incoming = IncomingFileService();
   final _ocr = OnDeviceOcr();
   StreamSubscription<IncomingFile>? _incomingSub;
@@ -192,6 +236,10 @@ class _EditorScreenState extends State<EditorScreen>
   late final UpdateService _updates =
       widget.updateService ?? UpdateService(currentVersion: AppInfo.version);
   bool get _ownsUpdates => widget.updateService == null;
+
+  /// The in-app updater that downloads and applies a newer release.
+  late final UpdateInstaller _updateInstaller =
+      widget.updateInstaller ?? UpdateInstaller();
 
   /// True once the "update available" banner has been shown this session, so a
   /// later check (or rebuild) doesn't stack a second copy.
@@ -251,7 +299,7 @@ class _EditorScreenState extends State<EditorScreen>
     // Re-open the documents that were open when the app last closed, unless the
     // app was launched to open a specific file (that explicit target wins).
     unawaited(_restoreSession());
-    if (widget.autoCheckUpdates && UpdateService.supported) {
+    if (widget.autoCheckUpdates && _updates.supported) {
       _updates.addListener(_onUpdateStatus);
       unawaited(_startupUpdateCheck());
     }
@@ -293,10 +341,17 @@ class _EditorScreenState extends State<EditorScreen>
           key: const ValueKey('update-banner-download'),
           onPressed: () {
             messenger.hideCurrentMaterialBanner();
-            final url = _updates.downloadUrl;
-            if (url != null) unawaited(_openExternal(Uri.parse(url)));
+            unawaited(startUpdateInstall(
+              context,
+              updates: _updates,
+              installer: _updateInstaller,
+            ));
           },
-          child: Text(appL10n(context).editorDownload),
+          child: Text(_updates.downloadAssetName != null &&
+                  _updateInstaller.modeFor(_updates.downloadAssetName) !=
+                      UpdateApplyMode.unsupported
+              ? appL10n(context).updateInstallNow
+              : appL10n(context).editorDownload),
         ),
       ],
     ));
@@ -328,6 +383,9 @@ class _EditorScreenState extends State<EditorScreen>
     _incomingSub?.cancel();
     _incoming.dispose();
     _ocr.dispose();
+    // Detaches only - the mirrored records stay, so an editor torn down with
+    // dirty tabs (a crash, a forced quit) can still hand the work back.
+    _autosave.dispose();
     for (final tab in _tabs) {
       tab.dispose();
     }
@@ -347,7 +405,25 @@ class _EditorScreenState extends State<EditorScreen>
     final proceed = await _confirmDiscard(
       appL10n(context).editorUnsavedChangesCount(dirty),
     );
-    return proceed ? ui.AppExitResponse.exit : ui.AppExitResponse.cancel;
+    if (!proceed) return ui.AppExitResponse.cancel;
+    // The user was asked and chose to throw the edits away - so drop the
+    // mirrored copies too, or the next launch would offer back work they
+    // already declined.
+    await _autosave.discardAll();
+    return ui.AppExitResponse.exit;
+  }
+
+  /// Mirrors pending edits when the app leaves the foreground. On mobile and
+  /// the web this can be the last callback we get before the process is
+  /// reclaimed, so it writes now rather than waiting out the debounce.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      unawaited(_autosave.flushPending());
+    }
   }
 
   // --- session restore -----------------------------------------------------
@@ -365,6 +441,11 @@ class _EditorScreenState extends State<EditorScreen>
   /// set is captured for next time. Documents whose file has since moved or been
   /// deleted are dropped silently rather than surfacing an error tab.
   Future<void> _restoreSession() async {
+    // Unsaved work comes back first, so a document recovered with its edits
+    // wins over the same file restored flat from disk below (the loop skips
+    // paths already open).
+    await _recoverUnsavedChanges();
+    if (!mounted) return;
     final documents = await _session.load();
     if (mounted && !_hasExplicitLaunchTarget) {
       // Suppress lazy materialization while restoring: each tab is briefly the
@@ -389,8 +470,60 @@ class _EditorScreenState extends State<EditorScreen>
       // Let the tab left active materialize now that restore is done.
       if (mounted) setState(() {});
     }
-    _sessionLoaded = true;
+    if (mounted) {
+      setState(() => _sessionLoaded = true);
+    } else {
+      _sessionLoaded = true;
+    }
     unawaited(_persistSession());
+  }
+
+  /// Re-opens the documents that had unsaved edits when the app last went
+  /// away, at the revision they were on.
+  ///
+  /// The mirror holds a record only while a document has unsaved work (saving
+  /// or closing drops it), so anything here is by construction work a previous
+  /// run lost - to a crash, an OOM kill, or a browser tab closed out from under
+  /// us. Each comes back as a normal editable tab that is still dirty and still
+  /// points at its original save destination, so the user finishes the save
+  /// they were interrupted in.
+  ///
+  /// What is *not* recovered is the undo stack: the mirrored bytes are one flat
+  /// chain of incremental updates, so the recovered document opens as a single
+  /// revision. The edits survive; the history behind them does not.
+  Future<void> _recoverUnsavedChanges() async {
+    if (!_autosave.enabled) return;
+    final recovered = await _autosave.recover();
+    if (!mounted) return;
+    for (final doc in recovered) {
+      final record = doc.record;
+      final tab = DocumentTab.document(
+        title: record.title,
+        bytes: doc.bytes,
+        preferences: _prefs,
+        originPath: record.originPath.isEmpty ? null : record.originPath,
+        originBookmark: record.originBookmark,
+        cachePath: record.cachePath,
+        // Comes back dirty exactly as it was: the baseline is what had been
+        // written to the real destination, not the revision we recovered.
+        savedLength: record.savedLength,
+      );
+      // Adopt the existing record *before* the tab is tracked by the usual
+      // open path, so continued editing appends to it instead of mirroring the
+      // whole document again under a fresh id.
+      _autosave.track(tab, recovered: record);
+      _addTab(tab);
+    }
+    // Anything nothing adopted (bytes gone, a record we couldn't read) would
+    // otherwise be offered back on every launch forever.
+    await _autosave.pruneAfterRecovery();
+    if (recovered.isEmpty || !mounted) return;
+    final count = recovered.length;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _toast(appL10n(context).editorRecoveredUnsavedChanges(count));
+      }
+    });
   }
 
   Future<void> _reopenSessionDocument(SessionDocument doc) async {
@@ -400,28 +533,16 @@ class _EditorScreenState extends State<EditorScreen>
     // restores from its private snapshot instead.
     final originPath = doc.path.isNotEmpty ? doc.path : null;
 
-    // Desktop origin: restore lazily and progressively. Probe the file length
-    // first - cheap metadata, no content read or cloud hydration - so a moved
-    // or deleted file is still dropped silently, then add a path-only tab that
-    // reads nothing until it is shown, when it opens progressively. This keeps
-    // launch cheap even when the last session held several big files: only the
-    // active tab pulls bytes, and it first-paints from ranges.
+    // Desktop origin: restore every tab immediately, without awaiting even a
+    // metadata probe. A cloud provider can stall file coordination for one
+    // origin; making the restore loop await it would hide every later tab until
+    // that provider responded. Path-only tabs read nothing until selected, so
+    // the user can switch to another restored document while a remote one is
+    // hydrating. A missing file is dropped when its lazy open fails.
     if (progressiveOpenSupported(originPath)) {
-      final source =
-          pdfByteSourceForPath(originPath!, bookmark: doc.bookmark);
-      int? length;
-      try {
-        length = await source.length;
-      } catch (_) {
-        length = null;
-      } finally {
-        await source.close();
-      }
-      if (!mounted) return;
-      if (length == null || length <= 0) return; // gone: drop silently
       _addTab(DocumentTab.deferredPath(
         title: doc.title,
-        originPath: originPath,
+        originPath: originPath!,
         originBookmark: doc.bookmark,
         cachePath: doc.cachePath,
       ));
@@ -478,6 +599,11 @@ class _EditorScreenState extends State<EditorScreen>
   /// launch can restore it. A no-op until the previous session has been read
   /// back, so early opens can't clobber the stored set before [_restoreSession].
   Future<void> _persistSession() async {
+    // Every tab-set mutation lands here, so this is also where the crash-
+    // recovery mirror learns which documents it should be watching. It runs
+    // ahead of the session-load gate below: a document opened before the last
+    // session has been read back still deserves its unsaved edits protected.
+    _autosave.syncTracking(_tabs);
     if (!_sessionLoaded) return;
     final documents = <SessionDocument>[];
     final seen = <String>{};
@@ -591,14 +717,14 @@ class _EditorScreenState extends State<EditorScreen>
       originPath: originPath,
       originBookmark: originBookmark,
     );
-    AppDevTools.instance.addLog(
-        'open-trace: "$title" placeholder shown, awaiting bytes '
-        '(defer=$defer, path=${originPath ?? "-"})');
+    AppDevTools.instance
+        .addLog('open-trace: "$title" placeholder shown, awaiting bytes '
+            '(defer=$defer, path=${originPath ?? "-"})');
     try {
       final bytes = await bytesFuture;
-      AppDevTools.instance.addLog(
-          'open-trace: "$title" bytes ready — ${bytes.length} B; '
-          'waiting for end of frame');
+      AppDevTools.instance
+          .addLog('open-trace: "$title" bytes ready — ${bytes.length} B; '
+              'waiting for end of frame');
       // Let the loading tab paint before constructing the edit session, which
       // synchronously opens the PDF and can be noticeable for large files.
       await WidgetsBinding.instance.endOfFrame;
@@ -683,9 +809,9 @@ class _EditorScreenState extends State<EditorScreen>
       final index = _tabs.indexOf(tab);
       final bytes = tab.deferredBytes;
       if (index == -1 || bytes == null) return;
-      AppDevTools.instance.addLog(
-          'open-trace: materializing deferred "${tab.title}" '
-          '— building session over ${bytes.length} B');
+      AppDevTools.instance
+          .addLog('open-trace: materializing deferred "${tab.title}" '
+              '— building session over ${bytes.length} B');
       final built = DocumentTab.document(
         title: tab.title,
         bytes: bytes,
@@ -719,6 +845,16 @@ class _EditorScreenState extends State<EditorScreen>
         bookmark: tab.originBookmark,
         cachePath: tab.cachePath,
         into: tab,
+        onOpenFailed: (_) {
+          // Session restoration is best-effort. A source that disappeared
+          // since the previous run should vanish quietly rather than leave a
+          // permanent error tab. `_closeTabs` removes synchronously until its
+          // first await for these clean placeholders, so the fallback's later
+          // replacement sees that the tab is already gone.
+          if (mounted && _tabs.contains(tab)) {
+            unawaited(_closeTabs([tab]));
+          }
+        },
       );
     });
   }
@@ -894,9 +1030,9 @@ class _EditorScreenState extends State<EditorScreen>
       await source.close();
       if (!mounted) return;
       if (_swapPreviewToDocument(preview, full)) {
-        AppDevTools.instance.addLog(
-            'progressive open: "${preview.title}" full read complete — '
-            '${full.length} bytes');
+        AppDevTools.instance
+            .addLog('progressive open: "${preview.title}" full read complete — '
+                '${full.length} bytes');
       }
     } on PdfHttpCancelledException {
       // The tab was closed mid-read (its dispose fired the token); the preview
@@ -1034,8 +1170,8 @@ class _EditorScreenState extends State<EditorScreen>
         // Older runner without the mobile_file channel - fall through to the
         // copy-based picker below.
       } catch (e) {
-        _openError(l10n.editorOpenFailedTitle,
-            l10n.editorCouldNotOpenSelected('$e'));
+        _openError(
+            l10n.editorOpenFailedTitle, l10n.editorCouldNotOpenSelected('$e'));
         return;
       }
     }
@@ -1062,8 +1198,7 @@ class _EditorScreenState extends State<EditorScreen>
           try {
             pickLength = await file.length();
           } catch (_) {}
-          AppDevTools.instance.addLog(
-              'open-trace: picked "${file.name}" '
+          AppDevTools.instance.addLog('open-trace: picked "${file.name}" '
               '(declared ${pickLength ?? "?"} B, path=${path ?? "-"}); '
               'starting readAsBytes');
           await _openLoadedBytes(
@@ -1076,8 +1211,8 @@ class _EditorScreenState extends State<EditorScreen>
         }
       }
     } catch (e) {
-      _openError(l10n.editorOpenFailedTitle,
-          l10n.editorCouldNotOpenSelected('$e'));
+      _openError(
+          l10n.editorOpenFailedTitle, l10n.editorCouldNotOpenSelected('$e'));
     }
   }
 
@@ -1134,6 +1269,70 @@ class _EditorScreenState extends State<EditorScreen>
     // document had switched the whole app into read-only mode.
     _readOnly = false;
     _addTab(tab);
+  }
+
+  /// Scans a document with the device camera (mobile/tablet only) and opens
+  /// the captured pages as a new tab. The scanner returns the pages as a PDF;
+  /// a cancelled scan is a silent no-op, a failed one toasts.
+  Future<void> _newDocumentFromScan() async {
+    final scan = _documentScanner;
+    if (scan == null) return;
+    final Uint8List? bytes;
+    try {
+      bytes = await scan();
+    } catch (e) {
+      AppDevTools.instance.addLog('scan failed: $e', level: DevLogLevel.error);
+      if (mounted) _toast(appL10n(context).editorScanFailed);
+      return;
+    }
+    if (!mounted || bytes == null) return;
+    final tab = DocumentTab.document(
+      title: _nextUntitledTitle(),
+      bytes: bytes,
+      preferences: _prefs,
+      initiallyDirty: true,
+    );
+    _readOnly = false;
+    _addTab(tab);
+  }
+
+  /// Scans a document (mobile/tablet only) and inserts its pages into [tab]'s
+  /// edit session, after the page currently in view. One undoable step.
+  Future<void> _insertScan(DocumentTab tab) async {
+    final scan = _documentScanner;
+    final session = tab.session;
+    if (scan == null || session == null) return;
+    final Uint8List? bytes;
+    try {
+      bytes = await scan();
+    } catch (e) {
+      AppDevTools.instance.addLog('scan failed: $e', level: DevLogLevel.error);
+      if (mounted) _toast(appL10n(context).editorScanFailed);
+      return;
+    }
+    if (!mounted || bytes == null) return;
+    final insertedAt = (tab.viewer?.currentPage ?? 0) + 1;
+    try {
+      session.insertPagesFromBytes(bytes, at: insertedAt);
+    } catch (e) {
+      AppDevTools.instance
+          .addLog('scan insert failed: $e', level: DevLogLevel.error);
+      if (mounted) _toast(appL10n(context).editorScanFailed);
+      return;
+    }
+    // Reveal the first inserted page. The revision swap rebuilds the viewer and
+    // a geometry-changing revision resets its scroll to the top in a post-frame
+    // callback, so navigate after two frames - once the new page metrics and
+    // that reset have both landed (mirrors the thumbnail insert/paste flow).
+    final viewer = tab.viewer;
+    if (viewer != null) {
+      unawaited(() async {
+        await SchedulerBinding.instance.endOfFrame;
+        await SchedulerBinding.instance.endOfFrame;
+        await viewer.jumpToPage(insertedAt);
+      }());
+    }
+    if (mounted) _toast(appL10n(context).editorInsertedScan);
   }
 
   /// Opens a file the OS handed us (association, share, launch arg).
@@ -1232,8 +1431,8 @@ class _EditorScreenState extends State<EditorScreen>
         session.insertPagesFromBytes(bytes);
         inserted++;
       } catch (e) {
-        AppDevTools.instance
-            .addLog('insert failed: ${item.name} - $e', level: DevLogLevel.error);
+        AppDevTools.instance.addLog('insert failed: ${item.name} - $e',
+            level: DevLogLevel.error);
         failed.add(item.name);
       }
     }
@@ -1391,8 +1590,8 @@ class _EditorScreenState extends State<EditorScreen>
         _activeIndex = _tabs.length - 1;
       });
     } catch (e) {
-      _openError(l10n.editorCompareFailedTitle,
-          l10n.editorCouldNotOpenSecond('$e'));
+      _openError(
+          l10n.editorCompareFailedTitle, l10n.editorCouldNotOpenSecond('$e'));
     }
   }
 
@@ -1621,6 +1820,10 @@ class _EditorScreenState extends State<EditorScreen>
           tab.cachePath = null;
         }
       });
+      // Saving never touches the edit session, so nothing notifies the mirror -
+      // tell it directly. The bytes are on the user's own disk now and the
+      // recovery copy has nothing left to protect.
+      unawaited(_autosave.noteSaved(tab));
       if (path != null) {
         _recents.add(
             title: tab.title, path: path, bookmark: tab.originBookmark);
@@ -1679,9 +1882,7 @@ class _EditorScreenState extends State<EditorScreen>
                         ? null
                         : (context) => _obtainKeyless(context, silentProvider),
                 placement: placement,
-                logoPicker: placement == null
-                    ? null
-                    : () => pickImageBytes(appL10n(context).fileTypeImages),
+                logoPicker: placement == null ? null : pickImageBytesFromSource,
                 pageCount: session.document.pageCount,
               ))(context);
       if (!mounted || options == null || !_tabs.contains(tab)) return;
@@ -2131,6 +2332,16 @@ class _EditorScreenState extends State<EditorScreen>
             shortcut: _menuShortcut('N'),
           ),
         ),
+        if (_canScan)
+          PopupMenuItem(
+            key: const ValueKey('menu-scan-document'),
+            height: _appMenuItemHeight(),
+            value: () => unawaited(_newDocumentFromScan()),
+            child: _appMenuTile(
+              icon: Icons.document_scanner_outlined,
+              title: appL10n(context).editorMenuScanDocument,
+            ),
+          ),
         PopupMenuItem(
           key: const ValueKey('menu-open'),
           height: _appMenuItemHeight(),
@@ -2154,6 +2365,16 @@ class _EditorScreenState extends State<EditorScreen>
               shortcut: _menuShortcut('S', shift: true),
             ),
           ),
+          if (_canScan && !_readOnly)
+            PopupMenuItem(
+              key: const ValueKey('menu-insert-scan'),
+              height: _appMenuItemHeight(),
+              value: () => unawaited(_insertScan(tab!)),
+              child: _appMenuTile(
+                icon: Icons.add_a_photo_outlined,
+                title: appL10n(context).editorMenuInsertScan,
+              ),
+            ),
           PopupMenuItem(
             key: const ValueKey('menu-digital-signature'),
             height: _appMenuItemHeight(),
@@ -2222,6 +2443,7 @@ class _EditorScreenState extends State<EditorScreen>
             prefs: _prefs,
             recents: _recents,
             updates: _updates,
+            updateInstaller: _updateInstaller,
             onOpenDevTools: kDevToolsEnabled ? _toggleDevTools : null,
           ),
           child: _appMenuTile(
@@ -2308,9 +2530,7 @@ class _EditorScreenState extends State<EditorScreen>
                   child: Row(
                     children: [
                       Expanded(child: _devToolsPointerLog(_buildBody(tab))),
-                      if (_devToolsOpen &&
-                          kDevToolsEnabled &&
-                          !compactDevTools)
+                      if (_devToolsOpen && kDevToolsEnabled && !compactDevTools)
                         DevToolsPanel(
                           onClose: _toggleDevTools,
                           session: tab?.session,
@@ -2356,7 +2576,12 @@ class _EditorScreenState extends State<EditorScreen>
         recents: _recents,
         onOpen: _pickAndOpen,
         onOpenRecent: _openRecent,
-        thumbnails: _recentThumbnails,
+        // Recents can load before the session list. Starting their first-page
+        // renders during that transient welcome frame wastes enough platform-
+        // thread work to beachball macOS, only for restore to replace the
+        // welcome screen immediately. Enable them once restore has decided
+        // that there really is no document to show.
+        thumbnails: _sessionLoaded ? _recentThumbnails : null,
       );
     }
     if (tab.isDeferredPath) {
@@ -2413,18 +2638,22 @@ class _EditorScreenState extends State<EditorScreen>
       onSave: (_) => unawaited(_save(tab)),
       onSaveAs: (_) => unawaited(_save(tab, saveAs: true)),
       showSaveButton: !compact,
-      // A brand-new untitled document has no on-disk origin yet, so keep
-      // Save (button + Ctrl/⌘+S) live even before the first edit - the first
-      // save writes the file via the Save As flow.
-      alwaysAllowSave: tab.isUnsaved,
+      // The shell enables Save off its *own* session history, which misses two
+      // cases the app knows about. A brand-new untitled document has no on-disk
+      // origin yet, so Save (button + Ctrl/⌘+S) stays live even before the
+      // first edit - the first save writes the file via the Save As flow. And a
+      // crash-recovered document opens at the revision it was lost on, so the
+      // session sees no edits of its own while the app knows the file on disk
+      // is still behind - without this the user could not save the very work we
+      // just handed back.
+      alwaysAllowSave: tab.isUnsaved || tab.isDirty,
       onPickPdfToInsert: () => pickPdfBytes(appL10n(context).fileTypePdf),
       onExportPages: (bytes) => unawaited(saveBytesAs(context, bytes, tab.title,
           pdfLabel: appL10n(context).fileTypePdf)),
       onAction: _onAction,
       annotationMenuBuilder: _annotationMenuActions,
-      formImagePicker: (context, field) =>
-          pickImageBytes(appL10n(context).fileTypeImages),
-      imagePicker: (context) => pickImageBytes(appL10n(context).fileTypeImages),
+      formImagePicker: (context, field) => pickImageBytesFromSource(context),
+      imagePicker: pickImageBytesFromSource,
       systemImagePasteProvider: (context) =>
           (widget.imageClipboardReader ?? readImageFromClipboard)(),
       systemTextPasteProvider: (context) =>
@@ -2735,8 +2964,9 @@ class _EditorScreenState extends State<EditorScreen>
           // While a close streak is held, keep the surviving tabs at the pinned
           // width; otherwise use the natural share (never wider than natural, so
           // a stale hold can't overflow after a resize).
-          final tabWidth =
-              _heldTabWidth == null ? natural : math.min(_heldTabWidth!, natural);
+          final tabWidth = _heldTabWidth == null
+              ? natural
+              : math.min(_heldTabWidth!, natural);
           final tabsWidth = _tabs.isEmpty
               ? 0.0
               : math.min(tabWidth * _tabs.length + listPadding, maxTabsWidth);

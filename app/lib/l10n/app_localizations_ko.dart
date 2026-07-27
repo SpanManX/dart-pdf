@@ -425,6 +425,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get editorMenuSaveAs => '다른 이름으로 저장…';
 
   @override
+  String get editorMenuScanDocument => '새 문서로 스캔…';
+
+  @override
+  String get editorMenuInsertScan => '스캔 삽입…';
+
+  @override
+  String get editorScanFailed => '문서를 스캔할 수 없습니다.';
+
+  @override
+  String get editorInsertedScan => '스캔한 페이지를 삽입했습니다.';
+
+  @override
   String get editorMenuSettings => '설정';
 
   @override
@@ -506,6 +518,17 @@ class AppLocalizationsKo extends AppLocalizations {
   String get editorPreviewPdf => 'PDF';
 
   @override
+  String editorRecoveredUnsavedChanges(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '이전 세션의 문서 $count개에서 저장되지 않은 변경 사항을 복구했습니다.',
+      one: '이전 세션의 저장되지 않은 변경 사항을 복구했습니다.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get editorSignatureRemoved => '서명이 제거되었습니다';
 
   @override
@@ -548,6 +571,31 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get editorUpdateLater => '나중에';
+
+  @override
+  String get updateInstallNow => '지금 업데이트';
+
+  @override
+  String get updateDownloadingTitle => '업데이트 다운로드 중';
+
+  @override
+  String get updatePreparing => '준비 중…';
+
+  @override
+  String updateDownloadingPercent(int percent) {
+    return '다운로드 중… $percent%';
+  }
+
+  @override
+  String get updateRestarting => '업데이트를 완료하기 위해 다시 시작하는 중…';
+
+  @override
+  String get updateHandedOff => '업데이트를 다운로드했습니다. 설치 프로그램을 여는 중…';
+
+  @override
+  String updateFailed(String error) {
+    return '업데이트 실패: $error';
+  }
 
   @override
   String get editorViewAllTabs => '모든 탭 보기';
@@ -905,4 +953,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get appSigErrorNoCertificateFound => 'X.509 인증서를 찾을 수 없습니다.';
+
+  @override
+  String get imageSourceTakePhoto => '사진 촬영';
+
+  @override
+  String get imageSourceChooseFile => '파일 선택';
+
+  @override
+  String get imageSourceCameraFailed => '사진을 촬영하지 못했습니다';
 }

@@ -328,6 +328,11 @@ void main() {
 
     await tester.tap(find.byTooltip('DartPDF menu'));
     await tester.pumpAndSettle();
+    // The app menu is tall (scan entries land above this on mobile), so the
+    // Digitally sign item can sit below the fold - scroll it in before tapping.
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('menu-digital-signature')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('menu-digital-signature')));
     await tester.pumpAndSettle();
 
@@ -367,6 +372,11 @@ void main() {
 
     await tester.tap(find.byTooltip('DartPDF menu'));
     await tester.pumpAndSettle();
+    // The app menu is tall (scan entries land above this on mobile), so the
+    // Digitally sign item can sit below the fold - scroll it in before tapping.
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('menu-digital-signature')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('menu-digital-signature')));
     await tester.pumpAndSettle();
 
@@ -405,6 +415,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     await tester.tap(find.byTooltip('DartPDF menu'));
+    await tester.pumpAndSettle();
+    // The app menu is tall (scan entries land above this on mobile), so the
+    // Digitally sign item can sit below the fold - scroll it in before tapping.
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('menu-digital-signature')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('menu-digital-signature')));
     await tester.pumpAndSettle();
@@ -494,7 +509,7 @@ void main() {
                 createSelfSignedIdentity: (context, store) async =>
                     PdfSigningIdentity.generate(name: 'Ada Lovelace'),
                 placement: (page: 0, rect: const PdfRect(72, 640, 320, 720)),
-                logoPicker: () async => logo,
+                logoPicker: (_) async => logo,
                 pageCount: 4,
               );
             },
@@ -564,7 +579,7 @@ void main() {
                 createSelfSignedIdentity: (context, s) async =>
                     PdfSigningIdentity.generate(name: 'Ada Lovelace'),
                 placement: (page: 0, rect: const PdfRect(72, 640, 320, 720)),
-                logoPicker: () async => logo,
+                logoPicker: (_) async => logo,
                 appearanceStore: store,
               ),
               child: const Text('Open'),
@@ -708,6 +723,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.tap(find.byTooltip('DartPDF menu'));
       await tester.pumpAndSettle();
+      // The app menu is tall (scan entries land above this on mobile), so the
+      // Digitally sign item can sit below the fold - scroll it in first.
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('menu-digital-signature')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('menu-digital-signature')));
       await tester.pumpAndSettle();
     }
@@ -748,6 +768,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     await tester.tap(find.byTooltip('DartPDF menu'));
+    await tester.pumpAndSettle();
+    // The app menu is tall (scan entries land above this on mobile), so the
+    // Digitally sign item can sit below the fold - scroll it in before tapping.
+    await tester
+        .ensureVisible(find.byKey(const ValueKey('menu-digital-signature')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('menu-digital-signature')));
     await tester.pumpAndSettle();
