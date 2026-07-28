@@ -1,0 +1,2856 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dart-pdf perf trends</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --text-primary: #0b0b0b; --text-secondary: #52514e;
+    --series-1: #2a78d6; --grid: #52514e33; --budget: #e34948;
+    --pass: #008300; --fail: #e34948; --card: #f2f1ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+      --series-1: #3987e5; --grid: #c3c2b733; --budget: #e66767;
+      --pass: #7fbf7f; --fail: #e66767; --card: #242423;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+    --series-1: #3987e5; --grid: #c3c2b733; --budget: #e66767;
+    --pass: #7fbf7f; --fail: #e66767; --card: #242423;
+  }
+  body { margin: 0; }
+  .viz-root { background: var(--surface-1); color: var(--text-primary);
+    font: 14px/1.5 system-ui, sans-serif; padding: 24px; min-height: 100vh; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 28px 0 2px; }
+  .meta { color: var(--text-secondary); margin: 0 0 10px; font-size: 12.5px; }
+  .charts { display: flex; flex-wrap: wrap; gap: 12px; }
+  .chart { margin: 0; background: var(--card); border-radius: 8px;
+    padding: 10px 12px; width: 320px; }
+  .chart figcaption { font-size: 12.5px; color: var(--text-secondary);
+    display: flex; justify-content: space-between; gap: 8px; }
+  .chart .last { color: var(--text-primary); font-weight: 600;
+    font-variant-numeric: tabular-nums; }
+  .chart .verdict { font-weight: 400; font-size: 11.5px; }
+  .chart.miss .verdict { color: var(--fail); }
+  .chart:not(.miss) .verdict { color: var(--pass); }
+  svg { display: block; width: 100%; height: auto; }
+  .line { fill: none; stroke: var(--series-1); stroke-width: 2;
+    stroke-linejoin: round; stroke-linecap: round; }
+  .dot { fill: var(--series-1); }
+  .grid { stroke: var(--grid); stroke-width: 1; }
+  .budget { stroke: var(--budget); stroke-width: 1; stroke-dasharray: 4 3; }
+  .axis { fill: var(--text-secondary); font-size: 9px; }
+  .hit { fill: transparent; }
+  .hit:hover { fill: var(--series-1); fill-opacity: 0.25; }
+  details { margin: 10px 0 0; }
+  summary { cursor: pointer; color: var(--text-secondary); font-size: 12.5px; }
+  table { border-collapse: collapse; margin-top: 8px; font-size: 12.5px; }
+  th, td { text-align: left; padding: 3px 14px 3px 0;
+    border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+  th { color: var(--text-secondary); font-weight: 500; }
+  td.pass { color: var(--pass); } td.fail { color: var(--fail); }
+  code { font-size: 12px; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0 6px; }
+  .tile { background: var(--card); border-radius: 8px; padding: 12px 16px;
+    min-width: 150px; }
+  .tile-label { font-size: 12px; color: var(--text-secondary); }
+  .tile-value { font-size: 26px; font-weight: 650; line-height: 1.25;
+    font-variant-numeric: tabular-nums; }
+  .tile-value.all-pass { color: var(--pass); }
+  .tile-unit { font-size: 12px; font-weight: 400;
+    color: var(--text-secondary); margin-left: 4px; }
+  .tile-delta { font-size: 11.5px; color: var(--text-secondary); }
+  .tile-delta.good { color: var(--pass); }
+  .tile-delta.bad { color: var(--fail); }
+  .tile-note { font-size: 11px; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <h1>dart-pdf perf trends</h1>
+  <p class="meta">Generated 2026-07-28 06:29 UTC ·
+    14 runs on record · budgets from tool/perf/targets.json
+    (aspirational targets, never PR gates)</p>
+  <div class="tiles"><div class="tile">
+    <div class="tile-label">Open p50</div>
+    <div class="tile-value">0.69<span class="tile-unit">ms</span></div>
+    <div class="tile-delta flat">dartpdf-corpus</div>
+    
+  </div>
+<div class="tile">
+    <div class="tile-label">Interpret p50</div>
+    <div class="tile-value">1.02<span class="tile-unit">ms/pg</span></div>
+    <div class="tile-delta flat">dartpdf-corpus, per page</div>
+    
+  </div>
+<div class="tile">
+    <div class="tile-label">Peak RSS</div>
+    <div class="tile-value">462.60<span class="tile-unit">MB</span></div>
+    <div class="tile-delta flat">dartpdf-corpus, worst file</div>
+    
+  </div>
+<div class="tile">
+    <div class="tile-label">Save p50</div>
+    <div class="tile-value">1.05<span class="tile-unit">ms</span></div>
+    <div class="tile-delta flat">incremental, ghent</div>
+    
+  </div>
+<div class="tile">
+    <div class="tile-label">Open vs PDFium</div>
+    <div class="tile-value">2.5<span class="tile-unit">x faster</span></div>
+    <div class="tile-delta flat">ghent, p50, higher is better</div>
+    
+  </div>
+<div class="tile">
+      <div class="tile-label">Perf budgets</div>
+      <div class="tile-value all-pass">12<span class="tile-unit">/ 12 green</span></div>
+      <div class="tile-note">targets.json, aspirational</div>
+    </div></div>
+  <section>
+  <h2>flutter-render · ghent-render</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:28
+    @ <code>17c46899</code> on linux
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">0.17</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">0.08</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">0.17</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50OpenMs=0.17  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">0.30</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.15</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.30</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95OpenMs=0.30  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">0.72</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.36</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.72</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxOpenMs=0.72  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxRenderMs
+    <span class="last">619.58</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxRenderMs trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">309.48</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">618.96</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxRenderMs=619.58  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxRenderMsPerPage
+    <span class="last">292.76</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxRenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">146.23</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">292.47</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxRenderMsPerPage=292.76  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMs
+    <span class="last">13.12</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">6.55</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">13.11</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50RenderMs=13.12  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMsPerPage
+    <span class="last">13.12</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">6.55</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">13.11</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50RenderMsPerPage=13.12  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMs
+    <span class="last">121.36</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">60.62</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">121.24</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95RenderMs=121.36  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMsPerPage
+    <span class="last">121.36</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">60.62</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">121.24</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95RenderMsPerPage=121.36  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>0.17</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>0.30</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>0.72</td><td>—</td><td class="">—</td></tr><tr><td>maxRenderMs</td><td>619.58</td><td>—</td><td class="">—</td></tr><tr><td>maxRenderMsPerPage</td><td>292.76</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMs</td><td>13.12</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMsPerPage</td><td>13.12</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMs</td><td>121.36</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMsPerPage</td><td>121.36</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>flutter-render · image-render</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:29
+    @ <code>17c46899</code> on linux
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">1.44</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.72</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.44</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50OpenMs=1.44  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.44</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.72</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.44</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95OpenMs=1.44  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">1.44</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.72</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.44</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxOpenMs=1.44  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxRenderMs
+    <span class="last">245.17</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxRenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">122.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">244.93</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxRenderMs=245.17  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxRenderMsPerPage
+    <span class="last">61.29</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxRenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">30.62</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">61.23</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxRenderMsPerPage=61.29  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMs
+    <span class="last">245.17</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">122.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">244.93</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50RenderMs=245.17  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMsPerPage
+    <span class="last">61.29</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">30.62</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">61.23</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50RenderMsPerPage=61.29  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMs
+    <span class="last">245.17</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">122.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">244.93</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95RenderMs=245.17  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMsPerPage
+    <span class="last">61.29</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">30.62</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">61.23</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95RenderMsPerPage=61.29  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>1.44</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>1.44</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>1.44</td><td>—</td><td class="">—</td></tr><tr><td>maxRenderMs</td><td>245.17</td><td>—</td><td class="">—</td></tr><tr><td>maxRenderMsPerPage</td><td>61.29</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMs</td><td>245.17</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMsPerPage</td><td>61.29</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMs</td><td>245.17</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMsPerPage</td><td>61.29</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>flutter-render · devicen-render</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:29
+    @ <code>17c46899</code> on linux
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">1.21</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.60</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.21</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50OpenMs=1.21  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.21</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.60</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.21</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95OpenMs=1.21  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">1.21</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.60</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.21</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxOpenMs=1.21  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxRenderMs
+    <span class="last">137.88</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxRenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">68.87</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">137.75</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxRenderMs=137.88  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxRenderMsPerPage
+    <span class="last">68.94</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxRenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">34.44</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">68.87</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxRenderMsPerPage=68.94  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMs
+    <span class="last">137.88</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">68.87</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">137.75</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50RenderMs=137.88  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMsPerPage
+    <span class="last">68.94</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">34.44</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">68.87</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50RenderMsPerPage=68.94  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMs
+    <span class="last">137.88</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">68.87</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">137.75</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95RenderMs=137.88  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMsPerPage
+    <span class="last">68.94</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">34.44</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">68.87</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95RenderMsPerPage=68.94  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>1.21</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>1.21</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>1.21</td><td>—</td><td class="">—</td></tr><tr><td>maxRenderMs</td><td>137.88</td><td>—</td><td class="">—</td></tr><tr><td>maxRenderMsPerPage</td><td>68.94</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMs</td><td>137.88</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMsPerPage</td><td>68.94</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMs</td><td>137.88</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMsPerPage</td><td>68.94</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>flutter-render · jbig2-scanned-render</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:29
+    @ <code>17c46899</code> on linux
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">4.34</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">2.17</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">4.34</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50OpenMs=4.34  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">4.34</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">2.17</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">4.34</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95OpenMs=4.34  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">4.34</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">2.17</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">4.34</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxOpenMs=4.34  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxRenderMs
+    <span class="last">459.57</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxRenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">229.56</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">459.11</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxRenderMs=459.57  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxRenderMsPerPage
+    <span class="last">114.89</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxRenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">57.39</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">114.78</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxRenderMsPerPage=114.89  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMs
+    <span class="last">459.57</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">229.56</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">459.11</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50RenderMs=459.57  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMsPerPage
+    <span class="last">114.89</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">57.39</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">114.78</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50RenderMsPerPage=114.89  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMs
+    <span class="last">459.57</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">229.56</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">459.11</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95RenderMs=459.57  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMsPerPage
+    <span class="last">114.89</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">57.39</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">114.78</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95RenderMsPerPage=114.89  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>4.34</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>4.34</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>4.34</td><td>—</td><td class="">—</td></tr><tr><td>maxRenderMs</td><td>459.57</td><td>—</td><td class="">—</td></tr><tr><td>maxRenderMsPerPage</td><td>114.89</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMs</td><td>459.57</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMsPerPage</td><td>114.89</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMs</td><td>459.57</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMsPerPage</td><td>114.89</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>pdfium</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:29
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">1.52</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.76</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.52</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50OpenMs=1.52  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">3.01</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.50</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">3.00</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95OpenMs=3.01  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50RenderMsPerPage
+    <span class="last">7.06</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">3.53</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">7.06</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50RenderMsPerPage=7.06  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95RenderMsPerPage
+    <span class="last">68.92</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95RenderMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">34.43</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">68.85</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95RenderMsPerPage=68.92  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>1.52</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>3.01</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>p50RenderMsPerPage</td><td>7.06</td><td>—</td><td class="">—</td></tr><tr><td>p95RenderMsPerPage</td><td>68.92</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>progressive-open · progressive-cad</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:29
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>firstPageBytesFractionPct
+    <span class="last">2.49</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="firstPageBytesFractionPct trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">1.25</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">2.49</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  firstPageBytesFractionPct=2.49  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>firstPageBytesFull
+    <span class="last">4.8M</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="firstPageBytesFull trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">2.4M</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">4.8M</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  firstPageBytesFull=4.8M  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>firstPageBytesProgressive
+    <span class="last">119.7k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="firstPageBytesProgressive trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">59.8k</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">119.6k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  firstPageBytesProgressive=119.7k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMsFull
+    <span class="last">14.26</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMsFull trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">7.12</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">14.25</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50FirstPageMsFull=14.26  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMsProgressive
+    <span class="last">12.73</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMsProgressive trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">6.36</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">12.71</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50FirstPageMsProgressive=12.73  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>firstPageBytesFractionPct</td><td>2.49</td><td>—</td><td class="">—</td></tr><tr><td>firstPageBytesFull</td><td>4.8M</td><td>—</td><td class="">—</td></tr><tr><td>firstPageBytesProgressive</td><td>119.7k</td><td>—</td><td class="">—</td></tr><tr><td>p50FirstPageMsFull</td><td>14.26</td><td>—</td><td class="">—</td></tr><tr><td>p50FirstPageMsProgressive</td><td>12.73</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>vm-sweep · dartpdf-corpus</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:07
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">0.69</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.34</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.69</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50OpenMs=0.69  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.82</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.91</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.82</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95OpenMs=1.82  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMs
+    <span class="last">1.51</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.76</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.51</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50FirstPageMs=1.51  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50InterpretMsPerPage
+    <span class="last">1.02</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.51</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.02</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50InterpretMsPerPage=1.02  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95InterpretMsPerPage
+    <span class="last">36.71</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">18.34</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">36.68</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95InterpretMsPerPage=36.71  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50ExtractMsPerPage
+    <span class="last">1.20</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.60</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.20</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50ExtractMsPerPage=1.20  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50SaveMs
+    <span class="last">0.33</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.16</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.33</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50SaveMs=0.33  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95SaveMs
+    <span class="last">1.35</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95SaveMs trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">0.67</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">1.35</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95SaveMs=1.35  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxPeakRssBytes
+    <span class="last">462.6M</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxPeakRssBytes trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">231.1M</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">462.1M</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxPeakRssBytes=462.6M  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxExtractMsPerPage
+    <span class="last">38.25</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">19.11</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">38.21</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxExtractMsPerPage=38.25  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxFirstPageMs
+    <span class="last">38.11</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxFirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">19.04</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">38.07</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxFirstPageMs=38.11  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxInterpretMsPerPage
+    <span class="last">37.37</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxInterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">18.67</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">37.34</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxInterpretMsPerPage=37.37  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">2.30</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">1.15</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">2.30</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxOpenMs=2.30  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxSaveMs
+    <span class="last">1.79</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxSaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.89</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.79</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxSaveMs=1.79  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95ExtractMsPerPage
+    <span class="last">20.38</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">10.18</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">20.36</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95ExtractMsPerPage=20.38  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95FirstPageMs
+    <span class="last">37.70</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">18.83</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">37.66</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95FirstPageMs=37.70  @17c46899</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>0.69</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>1.82</td><td>—</td><td class="">—</td></tr><tr><td>p50FirstPageMs</td><td>1.51</td><td>—</td><td class="">—</td></tr><tr><td>p50InterpretMsPerPage</td><td>1.02</td><td>—</td><td class="">—</td></tr><tr><td>p95InterpretMsPerPage</td><td>36.71</td><td>—</td><td class="">—</td></tr><tr><td>p50ExtractMsPerPage</td><td>1.20</td><td>—</td><td class="">—</td></tr><tr><td>p50SaveMs</td><td>0.33</td><td>—</td><td class="">—</td></tr><tr><td>p95SaveMs</td><td>1.35</td><td>—</td><td class="">—</td></tr><tr><td>maxPeakRssBytes</td><td>462.6M</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxExtractMsPerPage</td><td>38.25</td><td>—</td><td class="">—</td></tr><tr><td>maxFirstPageMs</td><td>38.11</td><td>—</td><td class="">—</td></tr><tr><td>maxInterpretMsPerPage</td><td>37.37</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>2.30</td><td>—</td><td class="">—</td></tr><tr><td>maxSaveMs</td><td>1.79</td><td>—</td><td class="">—</td></tr><tr><td>p95ExtractMsPerPage</td><td>20.38</td><td>—</td><td class="">—</td></tr><tr><td>p95FirstPageMs</td><td>37.70</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>vm-sweep · ghent-suite-open</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:11
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">0.61 <span class="verdict">✓ within 50</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">24.98</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">49.95</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,99.0"/>
+    <circle class="dot" cx="177" cy="99.01081481481481" r="3.5"/>
+    <circle class="hit" cx="177" cy="99.01081481481481" r="8"><title>2026-07-27 23:26  p50OpenMs=0.61  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.05 <span class="verdict">✓ within 250</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">124.88</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">249.75</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,99.7"/>
+    <circle class="dot" cx="177" cy="99.65842962962962" r="3.5"/>
+    <circle class="hit" cx="177" cy="99.65842962962962" r="8"><title>2026-07-27 23:26  p95OpenMs=1.05  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMs
+    <span class="last">12.87</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">6.43</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">12.85</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50FirstPageMs=12.87  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50InterpretMsPerPage
+    <span class="last">3.67</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.83</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">3.67</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50InterpretMsPerPage=3.67  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95InterpretMsPerPage
+    <span class="last">19.17 <span class="verdict">✓ within 150</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">74.92</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">149.85</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,89.6"/>
+    <circle class="dot" cx="177" cy="89.58558024691358" r="3.5"/>
+    <circle class="hit" cx="177" cy="89.58558024691358" r="8"><title>2026-07-27 23:26  p95InterpretMsPerPage=19.17  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50ExtractMsPerPage
+    <span class="last">3.04</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.52</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">3.04</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50ExtractMsPerPage=3.04  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50SaveMs
+    <span class="last">1.22</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.61</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.22</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50SaveMs=1.22  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95SaveMs
+    <span class="last">1.69</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.85</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.69</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95SaveMs=1.69  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxPeakRssBytes
+    <span class="last">566.0M</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxPeakRssBytes trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">282.7M</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">565.5M</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxPeakRssBytes=566.0M  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxExtractMsPerPage
+    <span class="last">14.19</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">7.09</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">14.17</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxExtractMsPerPage=14.19  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxFirstPageMs
+    <span class="last">110.78</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxFirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">55.34</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">110.67</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxFirstPageMs=110.78  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxInterpretMsPerPage
+    <span class="last">48.40</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxInterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">24.18</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">48.35</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxInterpretMsPerPage=48.40  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">1.76</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.88</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.75</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxOpenMs=1.76  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxSaveMs
+    <span class="last">2.00</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxSaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.00</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.00</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxSaveMs=2.00  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95ExtractMsPerPage
+    <span class="last">9.38</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">4.69</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">9.37</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95ExtractMsPerPage=9.38  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95FirstPageMs
+    <span class="last">50.49</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">25.22</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">50.44</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95FirstPageMs=50.49  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>0.61</td><td>50</td><td class="pass">✓ PASS</td></tr><tr><td>p95OpenMs</td><td>1.05</td><td>250</td><td class="pass">✓ PASS</td></tr><tr><td>p50FirstPageMs</td><td>12.87</td><td>—</td><td class="">—</td></tr><tr><td>p50InterpretMsPerPage</td><td>3.67</td><td>—</td><td class="">—</td></tr><tr><td>p95InterpretMsPerPage</td><td>19.17</td><td>150</td><td class="pass">✓ PASS</td></tr><tr><td>p50ExtractMsPerPage</td><td>3.04</td><td>—</td><td class="">—</td></tr><tr><td>p50SaveMs</td><td>1.22</td><td>—</td><td class="">—</td></tr><tr><td>p95SaveMs</td><td>1.69</td><td>—</td><td class="">—</td></tr><tr><td>maxPeakRssBytes</td><td>566.0M</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxExtractMsPerPage</td><td>14.19</td><td>—</td><td class="">—</td></tr><tr><td>maxFirstPageMs</td><td>110.78</td><td>—</td><td class="">—</td></tr><tr><td>maxInterpretMsPerPage</td><td>48.40</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>1.76</td><td>—</td><td class="">—</td></tr><tr><td>maxSaveMs</td><td>2.00</td><td>—</td><td class="">—</td></tr><tr><td>p95ExtractMsPerPage</td><td>9.38</td><td>—</td><td class="">—</td></tr><tr><td>p95FirstPageMs</td><td>50.49</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>vm-sweep · pdfjs-hostile</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:23
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">0.42</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.21</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.42</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50OpenMs=0.42  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.67</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.83</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.67</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95OpenMs=1.67  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMs
+    <span class="last">1.28</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.64</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.28</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50FirstPageMs=1.28  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50InterpretMsPerPage
+    <span class="last">0.22</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.11</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.22</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50InterpretMsPerPage=0.22  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95InterpretMsPerPage
+    <span class="last">6.35</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">3.17</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">6.35</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95InterpretMsPerPage=6.35  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50ExtractMsPerPage
+    <span class="last">0.20</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.10</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.20</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50ExtractMsPerPage=0.20  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50SaveMs
+    <span class="last">0.20</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.10</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.20</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50SaveMs=0.20  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95SaveMs
+    <span class="last">0.54</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.27</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.53</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95SaveMs=0.54  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxPeakRssBytes
+    <span class="last">450.9M</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxPeakRssBytes trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">225.2M</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">450.4M</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxPeakRssBytes=450.9M  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">12</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">5.99</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">11.99</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  errors=12  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxExtractMsPerPage
+    <span class="last">28.77</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">14.37</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">28.74</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxExtractMsPerPage=28.77  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxFirstPageMs
+    <span class="last">33.95</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxFirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">16.96</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">33.92</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxFirstPageMs=33.95  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxInterpretMsPerPage
+    <span class="last">19.75</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxInterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">9.86</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">19.73</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxInterpretMsPerPage=19.75  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">47.65</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">23.80</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">47.60</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxOpenMs=47.65  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxSaveMs
+    <span class="last">0.88</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxSaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.44</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.88</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxSaveMs=0.88  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95ExtractMsPerPage
+    <span class="last">4.63</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">2.32</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">4.63</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95ExtractMsPerPage=4.63  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95FirstPageMs
+    <span class="last">14.27</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">7.13</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">14.25</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95FirstPageMs=14.27  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>0.42</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>1.67</td><td>—</td><td class="">—</td></tr><tr><td>p50FirstPageMs</td><td>1.28</td><td>—</td><td class="">—</td></tr><tr><td>p50InterpretMsPerPage</td><td>0.22</td><td>—</td><td class="">—</td></tr><tr><td>p95InterpretMsPerPage</td><td>6.35</td><td>—</td><td class="">—</td></tr><tr><td>p50ExtractMsPerPage</td><td>0.20</td><td>—</td><td class="">—</td></tr><tr><td>p50SaveMs</td><td>0.20</td><td>—</td><td class="">—</td></tr><tr><td>p95SaveMs</td><td>0.54</td><td>—</td><td class="">—</td></tr><tr><td>maxPeakRssBytes</td><td>450.9M</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>12</td><td>—</td><td class="">—</td></tr><tr><td>maxExtractMsPerPage</td><td>28.77</td><td>—</td><td class="">—</td></tr><tr><td>maxFirstPageMs</td><td>33.95</td><td>—</td><td class="">—</td></tr><tr><td>maxInterpretMsPerPage</td><td>19.75</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>47.65</td><td>—</td><td class="">—</td></tr><tr><td>maxSaveMs</td><td>0.88</td><td>—</td><td class="">—</td></tr><tr><td>p95ExtractMsPerPage</td><td>4.63</td><td>—</td><td class="">—</td></tr><tr><td>p95FirstPageMs</td><td>14.27</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>vm-sweep · save-incremental</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:27
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">0.82</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.41</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.82</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50OpenMs=0.82  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.74</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.87</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.74</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95OpenMs=1.74  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50SaveMs
+    <span class="last">1.05</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50SaveMs trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">0.52</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">1.05</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50SaveMs=1.05  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95SaveMs
+    <span class="last">1.33 <span class="verdict">✓ within 100</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">49.95</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">99.90</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,98.9"/>
+    <circle class="dot" cx="177" cy="98.91874074074074" r="3.5"/>
+    <circle class="hit" cx="177" cy="98.91874074074074" r="8"><title>2026-07-27 23:26  p95SaveMs=1.33  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxPeakRssBytes
+    <span class="last">439.1M</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxPeakRssBytes trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">219.3M</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">438.6M</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxPeakRssBytes=439.1M  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">3.18</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.59</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">3.18</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxOpenMs=3.18  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxSaveMs
+    <span class="last">2.31</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxSaveMs trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">1.15</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">2.31</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxSaveMs=2.31  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>0.82</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>1.74</td><td>—</td><td class="">—</td></tr><tr><td>p50SaveMs</td><td>1.05</td><td>—</td><td class="">—</td></tr><tr><td>p95SaveMs</td><td>1.33</td><td>100</td><td class="pass">✓ PASS</td></tr><tr><td>maxPeakRssBytes</td><td>439.1M</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>3.18</td><td>—</td><td class="">—</td></tr><tr><td>maxSaveMs</td><td>2.31</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>vm-sweep · cad-138p-sweep</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:27
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">1.46 <span class="verdict">✓ within 400</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">199.80</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">399.60</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,99.7"/>
+    <circle class="dot" cx="177" cy="99.70340740740741" r="3.5"/>
+    <circle class="hit" cx="177" cy="99.70340740740741" r="8"><title>2026-07-27 23:26  p50OpenMs=1.46  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.46</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">0.73</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">1.45</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95OpenMs=1.46  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMs
+    <span class="last">2.95 <span class="verdict">✓ within 800</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">399.60</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">799.20</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,99.7"/>
+    <circle class="dot" cx="177" cy="99.69984259259259" r="3.5"/>
+    <circle class="hit" cx="177" cy="99.69984259259259" r="8"><title>2026-07-27 23:26  p50FirstPageMs=2.95  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50InterpretMsPerPage
+    <span class="last">2.83</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.41</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.83</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50InterpretMsPerPage=2.83  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95InterpretMsPerPage
+    <span class="last">2.83 <span class="verdict">✓ within 120</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">59.94</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">119.88</text><line class="budget" x1="44" y1="18.518518518518537" x2="310" y2="18.518518518518537"/>
+    <polyline class="line" points="177.0,98.1"/>
+    <circle class="dot" cx="177" cy="98.07907407407407" r="3.5"/>
+    <circle class="hit" cx="177" cy="98.07907407407407" r="8"><title>2026-07-27 23:26  p95InterpretMsPerPage=2.83  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50ExtractMsPerPage
+    <span class="last">2.28</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">1.14</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">2.28</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50ExtractMsPerPage=2.28  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50SaveMs
+    <span class="last">0.90 <span class="verdict">✓ within 500</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">249.75</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">499.50</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,99.9"/>
+    <circle class="dot" cx="177" cy="99.85398518518518" r="3.5"/>
+    <circle class="hit" cx="177" cy="99.85398518518518" r="8"><title>2026-07-27 23:26  p50SaveMs=0.90  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95SaveMs
+    <span class="last">0.90</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.45</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.90</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95SaveMs=0.90  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxPeakRssBytes
+    <span class="last">467.9M <span class="verdict">✓ within 1.61G</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxPeakRssBytes trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">804.5M</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.61G</text><line class="budget" x1="44" y1="18.518518518518526" x2="310" y2="18.518518518518526"/>
+    <polyline class="line" points="177.0,76.3"/>
+    <circle class="dot" cx="177" cy="76.3300954559703" r="3.5"/>
+    <circle class="hit" cx="177" cy="76.3300954559703" r="8"><title>2026-07-27 23:26  maxPeakRssBytes=467.9M  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxExtractMsPerPage
+    <span class="last">2.28</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">1.14</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">2.28</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxExtractMsPerPage=2.28  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxFirstPageMs
+    <span class="last">2.95</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxFirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.47</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.94</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxFirstPageMs=2.95  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxInterpretMsPerPage
+    <span class="last">2.83</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxInterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.41</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.83</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxInterpretMsPerPage=2.83  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">1.46</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.30000000000001" x2="310" y2="59.30000000000001"/>
+      <text class="axis" x="40" y="62.30000000000001" text-anchor="end">0.73</text><line class="grid" x1="44" y1="18.600000000000005" x2="310" y2="18.600000000000005"/>
+      <text class="axis" x="40" y="21.600000000000005" text-anchor="end">1.45</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxOpenMs=1.46  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxSaveMs
+    <span class="last">0.90</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxSaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.45</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.90</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxSaveMs=0.90  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95ExtractMsPerPage
+    <span class="last">2.28</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">1.14</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">2.28</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95ExtractMsPerPage=2.28  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95FirstPageMs
+    <span class="last">2.95</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.47</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.94</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95FirstPageMs=2.95  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>1.46</td><td>400</td><td class="pass">✓ PASS</td></tr><tr><td>p95OpenMs</td><td>1.46</td><td>—</td><td class="">—</td></tr><tr><td>p50FirstPageMs</td><td>2.95</td><td>800</td><td class="pass">✓ PASS</td></tr><tr><td>p50InterpretMsPerPage</td><td>2.83</td><td>—</td><td class="">—</td></tr><tr><td>p95InterpretMsPerPage</td><td>2.83</td><td>120</td><td class="pass">✓ PASS</td></tr><tr><td>p50ExtractMsPerPage</td><td>2.28</td><td>—</td><td class="">—</td></tr><tr><td>p50SaveMs</td><td>0.90</td><td>500</td><td class="pass">✓ PASS</td></tr><tr><td>p95SaveMs</td><td>0.90</td><td>—</td><td class="">—</td></tr><tr><td>maxPeakRssBytes</td><td>467.9M</td><td>1.61G</td><td class="pass">✓ PASS</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxExtractMsPerPage</td><td>2.28</td><td>—</td><td class="">—</td></tr><tr><td>maxFirstPageMs</td><td>2.95</td><td>—</td><td class="">—</td></tr><tr><td>maxInterpretMsPerPage</td><td>2.83</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>1.46</td><td>—</td><td class="">—</td></tr><tr><td>maxSaveMs</td><td>0.90</td><td>—</td><td class="">—</td></tr><tr><td>p95ExtractMsPerPage</td><td>2.28</td><td>—</td><td class="">—</td></tr><tr><td>p95FirstPageMs</td><td>2.95</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>vm-sweep · cad-wide-1p-sweep</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:28
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">0.24 <span class="verdict">✓ within 250</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">124.88</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">249.75</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,99.9"/>
+    <circle class="dot" cx="177" cy="99.9208" r="3.5"/>
+    <circle class="hit" cx="177" cy="99.9208" r="8"><title>2026-07-27 23:26  p50OpenMs=0.24  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">0.24</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.12</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.24</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95OpenMs=0.24  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMs
+    <span class="last">1.1k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">551.94</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.1k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50FirstPageMs=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50InterpretMsPerPage
+    <span class="last">1.1k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">551.01</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.1k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50InterpretMsPerPage=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95InterpretMsPerPage
+    <span class="last">1.1k <span class="verdict">✓ within 2.5k</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.2k</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.5k</text><line class="budget" x1="44" y1="18.51851851851852" x2="310" y2="18.51851851851852"/>
+    <polyline class="line" points="177.0,64.0"/>
+    <circle class="dot" cx="177" cy="64.04658962962962" r="3.5"/>
+    <circle class="hit" cx="177" cy="64.04658962962962" r="8"><title>2026-07-27 23:26  p95InterpretMsPerPage=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50ExtractMsPerPage
+    <span class="last">1.1k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">558.40</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.1k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50ExtractMsPerPage=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50SaveMs
+    <span class="last">2.17</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.09</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.17</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50SaveMs=2.17  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95SaveMs
+    <span class="last">2.17</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.09</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.17</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95SaveMs=2.17  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxPeakRssBytes
+    <span class="last">575.0M <span class="verdict">✓ within 2.15G</span></span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxPeakRssBytes trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.07G</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.15G</text><line class="budget" x1="44" y1="18.518518518518526" x2="310" y2="18.518518518518526"/>
+    <polyline class="line" points="177.0,78.2"/>
+    <circle class="dot" cx="177" cy="78.18319532606337" r="3.5"/>
+    <circle class="hit" cx="177" cy="78.18319532606337" r="8"><title>2026-07-27 23:26  maxPeakRssBytes=575.0M  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxExtractMsPerPage
+    <span class="last">1.1k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">558.40</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.1k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxExtractMsPerPage=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxFirstPageMs
+    <span class="last">1.1k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxFirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">551.94</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.1k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxFirstPageMs=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxInterpretMsPerPage
+    <span class="last">1.1k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxInterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">551.01</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.1k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxInterpretMsPerPage=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">0.24</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.12</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.24</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxOpenMs=0.24  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxSaveMs
+    <span class="last">2.17</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxSaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.09</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">2.17</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxSaveMs=2.17  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95ExtractMsPerPage
+    <span class="last">1.1k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">558.40</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.1k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95ExtractMsPerPage=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95FirstPageMs
+    <span class="last">1.1k</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">551.94</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.1k</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95FirstPageMs=1.1k  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>0.24</td><td>250</td><td class="pass">✓ PASS</td></tr><tr><td>p95OpenMs</td><td>0.24</td><td>—</td><td class="">—</td></tr><tr><td>p50FirstPageMs</td><td>1.1k</td><td>—</td><td class="">—</td></tr><tr><td>p50InterpretMsPerPage</td><td>1.1k</td><td>—</td><td class="">—</td></tr><tr><td>p95InterpretMsPerPage</td><td>1.1k</td><td>2.5k</td><td class="pass">✓ PASS</td></tr><tr><td>p50ExtractMsPerPage</td><td>1.1k</td><td>—</td><td class="">—</td></tr><tr><td>p50SaveMs</td><td>2.17</td><td>—</td><td class="">—</td></tr><tr><td>p95SaveMs</td><td>2.17</td><td>—</td><td class="">—</td></tr><tr><td>maxPeakRssBytes</td><td>575.0M</td><td>2.15G</td><td class="pass">✓ PASS</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxExtractMsPerPage</td><td>1.1k</td><td>—</td><td class="">—</td></tr><tr><td>maxFirstPageMs</td><td>1.1k</td><td>—</td><td class="">—</td></tr><tr><td>maxInterpretMsPerPage</td><td>1.1k</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>0.24</td><td>—</td><td class="">—</td></tr><tr><td>maxSaveMs</td><td>2.17</td><td>—</td><td class="">—</td></tr><tr><td>p95ExtractMsPerPage</td><td>1.1k</td><td>—</td><td class="">—</td></tr><tr><td>p95FirstPageMs</td><td>1.1k</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>vm-sweep · image-heavy</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:28
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">1.24</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.62</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.23</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50OpenMs=1.24  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.24</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.62</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.23</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95OpenMs=1.24  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMs
+    <span class="last">12.85</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">6.42</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">12.84</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50FirstPageMs=12.85  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50InterpretMsPerPage
+    <span class="last">5.05</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">2.52</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">5.05</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50InterpretMsPerPage=5.05  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95InterpretMsPerPage
+    <span class="last">5.05</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">2.52</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">5.05</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95InterpretMsPerPage=5.05  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50ExtractMsPerPage
+    <span class="last">3.54</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.77</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">3.54</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50ExtractMsPerPage=3.54  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50SaveMs
+    <span class="last">0.90</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.45</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.90</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p50SaveMs=0.90  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95SaveMs
+    <span class="last">0.90</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95SaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.45</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.90</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95SaveMs=0.90  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxPeakRssBytes
+    <span class="last">444.1M</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxPeakRssBytes trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">221.8M</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">443.7M</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxPeakRssBytes=444.1M  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxExtractMsPerPage
+    <span class="last">3.54</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.77</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">3.54</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxExtractMsPerPage=3.54  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxFirstPageMs
+    <span class="last">12.85</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxFirstPageMs trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">6.42</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">12.84</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxFirstPageMs=12.85  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxInterpretMsPerPage
+    <span class="last">5.05</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxInterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">2.52</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">5.05</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxInterpretMsPerPage=5.05  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">1.24</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.62</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.23</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxOpenMs=1.24  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxSaveMs
+    <span class="last">0.90</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxSaveMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.45</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.90</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  maxSaveMs=0.90  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95ExtractMsPerPage
+    <span class="last">3.54</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95ExtractMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">1.77</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">3.54</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.51851851851852" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.51851851851852" r="8"><title>2026-07-27 23:26  p95ExtractMsPerPage=3.54  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95FirstPageMs
+    <span class="last">12.85</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.29999999999999" x2="310" y2="59.29999999999999"/>
+      <text class="axis" x="40" y="62.29999999999999" text-anchor="end">6.42</text><line class="grid" x1="44" y1="18.599999999999987" x2="310" y2="18.599999999999987"/>
+      <text class="axis" x="40" y="21.599999999999987" text-anchor="end">12.84</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95FirstPageMs=12.85  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>1.24</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>1.24</td><td>—</td><td class="">—</td></tr><tr><td>p50FirstPageMs</td><td>12.85</td><td>—</td><td class="">—</td></tr><tr><td>p50InterpretMsPerPage</td><td>5.05</td><td>—</td><td class="">—</td></tr><tr><td>p95InterpretMsPerPage</td><td>5.05</td><td>—</td><td class="">—</td></tr><tr><td>p50ExtractMsPerPage</td><td>3.54</td><td>—</td><td class="">—</td></tr><tr><td>p50SaveMs</td><td>0.90</td><td>—</td><td class="">—</td></tr><tr><td>p95SaveMs</td><td>0.90</td><td>—</td><td class="">—</td></tr><tr><td>maxPeakRssBytes</td><td>444.1M</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxExtractMsPerPage</td><td>3.54</td><td>—</td><td class="">—</td></tr><tr><td>maxFirstPageMs</td><td>12.85</td><td>—</td><td class="">—</td></tr><tr><td>maxInterpretMsPerPage</td><td>5.05</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>1.24</td><td>—</td><td class="">—</td></tr><tr><td>maxSaveMs</td><td>0.90</td><td>—</td><td class="">—</td></tr><tr><td>p95ExtractMsPerPage</td><td>3.54</td><td>—</td><td class="">—</td></tr><tr><td>p95FirstPageMs</td><td>12.85</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section><section>
+  <h2>vm-sweep · jbig2-scanned-sweep</h2>
+  <p class="meta">1 runs · latest 2026-07-28 06:28
+    @ <code>17c46899</code> on linux-x86_64
+    (github-actions)</p>
+  <div class="charts"><figure class="chart">
+  <figcaption>p50OpenMs
+    <span class="last">1.83</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.92</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.83</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50OpenMs=1.83  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95OpenMs
+    <span class="last">1.83</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95OpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.92</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.83</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95OpenMs=1.83  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50FirstPageMs
+    <span class="last">0.20</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.10</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.20</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50FirstPageMs=0.20  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50InterpretMsPerPage
+    <span class="last">0.12</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.06</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.12</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50InterpretMsPerPage=0.12  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95InterpretMsPerPage
+    <span class="last">0.12</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95InterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.06</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.12</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95InterpretMsPerPage=0.12  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p50DecodeMsPerPage
+    <span class="last">46.47</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p50DecodeMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">23.21</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">46.42</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p50DecodeMsPerPage=46.47  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95DecodeMsPerPage
+    <span class="last">46.47</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95DecodeMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">23.21</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">46.42</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95DecodeMsPerPage=46.47  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxPeakRssBytes
+    <span class="last">426.1M</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxPeakRssBytes trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">212.8M</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">425.6M</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxPeakRssBytes=426.1M  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>errors
+    <span class="last">0</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="errors trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.46</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.93</text>
+    <polyline class="line" points="177.0,100.0"/>
+    <circle class="dot" cx="177" cy="100" r="3.5"/>
+    <circle class="hit" cx="177" cy="100" r="8"><title>2026-07-27 23:26  errors=0  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxDecodeMsPerPage
+    <span class="last">46.47</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxDecodeMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">23.21</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">46.42</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxDecodeMsPerPage=46.47  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxFirstPageMs
+    <span class="last">0.20</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxFirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.10</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.20</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxFirstPageMs=0.20  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxInterpretMsPerPage
+    <span class="last">0.12</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxInterpretMsPerPage trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.06</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.12</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxInterpretMsPerPage=0.12  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>maxOpenMs
+    <span class="last">1.83</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="maxOpenMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.92</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">1.83</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  maxOpenMs=1.83  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure>
+<figure class="chart">
+  <figcaption>p95FirstPageMs
+    <span class="last">0.20</span>
+  </figcaption>
+  <svg viewBox="0 0 320 120" role="img" aria-label="p95FirstPageMs trend">
+    <line class="grid" x1="44" y1="59.3" x2="310" y2="59.3"/>
+      <text class="axis" x="40" y="62.3" text-anchor="end">0.10</text><line class="grid" x1="44" y1="18.599999999999994" x2="310" y2="18.599999999999994"/>
+      <text class="axis" x="40" y="21.599999999999994" text-anchor="end">0.20</text>
+    <polyline class="line" points="177.0,18.5"/>
+    <circle class="dot" cx="177" cy="18.518518518518526" r="3.5"/>
+    <circle class="hit" cx="177" cy="18.518518518518526" r="8"><title>2026-07-27 23:26  p95FirstPageMs=0.20  @17c46899+dirty</title></circle>
+    <text class="axis" x="44" y="114">2026-07-27</text>
+    <text class="axis" x="310" y="114" text-anchor="end">2026-07-27</text>
+  </svg>
+</figure></div>
+  <details><summary>Latest run vs targets</summary>
+    <table><thead><tr><th>metric</th><th>latest</th><th>budget</th><th>verdict</th></tr></thead>
+    <tbody><tr><td>p50OpenMs</td><td>1.83</td><td>—</td><td class="">—</td></tr><tr><td>p95OpenMs</td><td>1.83</td><td>—</td><td class="">—</td></tr><tr><td>p50FirstPageMs</td><td>0.20</td><td>—</td><td class="">—</td></tr><tr><td>p50InterpretMsPerPage</td><td>0.12</td><td>—</td><td class="">—</td></tr><tr><td>p95InterpretMsPerPage</td><td>0.12</td><td>—</td><td class="">—</td></tr><tr><td>p50DecodeMsPerPage</td><td>46.47</td><td>—</td><td class="">—</td></tr><tr><td>p95DecodeMsPerPage</td><td>46.47</td><td>—</td><td class="">—</td></tr><tr><td>maxPeakRssBytes</td><td>426.1M</td><td>—</td><td class="">—</td></tr><tr><td>errors</td><td>0</td><td>—</td><td class="">—</td></tr><tr><td>maxDecodeMsPerPage</td><td>46.47</td><td>—</td><td class="">—</td></tr><tr><td>maxFirstPageMs</td><td>0.20</td><td>—</td><td class="">—</td></tr><tr><td>maxInterpretMsPerPage</td><td>0.12</td><td>—</td><td class="">—</td></tr><tr><td>maxOpenMs</td><td>1.83</td><td>—</td><td class="">—</td></tr><tr><td>p95FirstPageMs</td><td>0.20</td><td>—</td><td class="">—</td></tr></tbody></table>
+  </details>
+</section>
+</div>
+</body>
+</html>
