@@ -253,7 +253,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
   /// Demo of [PdfViewer.contextMenuEnabled]: when off, right-click and
   /// long-press annotation menus are suppressed. App-wide.
-  bool _contextMenuEnabled = true;
+  bool _contextMenuEnabled = false;
 
   /// Demo of [PdfViewer.onContextMenuRequested]: when the stock menu is
   /// off, this handler renders the demo app's own menu (a custom Copy row,
@@ -334,9 +334,6 @@ class _ViewerScreenState extends State<ViewerScreen> {
         final text = tab?.viewer!.selectedText;
         _toast(text!);
       case _DemoAnnotAction.highlight:
-        // Highlight the live selection, then write the optional note as
-        // the highlight's own /Contents (not a reply, not a /FreeText
-        // box - what Adobe/Foxit show as the highlight's first comment).
         final viewer = tab?.viewer;
         if (editing == null || viewer == null || !viewer.hasSelection) {
           _toast('Select some text first');
@@ -346,51 +343,63 @@ class _ViewerScreenState extends State<ViewerScreen> {
           for (final page in viewer.selectionPages)
             page: viewer.selectionRectsOn(page),
         };
-        editing.useMarkupStyleScope();
-        editing.addMarkup(PdfMarkupKind.highlight, quadsByPage);
 
-        final field = TextEditingController();
         final noteText = await showDialog<String>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Highlight note'),
-            content: TextField(
-              controller: field,
-              autofocus: true,
-              maxLines: 3,
-              minLines: 1,
-              decoration:
-                  const InputDecoration(hintText: 'Note text (optional)'),
-              onSubmitted: (value) => Navigator.pop(ctx, value),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
+          builder: (ctx) {
+            final field = TextEditingController();
+            return AlertDialog(
+              title: const Text('Highlight note'),
+              content: TextField(
+                controller: field,
+                autofocus: true,
+                maxLines: 3,
+                minLines: 1,
+                decoration:
+                    const InputDecoration(hintText: 'Note text (optional)'),
+                onSubmitted: (value) => Navigator.pop(ctx, value),
               ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, field.text),
-                child: const Text('Save'),
-              ),
-            ],
-          ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, field.text),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
         );
-        field.dispose();
         if (!mounted) return;
-        if (noteText != null && noteText.isNotEmpty) {
-          final firstPage = quadsByPage.keys.first;
-          final page = editing.document.page(firstPage);
-          final highlight = page.annotations.lastWhere(
-            (a) => a.subtype == 'Highlight',
-            orElse: () => throw StateError(
-              'highlight annotation not found on page $firstPage',
-            ),
-          );
-          editing.apply(
-            (e) => e.setAnnotationContents(firstPage, highlight, noteText),
-          );
-        }
-        viewer.clearSelection();
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          try {
+            editing.useMarkupStyleScope();
+            editing.addMarkup(PdfMarkupKind.highlight, quadsByPage);
+            if (noteText != null && noteText.isNotEmpty) {
+              final firstPage = quadsByPage.keys.first;
+              final page = editing.document.page(firstPage);
+              final highlight = page.annotations.lastWhere(
+                (a) => a.subtype == 'Highlight',
+                orElse: () => throw StateError(
+                  'highlight annotation not found on page $firstPage',
+                ),
+              );
+              editing.apply(
+                (e) => e.setAnnotationContents(firstPage, highlight, noteText),
+              );
+            }
+          } catch (e, s) {
+            AppLog.instance.error(
+              'Could not save highlight',
+              error: e,
+              stackTrace: s,
+            );
+          }
+        });
       case _DemoAnnotAction.sendTo:
         _toast('Send page ${pageIndex + 1}'
             '${annotation != null ? " (${annotation.subtype})" : ""}');
