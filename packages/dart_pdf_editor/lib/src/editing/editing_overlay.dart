@@ -3325,6 +3325,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         details.globalPosition,
         widget.pageIndex,
         pagePoint: (x, y),
+        target: hit != null
+            ? PdfContextMenuTarget.annotation
+            : PdfContextMenuTarget.emptyPage,
+        slot: hit?.$1,
+        annotation: hit?.$2,
       );
       return;
     }

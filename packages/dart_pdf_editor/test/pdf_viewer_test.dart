@@ -1506,7 +1506,7 @@ void main() {
     testWidgets(
         'right-click hands the gesture to the host when '
         'onContextMenuRequested is set', (tester) async {
-      final hostCalls = <(int, (double, double))>[];
+      final hostCalls = <PdfContextMenuRequest>[];
       final controller = PdfViewerController();
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -1515,10 +1515,7 @@ void main() {
             document: PdfDocument.open(buildMultiPagePdf(2)),
             controller: controller,
             contextMenuEnabled: false,
-            onContextMenuRequested: (globalPos, page,
-                {pagePoint = (0, 0)}) {
-              hostCalls.add((page, pagePoint));
-            },
+            onContextMenuRequested: hostCalls.add,
           ),
         ),
       ));
@@ -1529,11 +1526,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(hostCalls, hasLength(1),
           reason: 'host callback fires exactly once per right-click');
-      expect(hostCalls.first.$1, 0);
+      expect(hostCalls.first.pageIndex, 0);
       // page coordinates land near (100, 720).
-      final (x, y) = hostCalls.first.$2;
+      final (x, y) = hostCalls.first.pagePoint;
       expect(x, closeTo(100, 0.001));
       expect(y, closeTo(720, 0.001));
+      // The takeover prepares the same context the stock menu would have:
+      // the word under the cursor is selected before the handoff, so the
+      // host's own Copy has something to act on.
+      expect(hostCalls.first.target, PdfContextMenuTarget.text);
+      expect(hostCalls.first.selectedText, 'Page');
+      expect(controller.selectedText, 'Page');
       expect(find.byKey(const ValueKey('pdf-text-menu-copy')), findsNothing);
     });
 
@@ -1549,8 +1552,7 @@ void main() {
             document: PdfDocument.open(buildMultiPagePdf(2)),
             controller: controller,
             // contextMenuEnabled defaults to true
-            onContextMenuRequested: (globalPos, page,
-                {pagePoint = (0, 0)}) {
+            onContextMenuRequested: (request) {
               hostCalls++;
             },
           ),
@@ -1574,7 +1576,7 @@ void main() {
       // Covers _onLongPressStart's host-takeover branch (sets up text
       // selection, then hands the gesture to the host because the stock
       // menu is suppressed). Reader mode - no editing controller.
-      final hostCalls = <(int, (double, double))>[];
+      final hostCalls = <PdfContextMenuRequest>[];
       final controller = PdfViewerController();
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
@@ -1583,10 +1585,7 @@ void main() {
             document: PdfDocument.open(buildMultiPagePdf(2)),
             controller: controller,
             contextMenuEnabled: false,
-            onContextMenuRequested: (globalPos, page,
-                {pagePoint = (0, 0)}) {
-              hostCalls.add((page, pagePoint));
-            },
+            onContextMenuRequested: hostCalls.add,
           ),
         ),
       ));
@@ -1604,15 +1603,90 @@ void main() {
 
       expect(hostCalls, hasLength(1),
           reason: 'host callback fires exactly once per long-press');
-      expect(hostCalls.first.$1, 0);
-      final (x, y) = hostCalls.first.$2;
+      expect(hostCalls.first.pageIndex, 0);
+      final (x, y) = hostCalls.first.pagePoint;
       expect(x, closeTo(100, 0.5));
       expect(y, closeTo(720, 0.5));
+      expect(hostCalls.first.target, PdfContextMenuTarget.text);
+      expect(hostCalls.first.selectedText, 'Page');
       // The stock text menu and selection chip must not appear; the host
       // owns the popup.
       expect(find.byKey(const ValueKey('pdf-text-menu-copy')), findsNothing);
       expect(find.byKey(const ValueKey('pdf-text-menu-select-all')),
           findsNothing);
+    });
+
+    // 🔴 regression: the desktop takeover used to fire before the stock
+    // path resolved anything, so a right-click on a form widget / an
+    // annotation reached the host as an anonymous position and left no
+    // selection behind. Each target must now be named, and the same
+    // selection the stock menu would have made must be in place.
+    testWidgets(
+        'right-click takeover names the annotation and selects it first',
+        (tester) async {
+      final hostCalls = <PdfContextMenuRequest>[];
+      final editing = PdfEditingController(buildMultiPagePdf(1));
+      addTearDown(editing.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: editing,
+            builder: (context, _) => PdfViewer(
+              initialFit: PdfViewerFit.width,
+              document: editing.document,
+              editing: editing,
+              contextMenuEnabled: false,
+              onContextMenuRequested: hostCalls.add,
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      // clear of the 'Page 1' text, so only the annotation is under it
+      editing.addRectangle(0, const PdfRect(300, 400, 400, 450));
+      await tester.pump();
+
+      await tester.tapAt(annotView(350, 425), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+
+      expect(hostCalls, hasLength(1));
+      final request = hostCalls.single;
+      expect(request.target, PdfContextMenuTarget.annotation);
+      expect(request.annotation?.subtype, 'Square');
+      expect(request.slot, 0);
+      expect(request.controller, same(editing));
+      expect(editing.selectedAnnotationSlots, [(0, 0)],
+          reason: 'the takeover prepares the selection the stock menu '
+              'would have had');
+      expect(find.byKey(const ValueKey('pdf-annot-menu-delete')), findsNothing);
+    });
+
+    testWidgets('right-click takeover names a form widget target',
+        (tester) async {
+      final hostCalls = <PdfContextMenuRequest>[];
+      final editing = PdfEditingController(buildAcroFormPdf());
+      addTearDown(editing.dispose);
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: ListenableBuilder(
+            listenable: editing,
+            builder: (context, _) => PdfViewer(
+              initialFit: PdfViewerFit.width,
+              document: editing.document,
+              editing: editing,
+              contextMenuEnabled: false,
+              onContextMenuRequested: hostCalls.add,
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      // the 'name' text widget sits at /Rect [72 700 300 724]
+      await tester.tapAt(annotView(100, 712), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+
+      expect(hostCalls, hasLength(1));
+      expect(hostCalls.single.target, PdfContextMenuTarget.formWidget);
     });
   });
 }

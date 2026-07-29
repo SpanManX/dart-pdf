@@ -259,12 +259,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// off, this handler renders the demo app's own menu (a custom Copy row,
   /// Highlight and Add-note actions that write real annotations, plus a
   /// "Send to…" action) using the gesture position the viewer passes in.
-  /// App-wide.
-  Future<void> _onContextMenuRequested(
-    Offset globalPosition,
-    int pageIndex, {
-    (double, double) pagePoint = (0, 0),
-  }) async {
+  /// The viewer has already resolved what the gesture landed on, so the
+  /// menu can label itself from [PdfContextMenuRequest.target] without
+  /// re-running a hit test. App-wide.
+  Future<void> _onContextMenuRequested(PdfContextMenuRequest request) async {
     if (!mounted) return;
     final overlay =
         Overlay.of(context, rootOverlay: true).context.findRenderObject()
@@ -272,10 +270,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
     if (overlay == null) return;
     // showMenu anchors at the tap point in the root overlay's coordinate
     // space; flip the global position to local with the root overlay's box.
-    final local = overlay.globalToLocal(globalPosition);
+    final local = overlay.globalToLocal(request.globalPosition);
     final tab = _active;
     final editing = tab?.session;
-    final (x, y) = pagePoint;
+    final pageIndex = request.pageIndex;
+    // the viewer already named the annotation - no hit test needed here
+    final annotation = request.annotation;
     final picked = await showMenu<_DemoAnnotAction>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -285,11 +285,14 @@ class _ViewerScreenState extends State<ViewerScreen> {
         overlay.size.height - local.dy,
       ),
       items: [
-        const PopupMenuItem<_DemoAnnotAction>(
+        PopupMenuItem<_DemoAnnotAction>(
           value: _DemoAnnotAction.copy,
           child: ListTile(
-            leading: Icon(Icons.copy),
-            title: Text('Copy (custom)'),
+            leading: const Icon(Icons.copy),
+            // the request already carries the selection the viewer made
+            title: Text(request.selectedText.isEmpty
+                ? 'Copy (custom)'
+                : 'Copy "${request.selectedText}" (custom)'),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),
@@ -303,11 +306,20 @@ class _ViewerScreenState extends State<ViewerScreen> {
             contentPadding: EdgeInsets.zero,
           ),
         ),
-        const PopupMenuItem<_DemoAnnotAction>(
+        PopupMenuItem<_DemoAnnotAction>(
           value: _DemoAnnotAction.sendTo,
           child: ListTile(
-            leading: Icon(Icons.send),
-            title: Text('Send to…'),
+            leading: const Icon(Icons.send),
+            // branch on what the viewer resolved, not on a re-run hit test
+            title: Text(switch (request.target) {
+              PdfContextMenuTarget.annotation =>
+                'Send ${annotation?.subtype ?? "annotation"}…',
+              PdfContextMenuTarget.lockedAnnotation => 'Send (locked)…',
+              PdfContextMenuTarget.formWidget => 'Send form field…',
+              PdfContextMenuTarget.emptyPage ||
+              PdfContextMenuTarget.text =>
+                'Send to…',
+            }),
             dense: true,
             contentPadding: EdgeInsets.zero,
           ),
@@ -317,22 +329,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
 
     if (picked == null || !mounted) return;
 
-    PdfAnnotation? annotation;
-    if (editing != null) {
-      for (final slot in editing.selectedAnnotationSlots) {
-        if (slot.$1 == pageIndex) {
-          annotation = editing.document.page(slot.$1).annotations[slot.$2];
-          break;
-        }
-      }
-      annotation ??=
-          editing.selectableAnnotationAt(pageIndex, x, y)?.$2;
-    }
-
     switch (picked) {
       case _DemoAnnotAction.copy:
-        final text = tab?.viewer!.selectedText;
-        _toast(text!);
+        _toast(request.selectedText);
       case _DemoAnnotAction.highlight:
         final viewer = tab?.viewer;
         if (editing == null || viewer == null || !viewer.hasSelection) {

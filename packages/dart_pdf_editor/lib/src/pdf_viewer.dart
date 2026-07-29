@@ -1190,8 +1190,9 @@ class PdfViewer extends StatefulWidget {
   /// - the gesture is dropped silently. Has no effect while
   /// [contextMenuEnabled] is true (the default menu still owns the gesture).
   ///
-  /// To branch on annotation type, re-run the viewer's hit-test on
-  /// [pagePoint]; see [PdfContextMenuHost] for an example.
+  /// The viewer resolves the target and prepares the same selection the
+  /// stock menu would have had before calling: branch on
+  /// [PdfContextMenuRequest.target] rather than re-running a hit test.
   final PdfContextMenuHost? onContextMenuRequested;
 
   /// How the form tool fills a tapped push-button field with an image
@@ -3764,21 +3765,16 @@ class _PdfViewerState extends State<PdfViewer>
   /// keeping a multi-selection intact. Otherwise - reading mode, or a click
   /// that lands on plain page text - it opens the text menu (Copy / Select
   /// all).
+  ///
+  /// With [PdfViewer.contextMenuEnabled] false the same targets are
+  /// resolved and the same selection is prepared; only the popup is
+  /// replaced by a [PdfViewer.onContextMenuRequested] handoff, so the host
+  /// sees the context the stock menu would have had.
   Future<void> _onSecondaryTapUp(TapUpDetails details) async {
     final point = _pagePointAt(details.localPosition);
     if (point == null) return;
     final (page, x, y) = point;
-    if (!widget.contextMenuEnabled) {
-      // Host-takeover mode: hand the gesture to the host's own menu
-      // renderer instead of swallowing it. Position is the global cursor
-      // location; pagePoint is page coordinates for the host's hit tests.
-      widget.onContextMenuRequested?.call(
-        details.globalPosition,
-        page,
-        pagePoint: (x, y),
-      );
-      return;
-    }
+    final takeover = !widget.contextMenuEnabled;
     final editing = widget.editing;
     if (editing != null && !editing.isPickingColor) {
       // Existing form widgets become the selection in normal/select/form
@@ -3791,6 +3787,10 @@ class _PdfViewerState extends State<PdfViewer>
         final field = editing.formFieldAt(page, x, y);
         if (field != null) {
           editing.selectFormWidgetAt(page, x, y);
+          if (takeover) {
+            _requestContextMenu(details.globalPosition, page,
+                pagePoint: (x, y), target: PdfContextMenuTarget.formWidget);
+          }
           return;
         }
       }
@@ -3801,6 +3801,16 @@ class _PdfViewerState extends State<PdfViewer>
         if (hit != null || editing.hasAnnotationClipboard) {
           if (hit != null && !editing.isAnnotationSelected(page, hit.$1)) {
             editing.selectAnnotationAt(page, x, y);
+          }
+          if (takeover) {
+            _requestContextMenu(details.globalPosition, page,
+                pagePoint: (x, y),
+                target: hit != null
+                    ? PdfContextMenuTarget.annotation
+                    : PdfContextMenuTarget.emptyPage,
+                slot: hit?.$1,
+                annotation: hit?.$2);
+            return;
           }
           await showPdfAnnotationMenu(
             context: context,
@@ -3816,6 +3826,14 @@ class _PdfViewerState extends State<PdfViewer>
         // still offers Unlock - the mouse counterpart to the sidebar row.
         final locked = editing.lockedAnnotationAt(page, x, y);
         if (locked != null) {
+          if (takeover) {
+            _requestContextMenu(details.globalPosition, page,
+                pagePoint: (x, y),
+                target: PdfContextMenuTarget.lockedAnnotation,
+                slot: locked.$1,
+                annotation: locked.$2);
+            return;
+          }
           await showPdfAnnotationMenu(
             context: context,
             position: details.globalPosition,
@@ -3832,9 +3850,42 @@ class _PdfViewerState extends State<PdfViewer>
       // the eyedropper owns the click while it is armed
       return;
     }
+    if (takeover) {
+      // Reader mode has no editing session to hit-test through, so name
+      // the annotation from the document itself - a reader host can still
+      // branch on annotation type without owning a controller.
+      final reader = editing == null
+          ? _annotationHitAt(details.localPosition,
+              actionsOnly: false, at: point)
+          : null;
+      if (reader != null) {
+        _requestContextMenu(details.globalPosition, page,
+            pagePoint: (x, y),
+            target: PdfContextMenuTarget.annotation,
+            annotation: reader.annotation);
+        return;
+      }
+      // Prepare the same selection the stock text menu relies on, so the
+      // host's Copy has something to act on.
+      _prepareTextSelectionAt(details.localPosition);
+      _requestContextMenu(details.globalPosition, page,
+          pagePoint: (x, y), target: PdfContextMenuTarget.text);
+      return;
+    }
     // reading mode, or nothing under the click in editing mode: the text
     // menu, mirroring the touch selection chip for mouse users
     await _showTextMenu(details.globalPosition, details.localPosition, page);
+  }
+
+  /// Selects the word under [local] unless the click landed inside the
+  /// current selection, which is kept - the desktop-reader behaviour the
+  /// text menu (and its host-takeover counterpart) depend on so that Copy
+  /// has something to act on.
+  void _prepareTextSelectionAt(Offset local) {
+    final position = _textPositionAt(local, tolerance: 14);
+    if (!(position != null && _selectionContains(position))) {
+      _selectWordAt(local);
+    }
   }
 
   /// The mouse right-click text menu: editing/markup actions when an editor
@@ -3846,10 +3897,7 @@ class _PdfViewerState extends State<PdfViewer>
   /// no page text the menu does not open.
   Future<void> _showTextMenu(
       Offset globalPosition, Offset local, int page) async {
-    final position = _textPositionAt(local, tolerance: 14);
-    if (!(position != null && _selectionContains(position))) {
-      _selectWordAt(local);
-    }
+    _prepareTextSelectionAt(local);
     final hasSelection = _selRange != null;
     final hasText = _pageText(page).text.isNotEmpty;
     if (!hasSelection && !hasText) return;
@@ -4057,20 +4105,29 @@ class _PdfViewerState extends State<PdfViewer>
   }
 
   /// Bridge from the page overlay's interaction host to the viewer's
-  /// public [PdfViewer.onContextMenuRequested]: lets the long-press
-  /// path (which lives in the overlay) hand the gesture back to the host
-  /// when the stock menu is suppressed. Returns silently if the host did
-  /// not provide a callback - the gesture just stops there.
+  /// public [PdfViewer.onContextMenuRequested], and the single place a
+  /// [PdfContextMenuRequest] is assembled: callers resolve [target] (plus
+  /// the annotation behind it) the same way the stock menu would have, and
+  /// this fills in the selection and controller. Returns silently if the
+  /// host did not provide a callback - the gesture just stops there.
   void _requestContextMenu(
     Offset globalPosition,
     int pageIndex, {
-    (double, double) pagePoint = (0, 0),
+    required (double, double) pagePoint,
+    required PdfContextMenuTarget target,
+    int? slot,
+    PdfAnnotation? annotation,
   }) {
-    widget.onContextMenuRequested?.call(
-      globalPosition,
-      pageIndex,
+    widget.onContextMenuRequested?.call(PdfContextMenuRequest(
+      globalPosition: globalPosition,
+      pageIndex: pageIndex,
       pagePoint: pagePoint,
-    );
+      target: target,
+      controller: widget.editing ?? widget.formController,
+      slot: slot,
+      annotation: annotation,
+      selectedText: _controller.selectedText,
+    ));
   }
 
   Widget _textMenuRow(IconData icon, String label, bool enabled) => Row(
@@ -4771,24 +4828,25 @@ class _PdfViewerState extends State<PdfViewer>
     if (!widget.contextMenuEnabled) {
       final point = _pagePointAt(details.localPosition);
       if (point != null) {
-        widget.onContextMenuRequested?.call(
-          details.globalPosition,
-          point.$1,
-          pagePoint: (point.$2, point.$3),
-        );
+        _requestContextMenu(details.globalPosition, point.$1,
+            pagePoint: (point.$2, point.$3),
+            target: PdfContextMenuTarget.text);
       }
     }
   }
 
-  /// Reader-mode touch long-press fallback: with no text under the
-  /// press, an annotation joins the selection and gets the context
-  /// menu; empty page area gets the paste menu when the clipboard has
-  /// content. When [widget.contextMenuEnabled] is false the stock menu
-  /// is suppressed and the gesture is handed to
-  /// [widget.onContextMenuRequested] instead - matching the right-click
-  /// and editing-overlay long-press paths. Returns whether the gesture
-  /// was consumed (stock menu opened, host callback fired, or the press
-  /// already settled into a no-op selection change).
+  /// Touch long-press with no text under the press: an annotation joins
+  /// the selection and gets the context menu; empty page area gets the
+  /// paste menu when the clipboard has content. When
+  /// [widget.contextMenuEnabled] is false the stock menu is suppressed and
+  /// the gesture is handed to [widget.onContextMenuRequested] instead -
+  /// matching the right-click and editing-overlay long-press paths.
+  ///
+  /// Returns whether the gesture was consumed. The host-takeover branch
+  /// answers this the same way the stock branch does: a press with no menu
+  /// target (no annotation, nothing to paste), or one no host is listening
+  /// for, is *not* a menu gesture, so the caller still gets to clear the
+  /// text selection.
   bool _maybeAnnotationMenu(LongPressStartDetails details) {
     final editing = widget.editing;
     // Drawing/eyedropper tools own long-press as the start of their own
@@ -4801,22 +4859,39 @@ class _PdfViewerState extends State<PdfViewer>
     final (page, x, y) = point;
 
     if (!widget.contextMenuEnabled) {
-      // Stock menu disabled → hand the gesture to the host's renderer.
-      // Select the annotation under the press (when there is one) so the
-      // host has the same context the stock menu would have had; the host
-      // may also re-run `editing.selectableAnnotationAt` from
-      // `pagePoint` if it needs the (slot, annotation) pair.
-      if (editing != null) {
-        final hit = editing.selectableAnnotationAt(page, x, y);
-        if (hit != null && !editing.isAnnotationSelected(page, hit.$1)) {
-          editing.selectAnnotationAt(page, x, y);
+      // Reader with no editing session: the document itself still names
+      // the annotation, so a reader host can branch on annotation type.
+      if (editing == null) {
+        final reader = _annotationHitAt(details.localPosition,
+            actionsOnly: false, at: point);
+        if (reader == null || widget.onContextMenuRequested == null) {
+          return false;
         }
+        HapticFeedback.selectionClick();
+        _requestContextMenu(details.globalPosition, page,
+            pagePoint: (x, y),
+            target: PdfContextMenuTarget.annotation,
+            annotation: reader.annotation);
+        return true;
       }
-      widget.onContextMenuRequested?.call(
-        details.globalPosition,
-        page,
-        pagePoint: (x, y),
-      );
+      final hit = editing.selectableAnnotationAt(page, x, y);
+      // nothing to act on: not a menu gesture at all
+      if (hit == null && !editing.hasAnnotationClipboard) return false;
+      // select first, so the host sees the same context the stock menu
+      // would have had - and so a press with no listening host still
+      // leaves the selection the stock path would have made
+      if (hit != null && !editing.isAnnotationSelected(page, hit.$1)) {
+        editing.selectAnnotationAt(page, x, y);
+      }
+      if (widget.onContextMenuRequested == null) return false;
+      HapticFeedback.selectionClick();
+      _requestContextMenu(details.globalPosition, page,
+          pagePoint: (x, y),
+          target: hit != null
+              ? PdfContextMenuTarget.annotation
+              : PdfContextMenuTarget.emptyPage,
+          slot: hit?.$1,
+          annotation: hit?.$2);
       return true;
     }
 

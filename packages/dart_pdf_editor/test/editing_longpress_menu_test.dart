@@ -282,13 +282,13 @@ void main() {
 
   // When the host supplies an onContextMenuRequested callback, the
   // suppressed gesture is delivered to the callback instead of being
-  // dropped. The pageIndex and the page-coordinate pagePoint are passed
-  // through; the host can then call showMenu at globalPosition.
+  // dropped. The request carries the resolved target (annotation, text,
+  // form widget, ...) so the host never has to re-run a hit test.
   group('onContextMenuRequested host takeover', () {
     testWidgets(
         'long-press on an annotation in select mode hands the gesture to '
         'the host instead of opening the stock menu', (tester) async {
-      final hostCalls = <(int, (double, double))>[];
+      final hostCalls = <PdfContextMenuRequest>[];
       final editing = PdfEditingController(buildMultiPagePdf(1));
       addTearDown(editing.dispose);
       await tester.pumpWidget(MaterialApp(
@@ -300,9 +300,7 @@ void main() {
               document: editing.document,
               editing: editing,
               contextMenuEnabled: false,
-              onContextMenuRequested: (globalPos, page, {pagePoint = (0, 0)}) {
-                hostCalls.add((page, pagePoint));
-              },
+              onContextMenuRequested: hostCalls.add,
             ),
           ),
         ),
@@ -319,12 +317,16 @@ void main() {
               'menu is rerouted');
       expect(hostCalls, hasLength(1),
           reason: 'host takeover fires exactly once per long-press');
-      expect(hostCalls.first.$1, 0,
+      expect(hostCalls.first.pageIndex, 0,
           reason: 'pageIndex is forwarded');
       // pagePoint should be in page coordinates near (350, 425).
-      final (x, y) = hostCalls.first.$2;
+      final (x, y) = hostCalls.first.pagePoint;
       expect(x, closeTo(350, 0.001));
       expect(y, closeTo(425, 0.001));
+      // the resolved target rides along, so the host can branch on it
+      expect(hostCalls.first.target, PdfContextMenuTarget.annotation);
+      expect(hostCalls.first.annotation?.subtype, 'Square');
+      expect(hostCalls.first.slot, 0);
       // the stock annotation menu must not pop up either
       expect(find.byKey(const ValueKey('pdf-annot-menu-delete')),
           findsNothing);
@@ -334,7 +336,7 @@ void main() {
     testWidgets(
         'long-press in reader mode on a plain-text page hands the gesture '
         'to the host', (tester) async {
-      final hostCalls = <(int, (double, double))>[];
+      final hostCalls = <PdfContextMenuRequest>[];
       final controller = PdfViewerController();
       final editing = PdfEditingController(buildMultiPagePdf(1));
       addTearDown(editing.dispose);
@@ -348,10 +350,7 @@ void main() {
               controller: controller,
               editing: editing,
               contextMenuEnabled: false,
-              onContextMenuRequested: (globalPos, page,
-                  {pagePoint = (0, 0)}) {
-                hostCalls.add((page, pagePoint));
-              },
+              onContextMenuRequested: hostCalls.add,
             ),
           ),
         ),
@@ -362,6 +361,8 @@ void main() {
       await longPressAt(tester, viewPoint(100, 726));
       expect(hostCalls, hasLength(1),
           reason: 'reader-mode long-press is also handed to the host');
+      expect(hostCalls.first.target, PdfContextMenuTarget.text);
+      expect(hostCalls.first.selectedText, 'Page');
       expect(controller.selectedText, 'Page',
           reason: 'text selection still happens before the host callback');
       expect(find.byKey(const ValueKey('pdf-text-menu-copy')), findsNothing);
@@ -385,8 +386,7 @@ void main() {
               document: editing.document,
               editing: editing,
               // contextMenuEnabled defaults to true
-              onContextMenuRequested: (globalPos, page,
-                  {pagePoint = (0, 0)}) {
+              onContextMenuRequested: (request) {
                 hostCalls++;
               },
             ),
@@ -420,7 +420,7 @@ void main() {
     testWidgets(
         'long-press on an annotation in reader mode hands the gesture to '
         'the host instead of opening the stock menu', (tester) async {
-      final hostCalls = <(int, (double, double))>[];
+      final hostCalls = <PdfContextMenuRequest>[];
       final editing = PdfEditingController(buildMultiPagePdf(1));
       addTearDown(editing.dispose);
       await tester.pumpWidget(MaterialApp(
@@ -432,10 +432,7 @@ void main() {
               document: editing.document,
               editing: editing,
               contextMenuEnabled: false,
-              onContextMenuRequested: (globalPos, page,
-                  {pagePoint = (0, 0)}) {
-                hostCalls.add((page, pagePoint));
-              },
+              onContextMenuRequested: hostCalls.add,
             ),
           ),
         ),
@@ -453,12 +450,14 @@ void main() {
       expect(hostCalls, hasLength(1),
           reason: 'reader-mode annotation long-press now fires the host '
               'callback exactly once');
-      expect(hostCalls.first.$1, 0,
+      expect(hostCalls.first.pageIndex, 0,
           reason: 'pageIndex is forwarded');
-      final (x, y) = hostCalls.first.$2;
+      final (x, y) = hostCalls.first.pagePoint;
       expect(x, closeTo(350, 0.001),
           reason: 'pagePoint is in page coordinates');
       expect(y, closeTo(425, 0.001));
+      expect(hostCalls.first.target, PdfContextMenuTarget.annotation);
+      expect(hostCalls.first.annotation?.subtype, 'Square');
       expect(find.byKey(const ValueKey('pdf-annot-menu-delete')),
           findsNothing,
           reason: 'the stock annotation menu stays suppressed');
@@ -525,7 +524,7 @@ void main() {
               controller: controller,
               editing: editing,
               contextMenuEnabled: false,
-              onContextMenuRequested: (globalPos, page, {pagePoint = (0, 0)}) {
+              onContextMenuRequested: (request) {
                 hostCalls++;
               },
             ),
