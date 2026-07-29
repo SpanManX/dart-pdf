@@ -233,8 +233,11 @@ class _EditorScreenState extends State<EditorScreen>
   bool _restoringSession = false;
 
   /// The update checker, owned here unless the host injected one.
-  late final UpdateService _updates =
-      widget.updateService ?? UpdateService(currentVersion: AppInfo.version);
+  late final UpdateService _updates = widget.updateService ??
+      UpdateService(
+        currentVersion: AppInfo.version,
+        currentBuildCommit: AppInfo.buildCommit,
+      );
   bool get _ownsUpdates => widget.updateService == null;
 
   /// The in-app updater that downloads and applies a newer release.
@@ -326,8 +329,8 @@ class _EditorScreenState extends State<EditorScreen>
     final messenger = ScaffoldMessenger.of(context);
     messenger.showMaterialBanner(MaterialBanner(
       key: const ValueKey('update-available-banner'),
-      content: Text(
-          appL10n(context).editorUpdateAvailable(release.version.toString())),
+      content:
+          Text(appL10n(context).editorUpdateAvailable(release.displayVersion)),
       leading: const Icon(Icons.system_update_alt),
       actions: [
         TextButton(
