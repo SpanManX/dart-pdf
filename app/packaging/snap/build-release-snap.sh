@@ -38,6 +38,15 @@ command -v snapcraft >/dev/null || {
   exit 2
 }
 
+snapcraft_command=(snapcraft)
+if ((EUID != 0)); then
+  command -v sudo >/dev/null || {
+    echo "Snapcraft destructive builds need root (sudo was not found)" >&2
+    exit 2
+  }
+  snapcraft_command=(sudo snapcraft)
+fi
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
@@ -72,7 +81,9 @@ PY
 
 (
   cd "$work_dir"
-  snapcraft pack --destructive-mode --output "$(cd "$output" && pwd)"
+  "${snapcraft_command[@]}" pack \
+    --destructive-mode \
+    --output "$(cd "$output" && pwd)"
 )
 
 snap_file="$(find "$output" -maxdepth 1 -type f -name 'dartpdf_*.snap' -print -quit)"

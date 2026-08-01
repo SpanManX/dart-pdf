@@ -83,7 +83,7 @@ jobs:
           app/packaging/snap/build-release-snap.sh \
             --archive "$RUNNER_TEMP/snap-input/dartpdf-linux-x64.tar.gz" \
             --output "$RUNNER_TEMP/snap-output"
-          snapcraft lint "$RUNNER_TEMP"/snap-output/dartpdf_*.snap
+          sudo snapcraft lint "$RUNNER_TEMP"/snap-output/dartpdf_*.snap
 
       - name: Install and smoke-test snap
         run: |
