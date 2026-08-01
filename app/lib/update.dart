@@ -317,7 +317,7 @@ class UpdateService extends ChangeNotifier {
   ///   yet, and the "Download" button would only send them to a GitHub page
   ///   that isn't their update channel - exactly the confusing dead end we
   ///   want to avoid.
-  /// * Flatpak builds update through DartPDF's signed Flatpak repository.
+  /// * Flatpak and Snap builds update through their package repositories.
   ///   Offering a parallel AppImage download would bypass that package
   ///   manager and leave two competing installations on the machine.
   ///

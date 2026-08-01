@@ -20,8 +20,9 @@ so platform build files don't hardcode versions.
 3. `.github/workflows/release-app.yml` builds every platform and attaches the
    artifacts to a **draft** GitHub Release. Review, then publish - the in-app
    update checker cannot see a draft. Publishing also triggers
-   `.github/workflows/publish-flatpak.yml`, which packages the Linux tarball,
-   signs it, smoke-tests it, and updates the official Flatpak repository.
+   `.github/workflows/publish-flatpak.yml` and
+   `.github/workflows/publish-snap.yml`, which package and smoke-test the
+   Linux tarball, then update the official Flatpak repository and Snap Store.
 4. Write the store "What's New" text into
    [`release-notes/`](release-notes/) (`<version>-stores.txt` for Play,
    `<version>-appstore.txt` for both App Store platforms). See that
@@ -84,9 +85,9 @@ rolling tag `app-nightly`, recognized on Windows only after the user enables
 nightly updates; it must provide the source markers and
 `dartpdf-nightly-windows-installer.exe`/ZIP assets documented below. Publish
 stable draft Releases so the GitHub `/releases` API exposes them (drafts
-aren't visible unauthenticated). Flatpak installations skip the GitHub checker
-and update through the signed DartPDF Flatpak remote. The web build is always
-served fresh, so it skips the check.
+aren't visible unauthenticated). Flatpak and Snap installations skip the
+GitHub checker and update through their package repositories. The web build is
+always served fresh, so it skips the check.
 
 ## What CI produces
 
@@ -202,14 +203,25 @@ membership needed). What that means concretely:
   published. It digest-verifies the Linux tarball, builds and signs the app
   commit and repository summary, installs and smoke-tests the signed package,
   then deploys the dedicated `dartpdf-flatpak` Firebase Hosting site.
+- Snap Store is the secondary package-managed channel. Install it with
+  `sudo snap install dartpdf`; its public listing is
+  <https://snapcraft.io/dartpdf>.
+- `.github/workflows/publish-snap.yml` digest-verifies the same Linux release
+  asset, builds, lints, installs, and launches the strictly confined snap,
+  uploads it to `stable`, then verifies a clean install from the Store. The
+  repository secret `SNAPCRAFT_STORE_CREDENTIALS` must contain an exported
+  credential scoped to the `dartpdf` snap, stable channel, and
+  `package_push,package_release,package_update` ACLs. Rotate it with
+  `snapcraft export-login` before it expires; packaging details live in
+  [`packaging/snap/README.md`](packaging/snap/README.md).
 - The private repository key lives in the Actions secret
   `FLATPAK_GPG_PRIVATE_KEY`. Its pinned fingerprint is
   `32E53D6314CF1F1448462E2319EFDD96AD44514D`; backup details are in
   [`../flatpak-hosting/README.md`](../flatpak-hosting/README.md). Do not rotate
   it casually: existing clients trust this key.
 - AppImage and portable tarball artifacts remain available as fallbacks. The
-  AppImage uses the in-app updater; Flatpak builds deliberately leave updates
-  to the package manager.
+  AppImage uses the in-app updater; Flatpak and Snap builds deliberately leave
+  updates to their package managers.
 
 ### Web
 - The CI zip is a static bundle. Host it anywhere; for the file-association

@@ -15,6 +15,12 @@ flatpak install --from \
   https://dartpdf-flatpak.web.app/dartpdf.flatpakref
 ```
 
+Ubuntu and other snapd users can use the secondary Snap Store channel:
+
+```sh
+sudo snap install dartpdf
+```
+
 AppImage and portable tarball builds remain available from
 [GitHub Releases](https://github.com/ben-milanko/dart-pdf/releases/latest).
 
