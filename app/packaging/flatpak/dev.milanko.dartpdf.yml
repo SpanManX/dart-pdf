@@ -15,9 +15,9 @@
 # CI replaces this source with the digest-verified release asset it downloaded;
 # see build-self-hosted-repo.sh and flatpak-hosting/README.md.
 app-id: dev.milanko.dartpdf
-runtime: org.freedesktop.Platform
-runtime-version: '24.08'
-sdk: org.freedesktop.Sdk
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
 command: dartpdf
 
 finish-args:

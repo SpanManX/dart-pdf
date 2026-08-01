@@ -32,6 +32,9 @@ workflow instead of rebuilding Flutter inside the Flatpak sandbox. Its checked-
 in source URL pins the current stable release for local builds. Repository CI
 temporarily replaces that source with the digest-verified release asset it has
 downloaded, so publishing never depends on a draft or not-yet-uploaded URL.
+The GNOME runtime supplies the GTK desktop stack and `libsecret` used by
+`flutter_secure_storage`; dependencies outside that runtime stay bundled with
+the release archive.
 
 ## Sandbox permissions
 
@@ -56,7 +59,7 @@ sudo apt install flatpak flatpak-builder
 flatpak remote-add --if-not-exists --user flathub \
   https://dl.flathub.org/repo/flathub.flatpakrepo
 flatpak install --user flathub \
-  org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
+  org.gnome.Platform//50 org.gnome.Sdk//50
 
 cd app/packaging/flatpak
 flatpak-builder --user --install --force-clean \

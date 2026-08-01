@@ -21,7 +21,7 @@ permissions:
 
 env:
   FLATPAK_ID: dev.milanko.dartpdf
-  FLATPAK_RUNTIME: '24.08'
+  FLATPAK_RUNTIME: '50'
   FLATPAK_BASE_URL: https://dartpdf-flatpak.web.app
   FLATPAK_GPG_FINGERPRINT: 32E53D6314CF1F1448462E2319EFDD96AD44514D
 
@@ -86,8 +86,8 @@ jobs:
           flatpak remote-add --user --if-not-exists flathub \
             https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive -y flathub \
-            "org.freedesktop.Platform//$FLATPAK_RUNTIME" \
-            "org.freedesktop.Sdk//$FLATPAK_RUNTIME"
+            "org.gnome.Platform//$FLATPAK_RUNTIME" \
+            "org.gnome.Sdk//$FLATPAK_RUNTIME"
 
       - name: Import and verify repository signing key
         env:
