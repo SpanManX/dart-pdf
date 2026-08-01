@@ -60,10 +60,10 @@ modules:
         /app/share/applications/dev.milanko.dartpdf.desktop
       - install -Dm644 dev.milanko.dartpdf.metainfo.xml
         /app/share/metainfo/dev.milanko.dartpdf.metainfo.xml
-      - install -Dm644 icon-64.png  /app/share/icons/hicolor/64x64/apps/dev.milanko.dartpdf.png
-      - install -Dm644 icon-128.png /app/share/icons/hicolor/128x128/apps/dev.milanko.dartpdf.png
-      - install -Dm644 icon-256.png /app/share/icons/hicolor/256x256/apps/dev.milanko.dartpdf.png
-      - install -Dm644 icon-512.png /app/share/icons/hicolor/512x512/apps/dev.milanko.dartpdf.png
+      - install -Dm644 dartpdf-64.png  /app/share/icons/hicolor/64x64/apps/dev.milanko.dartpdf.png
+      - install -Dm644 dartpdf-128.png /app/share/icons/hicolor/128x128/apps/dev.milanko.dartpdf.png
+      - install -Dm644 dartpdf-256.png /app/share/icons/hicolor/256x256/apps/dev.milanko.dartpdf.png
+      - install -Dm644 dartpdf-512.png /app/share/icons/hicolor/512x512/apps/dev.milanko.dartpdf.png
     sources:
       # 1) The prebuilt Linux bundle (binary + data/ + lib/).
       - type: archive
