@@ -124,7 +124,8 @@ jobs:
           flatpak remote-add --user --if-not-exists \
             --gpg-import=app/packaging/flatpak/dartpdf-flatpak-public-key.gpg \
             dartpdf-local "file://$GITHUB_WORKSPACE/flatpak-hosting/public/repo"
-          flatpak install --user --noninteractive -y dartpdf-local "$FLATPAK_ID"
+          flatpak install --user --noninteractive -y \
+            dartpdf-local "$FLATPAK_ID//stable"
           flatpak info --user "$FLATPAK_ID"
           set +e
           timeout 12s dbus-run-session -- xvfb-run -a \
@@ -151,3 +152,23 @@ jobs:
           projectId: dart-pdf-demo
           channelId: live
           entryPoint: flatpak-hosting
+
+      - name: Verify installation from the public repository
+        env:
+          EXPECTED_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          metadata="$(curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            "$FLATPAK_BASE_URL/version.json")"
+          [[ "$(jq -r .version <<<"$metadata")" == "$EXPECTED_VERSION" ]]
+
+          flatpak uninstall --user --noninteractive -y "$FLATPAK_ID"
+          flatpak remote-delete --user --force dartpdf-local
+          flatpak install --user --noninteractive -y --from \
+            "$FLATPAK_BASE_URL/dartpdf.flatpakref"
+
+          [[ "$(flatpak info --user --show-ref "$FLATPAK_ID")" == \
+            "app/$FLATPAK_ID/x86_64/stable" ]]
+          [[ "$(flatpak info --user --show-version "$FLATPAK_ID")" == \
+            "$EXPECTED_VERSION" ]]

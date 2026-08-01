@@ -13,7 +13,9 @@ an already-published version. The workflow:
 2. builds the Flatpak from `app/packaging/flatpak/`;
 3. signs the app commit and repository summary with the dedicated Flatpak key;
 4. installs and smoke-tests the result from a local signed remote; and
-5. deploys this Firebase Hosting site.
+5. deploys this Firebase Hosting site; and
+6. performs a clean install from the public `.flatpakref`, verifying the
+   `stable` branch and published version.
 
 Generated output lives in `flatpak-hosting/public/` and is intentionally not
 committed. The public signing key and fingerprint are committed under

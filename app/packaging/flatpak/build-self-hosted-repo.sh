@@ -113,6 +113,7 @@ path.write_text(text[:source_start] + replacement + text[source_end:])
 PY
 
 flatpak-builder --user --force-clean \
+  --default-branch=stable \
   --repo="$output/repo" \
   --gpg-sign="$gpg_key" \
   --gpg-homedir="$gpg_homedir" \
