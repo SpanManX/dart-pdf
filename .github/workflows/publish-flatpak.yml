@@ -170,5 +170,6 @@ jobs:
 
           [[ "$(flatpak info --user --show-ref "$FLATPAK_ID")" == \
             "app/$FLATPAK_ID/x86_64/stable" ]]
-          [[ "$(flatpak info --user --show-version "$FLATPAK_ID")" == \
-            "$EXPECTED_VERSION" ]]
+          installed_version="$(LC_ALL=C flatpak info --user "$FLATPAK_ID" | \
+            sed -n 's/^[[:space:]]*Version:[[:space:]]*//p')"
+          [[ "$installed_version" == "$EXPECTED_VERSION" ]]
