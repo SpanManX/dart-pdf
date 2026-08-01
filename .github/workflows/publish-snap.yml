@@ -95,7 +95,11 @@ jobs:
           # so its user has no PAM-created session cgroup for snap-confine.
           # Root still runs through the snap's strict AppArmor/seccomp/mount
           # sandbox and avoids that runner-only cgroup limitation.
-          sudo timeout 12s dbus-run-session -- xvfb-run -a snap run "$SNAP_NAME" \
+          sudo install -d -m 700 /run/user/0 /root/snap/dartpdf/common
+          sudo env XDG_RUNTIME_DIR=/run/user/0 \
+            timeout 12s dbus-run-session -- \
+            xvfb-run -a -f /root/snap/dartpdf/common/.Xauthority \
+            snap run "$SNAP_NAME" \
             >"$RUNNER_TEMP/dartpdf-snap-smoke.log" 2>&1
           task_status=$?
           set -e
@@ -129,7 +133,11 @@ jobs:
           [[ "$(snap info "$SNAP_NAME" | sed -n 's/^installed:[[:space:]]*\([^[:space:]]*\).*/\1/p')" == \
             "$EXPECTED_VERSION" ]]
           set +e
-          sudo timeout 12s dbus-run-session -- xvfb-run -a snap run "$SNAP_NAME" \
+          sudo install -d -m 700 /run/user/0 /root/snap/dartpdf/common
+          sudo env XDG_RUNTIME_DIR=/run/user/0 \
+            timeout 12s dbus-run-session -- \
+            xvfb-run -a -f /root/snap/dartpdf/common/.Xauthority \
+            snap run "$SNAP_NAME" \
             >"$RUNNER_TEMP/dartpdf-snap-store-smoke.log" 2>&1
           task_status=$?
           set -e
