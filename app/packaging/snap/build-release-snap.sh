@@ -49,7 +49,14 @@ fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 work_dir="$(mktemp -d)"
-trap 'rm -rf "$work_dir"' EXIT
+cleanup() {
+  if ((EUID == 0)); then
+    rm -rf -- "$work_dir"
+  else
+    sudo rm -rf -- "$work_dir"
+  fi
+}
+trap cleanup EXIT
 
 mkdir -p "$work_dir/snap" "$output"
 cp "$script_dir/snap/snapcraft.yaml" "$work_dir/snap/snapcraft.yaml"

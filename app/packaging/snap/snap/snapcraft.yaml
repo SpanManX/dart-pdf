@@ -5,9 +5,19 @@ grade: stable
 confinement: strict
 compression: lzo
 assumes: [snapd2.55]
+contact: https://github.com/ben-milanko/dart-pdf/issues
 
 platforms:
   amd64:
+
+# ONNX Runtime is opened by Dart FFI and the desktop bundle carries its
+# platform-generated JNI companion; neither relationship is visible to the
+# ELF dependency scanner.
+lint:
+  ignore:
+    - library:
+        - lib/libdartjni.so
+        - lib/libonnxruntime.so.1.15.1
 
 apps:
   dartpdf:
