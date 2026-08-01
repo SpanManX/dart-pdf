@@ -91,7 +91,11 @@ jobs:
           sudo snap install --dangerous "$snap_file"
           snap info "$SNAP_NAME"
           set +e
-          timeout 12s dbus-run-session -- xvfb-run -a snap run "$SNAP_NAME" \
+          # GitHub hosts the runner inside a non-interactive system service,
+          # so its user has no PAM-created session cgroup for snap-confine.
+          # Root still runs through the snap's strict AppArmor/seccomp/mount
+          # sandbox and avoids that runner-only cgroup limitation.
+          sudo timeout 12s dbus-run-session -- xvfb-run -a snap run "$SNAP_NAME" \
             >"$RUNNER_TEMP/dartpdf-snap-smoke.log" 2>&1
           task_status=$?
           set -e
@@ -125,7 +129,7 @@ jobs:
           [[ "$(snap info "$SNAP_NAME" | sed -n 's/^installed:[[:space:]]*\([^[:space:]]*\).*/\1/p')" == \
             "$EXPECTED_VERSION" ]]
           set +e
-          timeout 12s dbus-run-session -- xvfb-run -a snap run "$SNAP_NAME" \
+          sudo timeout 12s dbus-run-session -- xvfb-run -a snap run "$SNAP_NAME" \
             >"$RUNNER_TEMP/dartpdf-snap-store-smoke.log" 2>&1
           task_status=$?
           set -e
