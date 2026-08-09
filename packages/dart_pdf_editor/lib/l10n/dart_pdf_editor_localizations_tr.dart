@@ -996,6 +996,10 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
   String get shellShowAnnotations => 'Ek açıklamaları göster';
 
   @override
+  String get shellShowScrollbarChapters =>
+      'Kaydırma çubuğunda bölümleri göster';
+
+  @override
   String get shellTabHere => 'Buraya sekmele';
 
   @override
