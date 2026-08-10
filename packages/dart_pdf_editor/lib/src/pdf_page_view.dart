@@ -402,6 +402,18 @@ class PdfPageView extends StatefulWidget {
   /// Set false to fall back to the single bounded [earlyPrefixPaint] snapshot.
   static bool progressiveStreamingPaint = true;
 
+  /// UI-time ceiling for progressive prefix replay. Once one prefix costs at
+  /// least this long, larger cumulative prefixes from the same record are
+  /// skipped and the final worker result is allowed to land next.
+  ///
+  /// This is deliberately a measured time budget rather than a command-count
+  /// limit: 8,000 simple lines and 8,000 clipped glyphs have radically
+  /// different costs, as do desktop and mobile GPUs. Twelve milliseconds
+  /// leaves roughly 4.7 ms of a 60 Hz frame for layout, input and composition.
+  /// Set null to keep painting every streamed prefix.
+  static Duration? progressivePartialUiBudget =
+      const Duration(milliseconds: 12);
+
   /// Composite deep-zoom detail from the [PdfTileStore] zoom-bucket pyramid
   /// instead of the single unbudgeted detail patch. When true (and the page
   /// retains a region-cullable scene), the visible slice is tiled: panning at
@@ -614,6 +626,23 @@ class _PdfPageViewState extends State<PdfPageView>
   /// an out-of-order async rasterize of an earlier partial can't clobber a later
   /// one. Only advances; a partial applies only if its seq exceeds this.
   int _progressiveAppliedSeq = 0;
+
+  /// Latest-only mailbox for cumulative progressive prefixes. The worker may
+  /// emit another (strict superset) while picture construction or rasterization
+  /// of the current prefix is awaiting the GPU. Retaining every callback as an
+  /// independent future kept all of those command buffers live and replayed
+  /// obsolete snapshots. One active build plus this one pending slot bounds the
+  /// transient memory and always advances to the newest available prefix.
+  ({
+    int generation,
+    int pageIndex,
+    List<PdfRenderCommand> commands,
+    int seq,
+  })? _progressivePending;
+  bool _progressiveDrainActive = false;
+  int _progressiveFinalizedThrough = 0;
+  int _progressiveBudgetGeneration = 0;
+  bool _progressiveBudgetSpent = false;
 
   // Full-page rasters stay within GPU texture limits and sane memory:
   // at most ~16.7M px (64 MB RGBA) and 8192 px per side. Past these caps
@@ -878,6 +907,7 @@ class _PdfPageViewState extends State<PdfPageView>
     // its null result resolves into a future nobody awaits any more
     _speculativeStripPlan = null;
     _speculativeStripDetail = null;
+    _progressivePending = null;
     widget.renderScheduler?.cancel(this);
     // Scrolled out of the cache window: drop this page's queued worker request
     // so the worker's next slot serves a page still on screen (the abandoned
@@ -1347,6 +1377,21 @@ class _PdfPageViewState extends State<PdfPageView>
         hold: widget.renderHold,
       );
 
+  Future<bool> _paceWorkerUiWork({bool replacePending = true}) async {
+    final scheduler = widget.renderScheduler;
+    if (scheduler == null) return true;
+    // renderPriority includes large visibility boosts (for example -1000),
+    // while PdfPageRenderScheduler.focus is a real page index. Comparing the
+    // two made completion ordering effectively arbitrary. The state token
+    // already identifies the visible/preloaded slot; rank it by its actual
+    // page index and keep only its latest cumulative worker result.
+    return scheduler.paceUiWork(
+      this,
+      widget.previewIndex,
+      replacePending: replacePending,
+    );
+  }
+
   /// Interprets the page into a picture, off the UI thread when a worker is
   /// available and the page is serializable, else locally. The worker path
   /// records the page on a background isolate and replays the returned
@@ -1395,10 +1440,16 @@ class _PdfPageViewState extends State<PdfPageView>
       if (_abandoned(pageIndex)) return (_emptyPicture(), null, false);
       if (commands != null) {
         if (_renderPaused) return null;
+        if (!await _paceWorkerUiWork() || _abandoned(pageIndex)) return null;
         _lastInterpretPath = 'worker';
         _lastInterpretResultBytes = _logImageStats(pageIndex, commands);
         final (picture, scene) = await _replayableFromCommands(commands,
             maxImagePixelRatio: imageRatio);
+        if (_abandoned(pageIndex) || _renderPaused) {
+          picture.dispose();
+          scene?.dispose();
+          return null;
+        }
         _lastInterpretWaitMs = waitMs;
         _lastInterpretBuildMs =
             buildClock == null ? null : buildClock.elapsedMicroseconds / 1000.0;
@@ -1638,6 +1689,12 @@ class _PdfPageViewState extends State<PdfPageView>
         _image != null) {
       return;
     }
+    if (!await _paceWorkerUiWork() ||
+        _superseded(generation, pageIndex) ||
+        _renderPaused ||
+        _image != null) {
+      return;
+    }
 
     final picture = await PdfPageRenderer.pictureFromCommandsWithPlan(
       widget.page,
@@ -1698,9 +1755,24 @@ class _PdfPageViewState extends State<PdfPageView>
         _renderPaused ||
         _image != null ||
         _slugPicture != null ||
+        generation <= _progressiveFinalizedThrough ||
+        (generation == _progressiveBudgetGeneration &&
+            _progressiveBudgetSpent) ||
         seq <= _progressiveAppliedSeq) {
       return;
     }
+    if (!await _paceWorkerUiWork()) return;
+    if (_superseded(generation, pageIndex) ||
+        _renderPaused ||
+        _image != null ||
+        _slugPicture != null ||
+        generation <= _progressiveFinalizedThrough ||
+        (generation == _progressiveBudgetGeneration &&
+            _progressiveBudgetSpent) ||
+        seq <= _progressiveAppliedSeq) {
+      return;
+    }
+    final uiClock = Stopwatch()..start();
     final picture = await PdfPageRenderer.pictureFromCommandsWithPlan(
       widget.page,
       commands,
@@ -1713,6 +1785,7 @@ class _PdfPageViewState extends State<PdfPageView>
         _renderPaused ||
         _image != null ||
         _slugPicture != null ||
+        generation <= _progressiveFinalizedThrough ||
         seq <= _progressiveAppliedSeq) {
       picture.dispose();
       return;
@@ -1728,17 +1801,91 @@ class _PdfPageViewState extends State<PdfPageView>
         _renderPaused ||
         _image != null ||
         _slugPicture != null ||
+        generation <= _progressiveFinalizedThrough ||
         seq <= _progressiveAppliedSeq) {
       image.dispose();
       return;
     }
     _progressiveAppliedSeq = seq;
+    uiClock.stop();
+    final budget = PdfPageView.progressivePartialUiBudget;
+    final budgetSpent = budget != null && uiClock.elapsed >= budget;
+    if (budgetSpent && generation == _progressiveBudgetGeneration) {
+      _progressiveBudgetSpent = true;
+      // A pending partial is necessarily larger than this one and cannot fit
+      // the same frame budget. Release its cumulative command buffer now.
+      if (_progressivePending?.generation == generation) {
+        _progressivePending = null;
+      }
+    }
     setState(() {
       _preview?.dispose();
       _preview = image;
     });
     PdfPerfLog.log('progressive-partial page=$pageIndex seq=$seq '
-        'commands=${commands.length}${PdfPerfLog.rssSuffix()}');
+        'commands=${commands.length} ui='
+        '${(uiClock.elapsedMicroseconds / 1000).toStringAsFixed(1)}ms '
+        'budgetStop=$budgetSpent${PdfPerfLog.rssSuffix()}');
+  }
+
+  void _queueProgressivePartial(
+    int generation,
+    int pageIndex,
+    List<PdfRenderCommand> commands,
+    int seq,
+  ) {
+    if (generation <= _progressiveFinalizedThrough ||
+        _superseded(generation, pageIndex)) {
+      return;
+    }
+    if (generation > _progressiveBudgetGeneration) {
+      _progressiveBudgetGeneration = generation;
+      _progressiveBudgetSpent = false;
+    }
+    if (_progressiveBudgetSpent) return;
+    _progressivePending = (
+      generation: generation,
+      pageIndex: pageIndex,
+      commands: commands,
+      seq: seq,
+    );
+    if (_progressiveDrainActive) return;
+    _progressiveDrainActive = true;
+    unawaited(_drainProgressivePartials());
+  }
+
+  Future<void> _drainProgressivePartials() async {
+    try {
+      while (mounted) {
+        final pending = _progressivePending;
+        _progressivePending = null;
+        if (pending == null) return;
+        await _paintProgressivePartial(
+          pending.generation,
+          pending.pageIndex,
+          pending.commands,
+          pending.seq,
+        );
+      }
+    } finally {
+      _progressiveDrainActive = false;
+      // There is no await between observing a null mailbox and this finally on
+      // Dart's single isolate, but retain this guard for callbacks delivered by
+      // a custom worker during error unwinding.
+      if (mounted && _progressivePending != null) {
+        _progressiveDrainActive = true;
+        unawaited(_drainProgressivePartials());
+      }
+    }
+  }
+
+  void _finalizeProgressivePartials(int generation) {
+    if (generation > _progressiveFinalizedThrough) {
+      _progressiveFinalizedThrough = generation;
+    }
+    if ((_progressivePending?.generation ?? generation + 1) <= generation) {
+      _progressivePending = null;
+    }
   }
 
   Future<Completer<bool>?> _paintVectorFirst(
@@ -1774,13 +1921,21 @@ class _PdfPageViewState extends State<PdfPageView>
           ? null
           : (partial) {
               final seq = ++_progressiveSeqCounter;
-              unawaited(_paintProgressivePartial(
-                  generation, pageIndex, partial, seq));
+              _queueProgressivePartial(generation, pageIndex, partial, seq);
             },
     );
     if (_superseded(generation, pageIndex) ||
         _renderPaused ||
         commands == null) {
+      return null;
+    }
+    // Every partial is a subset of this final buffer. Clear the mailbox before
+    // requesting the final UI turn so it cannot wait behind or race another
+    // obsolete prefix from its own page.
+    _finalizeProgressivePartials(generation);
+    if (!await _paceWorkerUiWork() ||
+        _superseded(generation, pageIndex) ||
+        _renderPaused) {
       return null;
     }
 
@@ -1901,7 +2056,9 @@ class _PdfPageViewState extends State<PdfPageView>
     // landed full raster has a non-null _rasteredRatio). Deliberately leave
     // _rasteredRatio null so the full pass below is not skipped by its
     // resolution-unchanged guard - it must re-raster to bring the images in.
-    if (_superseded(generation, pageIndex) || _rasteredRatio != null) {
+    if (_superseded(generation, pageIndex) ||
+        _renderPaused ||
+        _rasteredRatio != null) {
       image.dispose();
       return null;
     }
@@ -2273,8 +2430,9 @@ class _PdfPageViewState extends State<PdfPageView>
         ratio: effective,
         rasterize: rasterize,
       );
-      if (_superseded(generation, pageIndex)) {
+      if (_superseded(generation, pageIndex) || _renderPaused) {
         image.dispose();
+        if (!_superseded(generation, pageIndex)) _render();
         return;
       }
       final cache = widget.previewCache;
@@ -3119,9 +3277,10 @@ class _PdfPageViewState extends State<PdfPageView>
     final store = PdfPageView.debugTileStoreOverride ?? PdfTileStore.instance;
     final size = _renderPlan.pageSize(widget.page);
     if (size.width <= 0 || size.height <= 0) return false;
-    return store.viewFitsBudget(
+    final desired = _desiredRatioAt(widget.scale);
+    final status = store.viewBudgetStatus(
       pageSize: size,
-      desiredRatio: _desiredRatioAt(widget.scale),
+      desiredRatio: desired,
       visiblePageRect: Rect.fromLTRB(
         fraction.left * size.width,
         fraction.top * size.height,
@@ -3129,6 +3288,22 @@ class _PdfPageViewState extends State<PdfPageView>
         fraction.bottom * size.height,
       ),
     );
+    if (status == null) {
+      PdfPerfLog.log(
+        'tile fallback page=${widget.previewIndex} reason=invalid-geometry '
+        'desired=${desired.toStringAsFixed(2)}',
+      );
+      return false;
+    }
+    if (!status.fits) {
+      PdfPerfLog.log(
+        'tile fallback page=${widget.previewIndex} reason=budget '
+        'rung=${status.rung} visible=${status.visibleTiles} '
+        'limit=${status.limit} capacity=${status.capacity} '
+        'desired=${desired.toStringAsFixed(2)}',
+      );
+    }
+    return status.fits;
   }
 
   /// The [PdfTileStore] deep-zoom composite for this page, or null when the
@@ -3144,6 +3319,17 @@ class _PdfPageViewState extends State<PdfPageView>
     final desired = _tileDesiredRatio;
     if (scene == null || fraction == null || desired == null) return null;
     final store = PdfPageView.debugTileStoreOverride ?? PdfTileStore.instance;
+    final session = _tileRasterSessionFor(scene);
+    final scheduling = session is PdfTileRasterScheduling
+        ? session as PdfTileRasterScheduling
+        : null;
+    final sessionCap = scheduling?.maxNewTilesPerPaint;
+    final sceneCap = scene.regionIndexBuildIsHeavy ? 1 : null;
+    final maxNewTiles = sessionCap == null
+        ? sceneCap
+        : sceneCap == null
+            ? sessionCap
+            : math.min(sessionCap, sceneCap);
     return Positioned.fill(
       child: PdfTileLayer(
         store: store,
@@ -3167,6 +3353,7 @@ class _PdfPageViewState extends State<PdfPageView>
         ),
         persistence: _tilePersistence,
         canRasterize: _tileRegionRasterizable,
+        batchRasters: scheduling?.batchAdjacentTiles,
         // A grid-indexed CAD scene can select tens of thousands of commands
         // across one viewport slab. replayRegion records those commands
         // synchronously before toImage yields, so batching every missing tile
@@ -3174,7 +3361,7 @@ class _PdfPageViewState extends State<PdfPageView>
         // Admit one tile per paint instead. A tile completion repaints the
         // layer and advances the center-out fill; ordinary scenes retain the
         // lower-overhead batched path.
-        maxNewTilesPerPaint: scene.regionIndexBuildIsHeavy ? 1 : null,
+        maxNewTilesPerPaint: maxNewTiles,
       ),
     );
   }
@@ -3728,7 +3915,8 @@ class _PdfPageViewState extends State<PdfPageView>
 /// serves that request (and every later one) through Canvas. The failed
 /// session stays owned until dispose: another slab may already be in flight,
 /// and the backend contract allows it to finish before resources are freed.
-class _FallbackTileRasterSession implements PdfTileRasterSession {
+class _FallbackTileRasterSession
+    implements PdfTileRasterSession, PdfTileRasterScheduling {
   _FallbackTileRasterSession({
     required PdfTileRasterSession primary,
     required this.fallback,
@@ -3744,6 +3932,22 @@ class _FallbackTileRasterSession implements PdfTileRasterSession {
 
   @override
   PdfRetainedScene get scene => fallback.scene;
+
+  @override
+  bool get batchAdjacentTiles {
+    final active = _primaryEnabled ? _primary : fallback;
+    return active is PdfTileRasterScheduling
+        ? (active as PdfTileRasterScheduling).batchAdjacentTiles
+        : true;
+  }
+
+  @override
+  int? get maxNewTilesPerPaint {
+    final active = _primaryEnabled ? _primary : fallback;
+    return active is PdfTileRasterScheduling
+        ? (active as PdfTileRasterScheduling).maxNewTilesPerPaint
+        : null;
+  }
 
   @override
   Future<ui.Image> rasterizeRegion(
