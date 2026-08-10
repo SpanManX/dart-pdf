@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Add a live Canvas/flutter_gpu tile-backend switch to Developer tools, along
+  with persistent texture/geometry ceilings and diagnostics for actual route,
+  fallback reasons, compile/replay time, cache pressure, uploads/readbacks,
+  and live resource leases. Export all GPU metrics in the JSON snapshot. PR
+  web previews link to downloadable macOS, Windows, and Linux native builds so
+  the real Impeller backend can be tested even though flutter_gpu has no web
+  runtime. The ad-hoc macOS preview/release packages now omit the provisioned
+  Keychain entitlement so macOS can launch them normally.
+
 ## 3.4.0
 
 - Copy and paste annotations between open documents, save placed stamps back
