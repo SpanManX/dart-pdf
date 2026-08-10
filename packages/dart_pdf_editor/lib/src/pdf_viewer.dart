@@ -786,6 +786,37 @@ class _ViewportNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
 }
 
+/// The contiguous span of pages overlapping the viewport, as a [Listenable]
+/// the page views subscribe to individually.
+///
+/// Deliberately *not* viewer state behind a `setState`. The span changes a
+/// couple of times per page crossing - far more often than the scroll settle
+/// the page views used to rebuild on - and rebuilding the whole viewer to hand
+/// a bool to the two or three pages whose flag actually flipped costs a
+/// visible slice of the frame budget on a dense sheet (it moved `scroll-scan`'s
+/// buildP95 and buildMax when #657's fix first landed that way). Each
+/// [_PdfViewerPage] listens and rebuilds only itself, and only when its own
+/// answer changes.
+class _PdfOnScreenSpan extends ChangeNotifier {
+  /// -1 until the first layout has measured the viewport.
+  int first = -1;
+  int last = -1;
+
+  void set(int newFirst, int newLast) {
+    if (newFirst == first && newLast == last) return;
+    first = newFirst;
+    last = newLast;
+    notifyListeners();
+  }
+
+  /// Whether page [index] overlaps the viewport. Before the first measurement
+  /// every mounted page counts as on screen: the reduced-resolution prefetch
+  /// path must never be the *first* thing a page renders at, or the initial
+  /// paint lands soft.
+  bool contains(int index) =>
+      first < 0 || (index >= first && index <= last);
+}
+
 /// A [Listenable] that relays whichever [source] is currently attached.
 ///
 /// The controller outlives the viewer state it drives (and can be handed a new
@@ -3114,6 +3145,7 @@ class _PdfViewerState extends State<PdfViewer>
     _touchFlinger.dispose();
     _hBounceController.dispose();
     _focusNode.dispose();
+    _onScreenSpan.dispose();
     super.dispose();
   }
 
@@ -3320,22 +3352,63 @@ class _PdfViewerState extends State<PdfViewer>
       return;
     }
     final matrix = _transform.value;
-    final scale = matrix.getMaxScaleOnAxis();
-    // Unproject the screen centre (along the scroll axis) through the zoom
-    // window. The old scroll+viewport/2 calculation was only valid while the
+    final rawScale = matrix.getMaxScaleOnAxis();
+    final scale = rawScale.isFinite && rawScale > 0 ? rawScale : 1.0;
+    // Unproject the viewport (along the scroll axis) through the zoom window.
+    // The old scroll+viewport/2 calculation was only valid while the
     // transform's main-axis translation sat at its focal-centred default.
-    final center = _scroll.offset +
-        (_mainView / 2 - matrix.storage[_mainTranslate]) /
-            (scale.isFinite && scale > 0 ? scale : 1.0);
+    final viewStart =
+        _scroll.offset - matrix.storage[_mainTranslate] / scale;
+    final viewEnd = viewStart + _mainView / scale;
+    final center = viewStart + _mainView / (2 * scale);
+    var current = _pages.length - 1;
+    var found = false;
+    var first = -1;
+    var last = -1;
     var offset = 0.0;
     for (var i = 0; i < _pages.length; i++) {
-      offset += _pageMain(i) + widget.pageSpacing;
-      if (center < offset) {
-        _controller._setCurrentPage(i);
-        return;
+      final main = _pageMain(i);
+      // The page's own extent decides visibility; the spacing that follows it
+      // belongs to no page. `current` keeps the original rule (the spacing
+      // after a page counts as that page) so the reported page number and
+      // render focus are unchanged by this pass.
+      if (offset < viewEnd && offset + main > viewStart) {
+        if (first < 0) first = i;
+        last = i;
       }
+      offset += main + widget.pageSpacing;
+      if (!found && center < offset) {
+        current = i;
+        found = true;
+      }
+      // Pages are laid out in order, so once one starts past the viewport
+      // nothing after it can be visible either.
+      if (found && offset - widget.pageSpacing >= viewEnd) break;
     }
-    _controller._setCurrentPage(_pages.length - 1);
+    _controller._setCurrentPage(current);
+    // A viewport that fell entirely inside the gap between two pages overlaps
+    // none of them; the page the centre is on is still what the user is at.
+    _setOnScreenRange(first < 0 ? current : first, last < 0 ? current : last);
+  }
+
+  /// The span of pages overlapping the viewport - see [_PdfOnScreenSpan].
+  final _onScreenSpan = _PdfOnScreenSpan();
+
+  /// Records the visible span, notifying the page views whose flag flipped.
+  ///
+  /// Scroll listeners can fire during layout, and a listening page's setState
+  /// would be illegal there, so a mid-frame change defers to after the frame
+  /// (the same hazard `PdfViewerController._notifySafely` guards).
+  void _setOnScreenRange(int first, int last) {
+    if (first == _onScreenSpan.first && last == _onScreenSpan.last) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _onScreenSpan.set(first, last);
+      });
+    } else {
+      _onScreenSpan.set(first, last);
+    }
   }
 
   void _onScroll() {
@@ -6164,6 +6237,17 @@ class _PdfViewerState extends State<PdfViewer>
                   ? (_mainView / firstMainAtFit).clamp(widget.minZoom, 1.0)
                   : 1.0;
         }
+        if (_onScreenSpan.first < 0) {
+          // A document that opens and is never scrolled or zoomed calls
+          // neither _onScroll nor _onTransformChanged, so the visible span
+          // would stay uninitialised and every mounted page would read as on
+          // screen - safe (it never blanks a page) but it skips the prefetch
+          // reduction on the pages behind the fold. Measure it once the
+          // extents this layout creates exist.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _onScreenSpan.first < 0) _updateCurrentPage();
+          });
+        }
       }
       // no implicit desktop scrollbar: it would attach here, inside the
       // zoom transform - thin, low-contrast, and scaled or translated out
@@ -6232,6 +6316,7 @@ class _PdfViewerState extends State<PdfViewer>
                 renderPriority: _renderPriority(index),
                 focusDistance:
                     (index - (_jumpFocusPage ?? _controller.currentPage)).abs(),
+                onScreenSpan: _onScreenSpan,
                 matches: _controller._matchesOn(index),
                 currentMatch: _controller._currentMatch >= 0
                     ? _controller._matches[_controller._currentMatch]
@@ -7026,6 +7111,7 @@ class _PdfViewerPage extends StatefulWidget {
     required this.destructiveStamp,
     required this.renderPriority,
     required this.focusDistance,
+    required this.onScreenSpan,
     required this.matches,
     required this.currentMatch,
     required this.selection,
@@ -7093,6 +7179,10 @@ class _PdfViewerPage extends StatefulWidget {
   final int destructiveStamp;
   final int renderPriority;
   final int focusDistance;
+
+  /// The viewer's visible-page span. This page subscribes to it and rebuilds
+  /// only itself when its own answer flips - see [_PdfOnScreenSpan].
+  final _PdfOnScreenSpan onScreenSpan;
   final List<PdfTextMatch> matches;
   final PdfTextMatch? currentMatch;
   final List<PdfTextQuad> selection;
@@ -7168,9 +7258,40 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
   bool _rastered = false;
   bool _annotationLayerCurrent = true;
 
+  /// Whether this page overlaps the viewport (#657). Read from
+  /// [_PdfViewerPage.onScreenSpan] rather than passed down, so a span change
+  /// rebuilds only the pages whose answer actually flipped.
+  late bool _onScreen = widget.onScreenSpan.contains(widget.index);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.onScreenSpan.addListener(_onSpanChanged);
+  }
+
+  void _onSpanChanged() {
+    final next = widget.onScreenSpan.contains(widget.index);
+    if (next == _onScreen || !mounted) return;
+    setState(() => _onScreen = next);
+  }
+
+  @override
+  void dispose() {
+    widget.onScreenSpan.removeListener(_onSpanChanged);
+    super.dispose();
+  }
+
   @override
   void didUpdateWidget(_PdfViewerPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.onScreenSpan, widget.onScreenSpan) ||
+        oldWidget.index != widget.index) {
+      // The lazy list reused this State for another page, or the viewer handed
+      // over a new span: re-answer for whoever this slot is now.
+      oldWidget.onScreenSpan.removeListener(_onSpanChanged);
+      widget.onScreenSpan.addListener(_onSpanChanged);
+      _onScreen = widget.onScreenSpan.contains(widget.index);
+    }
     final pageImageChanged = oldWidget.pageEpoch != widget.pageEpoch ||
         oldWidget.destructiveStamp != widget.destructiveStamp ||
         oldWidget.contentStamp != widget.contentStamp ||
@@ -7233,6 +7354,7 @@ class _PdfViewerPageState extends State<_PdfViewerPage> {
         destructiveStamp: widget.destructiveStamp,
         renderPriority: widget.renderPriority,
         focusDistance: widget.focusDistance,
+        onScreen: _onScreen,
         pageColor: widget.pageColor,
         showAnnotations: widget.pageImagesShowAnnotations,
         trustContentStamp: widget.trustContentStamp,
