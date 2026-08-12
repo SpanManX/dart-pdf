@@ -4,6 +4,7 @@
 // rasters), and stay under its byte budget - all the behaviour the deep-zoom
 // composite depends on.
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
@@ -133,9 +134,54 @@ void main() {
       expect(ladder.rungFor(0.001), -2); // clamped to minRung
       expect(ladder.rungFor(0), -2); // degenerate ratio → safe 0.05, clamped
     });
+
+    test('settled sharp rung never undersamples the display ratio', () {
+      const ladder = PdfTileZoomLadder();
+      expect(ladder.rungAtOrAbove(0.5), -2);
+      expect(ladder.rungAtOrAbove(0.57), -1);
+      expect(ladder.ratioFor(ladder.rungAtOrAbove(0.57)),
+          closeTo(math.sqrt(0.5), 1e-9));
+      expect(ladder.rungAtOrAbove(1), 0);
+      expect(ladder.rungAtOrAbove(1.01), 1);
+      for (final rung in [-4, -1, 0, 3, 7]) {
+        expect(ladder.rungAtOrAbove(ladder.ratioFor(rung)), rung);
+      }
+    });
   });
 
   group('PdfTileStore.viewFor', () {
+    test('raster coverage follows whole cells and includes the prefetch ring',
+        () {
+      final store = PdfTileStore(
+        tilePixels: 512,
+        prefetchRing: 1,
+        registerForMemoryPressure: false,
+      );
+      addTearDown(store.dispose);
+
+      // A3 CAD page displayed at 0.57x targets the next sharp rung (sqrt(0.5)),
+      // a 2x2 grid. Even a small visible slice in the right-hand cells needs
+      // the whole grid decoded once the one-cell prefetch ring is included.
+      final coverage = store.rasterCoverageForView(
+        pageSize: const Size(1190.55, 841.89),
+        desiredRatio: 0.57,
+        visiblePageRect: const Rect.fromLTWH(1060, 300, 80, 200),
+      );
+
+      expect(coverage, const Rect.fromLTWH(0, 0, 1190.55, 841.89));
+      expect(
+        store
+            .viewBudgetStatus(
+              pageSize: const Size(1190.55, 841.89),
+              desiredRatio: 0.57,
+              visiblePageRect: const Rect.fromLTWH(1060, 300, 80, 200),
+            )!
+            .rung,
+        -1,
+        reason: '57% must target 70.7%, never permanently upscale 50%',
+      );
+    });
+
     testWidgets('persistent hit races and wins without blocking raster start',
         (tester) async {
       await tester.runAsync(() async {
@@ -384,6 +430,8 @@ void main() {
           ladder: const PdfTileZoomLadder(stepsPerOctave: 1),
           registerForMemoryPressure: false,
         );
+        var ticks = 0;
+        store.addListener(() => ticks++);
         final raster = _Rasterizer();
         // Visible = the single centre tile (2,2) of a 5×5 grid; ring adds the
         // 8 surrounding tiles.
@@ -394,7 +442,47 @@ void main() {
           visiblePageRect: const Rect.fromLTWH(32, 32, 16, 16),
           rasterize: raster.call,
         );
-        expect(store.inFlightCount, 9); // 1 visible + 8 ring
+        expect(store.inFlightCount, 1,
+            reason: 'visible pixels must land before off-screen prefetch');
+        await raster.flush();
+        expect(ticks, 1);
+        store.viewFor(
+          id: _id(0),
+          pageSize: const Size(80, 80),
+          desiredRatio: 1.0,
+          visiblePageRect: const Rect.fromLTWH(32, 32, 16, 16),
+          rasterize: raster.call,
+        );
+        expect(store.inFlightCount, 8,
+            reason: 'the next paint schedules the surrounding ring');
+        await raster.flush();
+        expect(ticks, 1,
+            reason: 'off-screen arrivals must not repaint current pixels');
+        store.dispose();
+      });
+    });
+
+    testWidgets('a request can suppress the configured prefetch ring',
+        (tester) async {
+      await tester.runAsync(() async {
+        final store = PdfTileStore(
+          tilePixels: 16,
+          prefetchRing: 1,
+          ladder: const PdfTileZoomLadder(stepsPerOctave: 1),
+          registerForMemoryPressure: false,
+        );
+        final raster = _Rasterizer();
+        store.viewFor(
+          id: _id(0),
+          pageSize: const Size(80, 80),
+          desiredRatio: 1.0,
+          visiblePageRect: const Rect.fromLTWH(32, 32, 16, 16),
+          rasterize: raster.call,
+          prefetchRingOverride: 0,
+        );
+
+        expect(store.inFlightCount, 1,
+            reason: 'only the one visible tile should be admitted');
         store.dispose();
       });
     });
@@ -445,6 +533,47 @@ void main() {
       });
     });
 
+    testWidgets('coarser presentation can be suppressed above a sharper base',
+        (tester) async {
+      await tester.runAsync(() async {
+        final store = PdfTileStore(
+          tilePixels: 32,
+          prefetchRing: 0,
+          registerForMemoryPressure: false,
+        );
+        final raster = _Rasterizer(tileSize: 32);
+        addTearDown(store.dispose);
+
+        // Seed the exact area at a coarse rung.
+        store.viewFor(
+          id: _id(0),
+          pageSize: const Size(128, 128),
+          desiredRatio: 1,
+          visiblePageRect: const Rect.fromLTWH(0, 0, 32, 32),
+          rasterize: raster.call,
+        );
+        await raster.flush();
+        expect(store.tileCount, 1);
+
+        // A retained vector picture below the tile layer is sharper than an
+        // upscaled version of that cache entry. The exact request must still
+        // start, but the coarse square must not be painted in the meantime.
+        final view = store.viewFor(
+          id: _id(0),
+          pageSize: const Size(128, 128),
+          desiredRatio: 4,
+          visiblePageRect: const Rect.fromLTWH(0, 0, 32, 32),
+          rasterize: raster.call,
+          allowCoarserFallback: false,
+        );
+        expect(view.complete, isFalse);
+        expect(view.placements, isEmpty,
+            reason: 'the sharper retained base should show through');
+        expect(store.inFlightCount, greaterThan(0),
+            reason: 'presentation suppression must not block exact work');
+      });
+    });
+
     testWidgets('no fallback and no cache yields an empty (base-only) view',
         (tester) async {
       await tester.runAsync(() async {
@@ -469,6 +598,37 @@ void main() {
   });
 
   group('PdfTileStore.invalidate', () {
+    testWidgets('selective invalidation preserves unrelated sharp tiles',
+        (tester) async {
+      await tester.runAsync(() async {
+        final store = PdfTileStore(
+          tilePixels: 16,
+          prefetchRing: 0,
+          ladder: const PdfTileZoomLadder(stepsPerOctave: 1),
+          registerForMemoryPressure: false,
+        );
+        final raster = _Rasterizer();
+        store.viewFor(
+          id: _id(0),
+          pageSize: const Size(32, 16),
+          desiredRatio: 1,
+          visiblePageRect: const Rect.fromLTWH(0, 0, 32, 16),
+          rasterize: raster.call,
+        );
+        await raster.flush();
+        expect(store.tileCount, 2);
+
+        store.invalidatePageTilesWhere(
+          0,
+          (tile) => tile.region.left >= 16,
+        );
+
+        expect(store.containsTile(PdfTileKey(_id(0), 0, 0, 0)), isTrue);
+        expect(store.containsTile(PdfTileKey(_id(0), 0, 1, 0)), isFalse);
+        store.dispose();
+      });
+    });
+
     testWidgets('drops only the named pages; others survive', (tester) async {
       await tester.runAsync(() async {
         final store = PdfTileStore(
@@ -711,51 +871,74 @@ void main() {
       store.dispose();
     });
 
-    test(
+    testWidgets(
         'viewFor drops the prefetch ring when the visible set fills the budget',
-        () {
-      const pageSize = Size(5120, 5120); // 10×10 grid at span 512
-      const window = Rect.fromLTWH(2048, 2048, 1536, 1536); // centre 3×3 = 9
-      final raster = _Rasterizer(tileSize: 512);
+        (tester) async {
+      await tester.runAsync(() async {
+        const pageSize = Size(5120, 5120); // 10×10 grid at span 512
+        const window = Rect.fromLTWH(2048, 2048, 1536, 1536); // centre 3×3 = 9
 
-      // Ample budget → the full 5×5 ring around the 3×3 window is scheduled.
-      final roomy = PdfTileStore(
-        tilePixels: 512,
-        prefetchRing: 1,
-        maxBytes: 128 << 20, // 128 tiles
-        ladder: const PdfTileZoomLadder(stepsPerOctave: 1),
-        batchRasters: false,
-        registerForMemoryPressure: false,
-      );
-      roomy.viewFor(
-        id: _id(0),
-        pageSize: pageSize,
-        desiredRatio: 1.0,
-        visiblePageRect: window,
-        rasterize: raster.call,
-      );
-      expect(roomy.inFlightCount, 25, reason: '3×3 visible + full 5×5 ring');
-      roomy.dispose();
+        // Ample budget → the full 5×5 ring around the 3×3 window is scheduled.
+        final roomyRaster = _Rasterizer(tileSize: 512);
+        final roomy = PdfTileStore(
+          tilePixels: 512,
+          prefetchRing: 1,
+          maxBytes: 128 << 20, // 128 tiles
+          ladder: const PdfTileZoomLadder(stepsPerOctave: 1),
+          batchRasters: false,
+          registerForMemoryPressure: false,
+        );
+        roomy.viewFor(
+          id: _id(0),
+          pageSize: pageSize,
+          desiredRatio: 1.0,
+          visiblePageRect: window,
+          rasterize: roomyRaster.call,
+        );
+        expect(roomy.inFlightCount, 9, reason: 'visible set goes first');
+        await roomyRaster.flush();
+        roomy.viewFor(
+          id: _id(0),
+          pageSize: pageSize,
+          desiredRatio: 1.0,
+          visiblePageRect: window,
+          rasterize: roomyRaster.call,
+        );
+        expect(roomy.inFlightCount, 16,
+            reason: 'the remaining full 5×5 ring follows on the next paint');
+        await roomyRaster.flush();
+        roomy.dispose();
 
-      // Budget exactly the visible set → no headroom, ring fully dropped.
-      final tight = PdfTileStore(
-        tilePixels: 512,
-        prefetchRing: 1,
-        maxBytes: 9 << 20, // 9 tiles = the visible 3×3 exactly
-        ladder: const PdfTileZoomLadder(stepsPerOctave: 1),
-        batchRasters: false,
-        registerForMemoryPressure: false,
-      );
-      tight.viewFor(
-        id: _id(0),
-        pageSize: pageSize,
-        desiredRatio: 1.0,
-        visiblePageRect: window,
-        rasterize: raster.call,
-      );
-      expect(tight.inFlightCount, 9,
-          reason: 'ring dropped: visible tiles only');
-      tight.dispose();
+        // Budget exactly the visible set → no headroom, ring fully dropped.
+        final tightRaster = _Rasterizer(tileSize: 512);
+        final tight = PdfTileStore(
+          tilePixels: 512,
+          prefetchRing: 1,
+          maxBytes: 9 << 20, // 9 tiles = the visible 3×3 exactly
+          ladder: const PdfTileZoomLadder(stepsPerOctave: 1),
+          batchRasters: false,
+          registerForMemoryPressure: false,
+        );
+        tight.viewFor(
+          id: _id(0),
+          pageSize: pageSize,
+          desiredRatio: 1.0,
+          visiblePageRect: window,
+          rasterize: tightRaster.call,
+        );
+        expect(tight.inFlightCount, 9, reason: 'visible set goes first');
+        await tightRaster.flush();
+        tight.viewFor(
+          id: _id(0),
+          pageSize: pageSize,
+          desiredRatio: 1.0,
+          visiblePageRect: window,
+          rasterize: tightRaster.call,
+        );
+        expect(tight.inFlightCount, 0,
+            reason: 'ring dropped after visible tiles fill the budget');
+        tight.dispose();
+      });
     });
 
     testWidgets('a budget-tight static view converges - no eviction thrash',

@@ -131,6 +131,7 @@ class PdfReader extends StatefulWidget {
     this.preferences,
     this.performance,
     this.tileRasterBackend = const PdfCanvasTileRasterBackend(),
+    this.autoRenderWorker = true,
     this.features = const PdfReaderFeatures(),
     this.onAction,
     this.onAnnotationTap,
@@ -150,7 +151,10 @@ class PdfReader extends StatefulWidget {
     this.pageRasterCachePolicy = const PdfPageRasterCachePolicy(),
     this.pageRasterWarmPolicy = const PdfPageRasterWarmPolicy.disabled(),
   })  : source = null,
-        options = const PdfSourceLoadOptions(firstPaintPages: 1),
+        options = const PdfSourceLoadOptions(
+          firstPaintPages: 1,
+          completeFirstPaintPageTree: false,
+        ),
         onProgress = null,
         onFirstPaint = null,
         loadingBuilder = null,
@@ -169,7 +173,10 @@ class PdfReader extends StatefulWidget {
   const PdfReader.source(
     PdfByteSource this.source, {
     super.key,
-    this.options = const PdfSourceLoadOptions(firstPaintPages: 1),
+    this.options = const PdfSourceLoadOptions(
+      firstPaintPages: 1,
+      completeFirstPaintPageTree: false,
+    ),
     this.documentId,
     this.onProgress,
     this.onFirstPaint,
@@ -179,6 +186,7 @@ class PdfReader extends StatefulWidget {
     this.preferences,
     this.performance,
     this.tileRasterBackend = const PdfCanvasTileRasterBackend(),
+    this.autoRenderWorker = true,
     this.features = const PdfReaderFeatures(),
     this.onAction,
     this.onAnnotationTap,
@@ -267,6 +275,14 @@ class PdfReader extends StatefulWidget {
   /// See [PdfViewer.tileRasterBackend].
   final PdfTileRasterBackend tileRasterBackend;
 
+  /// Whether the reader starts an off-main-thread page render worker.
+  ///
+  /// Defaults to true. [PdfReader.source] temporarily disables it for the
+  /// sparse first-paint buffer: that buffer has the full file's address space,
+  /// so handing it to a worker can copy hundreds of megabytes before page one
+  /// appears. The complete-buffer handoff turns the worker back on.
+  final bool autoRenderWorker;
+
   final PdfReaderFeatures features;
 
   /// See [PdfViewer.onAction].
@@ -339,6 +355,7 @@ class _PdfReaderState extends State<PdfReader> {
       viewerController: widget.controller,
       performance: widget.performance,
       documentId: widget.documentId,
+      renderWorkerEnabled: widget.autoRenderWorker,
     );
   }
 
@@ -353,6 +370,7 @@ class _PdfReaderState extends State<PdfReader> {
       viewerController: widget.controller,
       performanceController: widget.performance,
       documentId: widget.documentId,
+      renderWorkerEnabled: widget.autoRenderWorker,
     );
   }
 
@@ -563,6 +581,7 @@ class _PdfReaderState extends State<PdfReader> {
                           showScrollbarChapters: prefs.showScrollbarChapters,
                           highlightFormFields: prefs.highlightFormFields,
                           renderWorker: _shell.worker,
+                          autoRenderWorker: widget.autoRenderWorker,
                           performance: _performance,
                           tileRasterBackend: widget.tileRasterBackend,
                           rasterCache: widget.rasterCache,
@@ -630,6 +649,7 @@ class _PdfReaderState extends State<PdfReader> {
         preferences: widget.preferences,
         performance: widget.performance,
         tileRasterBackend: widget.tileRasterBackend,
+        autoRenderWorker: complete && widget.autoRenderWorker,
         features: widget.features,
         onAction: widget.onAction,
         onAnnotationTap: widget.onAnnotationTap,

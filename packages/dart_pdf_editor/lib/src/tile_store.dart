@@ -95,6 +95,20 @@ class PdfTileZoomLadder {
     return raw.round().clamp(minRung, maxRung);
   }
 
+  /// The first rung whose pixel ratio is at or above [ratio], clamped.
+  ///
+  /// Exact settled tiles use this rung so they are never permanently
+  /// upscaled. A cached lower rung may still be presented as a temporary
+  /// fallback while this sharper rung is rasterizing.
+  int rungAtOrAbove(double ratio) {
+    final safe = ratio <= 0 ? 0.05 : ratio;
+    final raw = (math.log(safe) / math.ln2) * stepsPerOctave;
+    // Subtract a tiny tolerance so ratioFor(rung) round-trips to that rung
+    // despite floating-point log/pow noise instead of spuriously jumping one
+    // level higher.
+    return (raw - 1e-10).ceil().clamp(minRung, maxRung);
+  }
+
   /// The exact pixel ratio a [rung]'s tiles are rastered at.
   double ratioFor(int rung) => math.pow(2, rung / stepsPerOctave).toDouble();
 }
@@ -419,7 +433,11 @@ class PdfTileStore extends ChangeNotifier {
         visiblePageRect.isEmpty) {
       return null;
     }
-    final rung = ladder.rungFor(desiredRatio);
+    // A settled exact tile must carry at least one source pixel per physical
+    // display pixel. Nearest-rung snapping can choose the lower level (for
+    // example 0.50x at a 0.57x display ratio), leaving a permanently upscaled
+    // page that is technically "complete" but still visibly soft.
+    final rung = ladder.rungAtOrAbove(desiredRatio);
     final ratio = ladder.ratioFor(rung);
     final span = tilePixels / ratio; // page points per tile side
     if (!span.isFinite || span <= 0) return null;
@@ -441,6 +459,39 @@ class PdfTileStore extends ChangeNotifier {
       ty0: ty0,
       tx1: tx1,
       ty1: ty1,
+    );
+  }
+
+  /// The page-point region containing every tile [viewFor] can schedule for
+  /// this view, including its configured prefetch ring.
+  ///
+  /// Region-scoped image decoders use this before admitting tile work. A
+  /// merely visible-pixel-aligned decode is insufficient: [viewFor] rasters
+  /// whole grid cells, so a tile that extends outside that decode would have
+  /// to replay from a lower-resolution base scene and then remain cached under
+  /// the same zoom key.
+  Rect? rasterCoverageForView({
+    required Size pageSize,
+    required double desiredRatio,
+    required Rect visiblePageRect,
+    int? prefetchRingOverride,
+  }) {
+    assert(prefetchRingOverride == null || prefetchRingOverride >= 0);
+    final grid = _tileGrid(pageSize, desiredRatio, visiblePageRect);
+    if (grid == null) return null;
+    final ring = prefetchRingOverride ?? prefetchRing;
+    final tx0 = math.max(0, grid.tx0 - ring);
+    final ty0 = math.max(0, grid.ty0 - ring);
+    final tx1 = math.min(grid.nx - 1, grid.tx1 + ring);
+    final ty1 = math.min(grid.ny - 1, grid.ty1 + ring);
+    return _clampToPage(
+      Rect.fromLTRB(
+        tx0 * grid.span,
+        ty0 * grid.span,
+        (tx1 + 1) * grid.span,
+        (ty1 + 1) * grid.span,
+      ),
+      pageSize,
     );
   }
 
@@ -501,6 +552,16 @@ class PdfTileStore extends ChangeNotifier {
   /// lets a GPU session request final tile textures directly while Canvas
   /// sessions using the same shared store continue to amortize slab replay.
   ///
+  /// [prefetchRingOverride] replaces [prefetchRing] for this request. Passing
+  /// zero is useful for a scale-changing frame: raster the pixels visible now
+  /// before spending work on pan headroom, then restore the configured ring on
+  /// subsequent pan settles.
+  ///
+  /// [allowCoarserFallback] controls presentation only: exact misses are still
+  /// scheduled, but a false value leaves their area transparent instead of
+  /// upscaling a lower-rung tile. This is useful above a retained vector base,
+  /// which is already sharper than a coarse raster fallback.
+  ///
   /// Synchronous and side-effecting: every tile it *places* is touched to
   /// most-recently-used, so a concurrent completion's eviction can only drop
   /// tiles outside the current view (the budget floor keeps a viewport's worth
@@ -517,8 +578,11 @@ class PdfTileStore extends ChangeNotifier {
     bool Function(Rect region)? canRasterize,
     bool? batchRasters,
     int? maxNewTiles,
+    int? prefetchRingOverride,
+    bool allowCoarserFallback = true,
   }) {
     assert(maxNewTiles == null || maxNewTiles > 0);
+    assert(prefetchRingOverride == null || prefetchRingOverride >= 0);
     if (_disposed) return PdfTileView.empty;
     final grid = _tileGrid(pageSize, desiredRatio, visiblePageRect);
     if (grid == null) return PdfTileView.empty;
@@ -555,10 +619,20 @@ class PdfTileStore extends ChangeNotifier {
     final placements = <PdfTilePlacement>[];
     final pending = (batchRasters ?? this.batchRasters) ? <PdfTileKey>[] : null;
     var newTiles = 0;
-    bool schedule(PdfTileKey key) {
+    bool schedule(PdfTileKey key, {required bool notifyOnLand}) {
       if (maxNewTiles != null && newTiles >= maxNewTiles) return false;
-      final scheduled = _schedule(key, id, pageSize, span, ratio, rasterize,
-          persistence, pending, canRasterize);
+      final scheduled = _schedule(
+        key,
+        id,
+        pageSize,
+        span,
+        ratio,
+        rasterize,
+        persistence,
+        pending,
+        canRasterize,
+        notifyOnLand: notifyOnLand,
+      );
       if (scheduled) newTiles++;
       return scheduled;
     }
@@ -576,34 +650,43 @@ class PdfTileStore extends ChangeNotifier {
         ));
       } else {
         complete = false;
-        schedule(key);
-        final fallback = _coarserFallback(id, rung, tx, ty, span, pageSize);
+        schedule(key, notifyOnLand: true);
+        final fallback = allowCoarserFallback
+            ? _coarserFallback(id, rung, tx, ty, span, pageSize)
+            : null;
         if (fallback != null) placements.add(fallback);
       }
     }
 
     // Prefetch ring: pre-raster the border just outside the visible range so a
-    // pan reveals ready tiles. Scheduled after the visible tiles (which matter
-    // now); dedup keeps a hovering viewport from re-queueing. Capped to the
+    // pan reveals ready tiles. Admit it only after every visible tile is exact:
+    // with batched rasters, merely appending the ring after the visible keys
+    // coalesced both into one large slab and made first sharp paint wait for
+    // off-screen work. A visible completion notifies the layer; its next paint
+    // schedules this ring as a separate background batch. Capped to the
     // budget headroom left after the visible set, so a large view never
     // schedules more tiles than the LRU can hold - which would evict this
     // view's own tiles and re-raster them on every repaint (issues #314/#360).
     // A view whose visible set already fills the budget gets no ring; the page
     // view falls back to the single patch before a view gets that dense.
-    if (prefetchRing > 0) {
+    final requestPrefetchRing = prefetchRingOverride ?? prefetchRing;
+    if (requestPrefetchRing > 0 && complete) {
       final visibleCount = (tx1 - tx0 + 1) * (ty1 - ty0 + 1);
       var ringHeadroom = budgetTileCapacity - visibleCount;
       if (ringHeadroom > 0) {
-        final rx0 = math.max(0, tx0 - prefetchRing);
-        final ry0 = math.max(0, ty0 - prefetchRing);
-        final rx1 = math.min(nx - 1, tx1 + prefetchRing);
-        final ry1 = math.min(ny - 1, ty1 + prefetchRing);
+        final rx0 = math.max(0, tx0 - requestPrefetchRing);
+        final ry0 = math.max(0, ty0 - requestPrefetchRing);
+        final rx1 = math.min(nx - 1, tx1 + requestPrefetchRing);
+        final ry1 = math.min(ny - 1, ty1 + requestPrefetchRing);
         ring:
         for (var ty = ry0; ty <= ry1; ty++) {
           for (var tx = rx0; tx <= rx1; tx++) {
             if (tx >= tx0 && tx <= tx1 && ty >= ty0 && ty <= ty1) continue;
             if (ringHeadroom-- <= 0) break ring;
-            schedule(PdfTileKey(id, rung, tx, ty));
+            schedule(
+              PdfTileKey(id, rung, tx, ty),
+              notifyOnLand: false,
+            );
           }
         }
       }
@@ -612,7 +695,18 @@ class PdfTileStore extends ChangeNotifier {
     if (pending != null && pending.isNotEmpty) {
       for (final group in _groupBatches(pending)) {
         _dispatchBatch(
-            group, id, pageSize, span, ratio, rasterize, persistence);
+          group,
+          id,
+          pageSize,
+          span,
+          ratio,
+          rasterize,
+          persistence,
+          // Ring batches are admitted only when the visible set was already
+          // complete. Their landing changes no current pixels, so avoid a
+          // redundant compositor frame; the next pan rebuild reads the cache.
+          notifyOnLand: !complete,
+        );
       }
     }
 
@@ -679,8 +773,9 @@ class PdfTileStore extends ChangeNotifier {
     PdfTileRasterizer rasterize,
     PdfTilePersistence? persistence,
     List<PdfTileKey>? pending,
-    bool Function(Rect region)? canRasterize,
-  ) {
+    bool Function(Rect region)? canRasterize, {
+    required bool notifyOnLand,
+  }) {
     if (_disposed || _cache.containsKey(key) || _inFlight.contains(key)) {
       return false;
     }
@@ -693,8 +788,8 @@ class PdfTileStore extends ChangeNotifier {
 
     _inFlight.add(key);
     debugTilesScheduled++;
-    _loadPersistentTile(
-        key, id, pageSize, region, ratio, persistence, _epochCounter);
+    _loadPersistentTile(key, id, pageSize, region, ratio, persistence,
+        _epochCounter, notifyOnLand);
     if (pending != null) {
       pending.add(key);
       return true;
@@ -705,6 +800,11 @@ class PdfTileStore extends ChangeNotifier {
       if (_disposed || _isStale(id.pageIndex, dispatchEpoch)) {
         image.dispose();
         debugTilesDiscarded++;
+        // Invalidation can race a visible raster. Its completion releases the
+        // in-flight key, so repaint now and let the current scene reschedule
+        // the tile; otherwise the stale result disappears with no event to
+        // replace it.
+        if (notifyOnLand) _scheduleTick();
         return;
       }
       if (_cache.containsKey(key)) {
@@ -717,7 +817,7 @@ class PdfTileStore extends ChangeNotifier {
           key, PdfTile(image, region, key.rung, _fractionOf(region, pageSize)));
       debugTilesLanded++;
       _storePersistentTile(key, image, region, ratio, persistence);
-      _scheduleTick();
+      if (notifyOnLand) _scheduleTick();
     }, onError: (Object _, StackTrace __) {
       _inFlight.remove(key);
       debugTilesDiscarded++;
@@ -775,8 +875,9 @@ class PdfTileStore extends ChangeNotifier {
     double span,
     double ratio,
     PdfTileRasterizer rasterize,
-    PdfTilePersistence? persistence,
-  ) {
+    PdfTilePersistence? persistence, {
+    required bool notifyOnLand,
+  }) {
     Rect tileRegion(PdfTileKey key) => _clampToPage(
         Rect.fromLTWH(key.tx * span, key.ty * span, span, span), pageSize);
 
@@ -802,6 +903,7 @@ class PdfTileStore extends ChangeNotifier {
       if (_disposed || _isStale(id.pageIndex, dispatchEpoch)) {
         slab.dispose();
         debugTilesDiscarded += batch.length;
+        if (notifyOnLand) _scheduleTick();
         return;
       }
       final sliceClock = PdfPerfLog.enabled ? (Stopwatch()..start()) : null;
@@ -826,7 +928,7 @@ class PdfTileStore extends ChangeNotifier {
         'retained=${_cache.weight} entries=${_cache.length}'
         '${PdfPerfLog.rssSuffix()}',
       );
-      _scheduleTick();
+      if (notifyOnLand) _scheduleTick();
     }, onError: (Object _, StackTrace __) {
       for (final key in batch) {
         _inFlight.remove(key);
@@ -875,6 +977,7 @@ class PdfTileStore extends ChangeNotifier {
     double ratio,
     PdfTilePersistence? persistence,
     int dispatchEpoch,
+    bool notifyOnLand,
   ) {
     if (persistence == null || !_persistentInFlight.add(key)) return;
     final width = (region.width * ratio).ceil().clamp(1, 1 << 14);
@@ -896,7 +999,7 @@ class PdfTileStore extends ChangeNotifier {
           key, PdfTile(image, region, key.rung, _fractionOf(region, pageSize)));
       debugPersistentHits++;
       debugTilesLanded++;
-      _scheduleTick();
+      if (notifyOnLand) _scheduleTick();
     }, onError: (Object _, StackTrace __) {
       _persistentInFlight.remove(key);
     });
@@ -932,6 +1035,25 @@ class PdfTileStore extends ChangeNotifier {
       }
       _cache.evictWhere((key) => pages.contains(key.id.pageIndex));
     }
+  }
+
+  /// Drops retained tiles on [pageIndex] that satisfy [test], while marking
+  /// every in-flight tile for that page stale.
+  ///
+  /// The selective retained eviction lets a newly expanded image-detail scene
+  /// replace tiles that could only have come from the capped base decode while
+  /// preserving already-sharp tiles in the scene's previous coverage.
+  void invalidatePageTilesWhere(
+    int pageIndex,
+    bool Function(PdfTile tile) test,
+  ) {
+    if (_disposed) return;
+    _pageEpoch[pageIndex] = ++_epochCounter;
+    _cache.evictWhere((key) {
+      if (key.id.pageIndex != pageIndex) return false;
+      final tile = _cache.peek(key);
+      return tile != null && test(tile);
+    });
   }
 
   void _scheduleTick() {

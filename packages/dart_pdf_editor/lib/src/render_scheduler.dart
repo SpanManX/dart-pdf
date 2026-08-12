@@ -54,6 +54,14 @@ class PdfPageRenderScheduler {
   /// and 3-5 records produced per page.
   final _inFlight = <Object, _RenderRequest?>{};
 
+  /// Page index for each active token. While the current focus page is in
+  /// flight, neighbouring first renders stay pending: their worker replies
+  /// deserialize and replay on the same UI thread, so filling every worker one
+  /// frame after the focused request can delay the pixels the user asked for
+  /// by hundreds of milliseconds. Once focus lands, ordinary background
+  /// concurrency resumes unchanged.
+  final _activePriorities = <Object, int>{};
+
   bool _holding = false;
   int _focus = 0;
   int? _renderFrameCallbackId;
@@ -118,7 +126,16 @@ class PdfPageRenderScheduler {
   /// The page index nearest the viewport. Pending requests closest to it
   /// drain first, so what the user is looking at sharpens before
   /// off-screen neighbours.
-  set focus(int index) => _focus = index;
+  set focus(int index) {
+    if (_focus == index || _disposed) return;
+    _focus = index;
+    // The drain deliberately parks neighbouring requests while the focused
+    // page is in flight. If navigation moves the focus in that window, the
+    // old drain has already returned and no request will settle just because
+    // the focus changed. Re-arm it so the new visible page is granted now,
+    // rather than waiting for the previous page's worker/replay to finish.
+    _scheduleDrain();
+  }
 
   /// Whether any page is still waiting for its first interpret. The
   /// background preview prerender yields while this is true, so the two
@@ -229,6 +246,10 @@ class PdfPageRenderScheduler {
   void _grantNextRender(Duration _) {
     _renderFrameCallbackId = null;
     if (_disposed || _holding || _pending.isEmpty) return;
+    // Keep the focused page's first visual ahead of neighbouring first
+    // renders. Once it settles, the normal one-grant-per-frame pool fill
+    // resumes and keeps all available workers productive.
+    if (_activePriorities.containsValue(_focus)) return;
     // the pending request nearest the viewport focus
     var pick = 0;
     var best = (_pending[0].priority - _focus).abs();
@@ -243,6 +264,7 @@ class PdfPageRenderScheduler {
     PdfPerfLog.log('scheduler grant page=${next.priority} '
         'focus=$_focus remaining=${_pending.length}');
     _inFlight[next.token] = null;
+    _activePriorities[next.token] = next.priority;
     // A granted async render has left the pending queue but still owns the
     // platform thread for its replay/raster phase. Background thumbnail work
     // must keep treating the viewer as busy through that window.
@@ -311,11 +333,12 @@ class PdfPageRenderScheduler {
   /// the re-request that arrived while it was running, if any.
   void _settle(Object token) {
     final queued = _inFlight.remove(token);
+    _activePriorities.remove(token);
     if (_disposed) return;
     if (queued != null) {
       _pending.add(queued);
-      _scheduleDrain();
     }
+    _scheduleDrain();
     // Finishing the last in-flight render may make the viewer idle; if a
     // repeat was queued it remains busy. Either transition must wake the
     // foreground gate so thumbnail work can re-read [busy].
@@ -344,6 +367,7 @@ class PdfPageRenderScheduler {
     }
     _uiPending.clear();
     _inFlight.clear();
+    _activePriorities.clear();
     _activity.ping();
     _activity.dispose();
   }

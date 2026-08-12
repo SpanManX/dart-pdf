@@ -20,8 +20,8 @@ import 'package:pdf_document/pdf_document.dart';
 import 'package:pdf_graphics/pdf_graphics.dart';
 import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 
-/// A page dominated by one image denser than the full-page raster cap lets the
-/// base scene decode - the scanned-document shape.
+/// A page dominated by layered images denser than the full-page raster cap
+/// lets the base scene decode - the scanned/CAD-underlay shape.
 ///
 /// The page is deliberately long and narrow: the cap that binds is the raster's
 /// 8192-px max edge, so an elongated page reaches it at a modest image size and
@@ -30,7 +30,7 @@ import 'package:pdf_test_fixtures/pdf_test_fixtures.dart';
 /// base decode to ~61% linear.
 Uint8List _scannedSheet() => buildSyntheticRasterUnderlaySheet(
       underlays: const [PdfUnderlaySpec(width: 2048, height: 1024)],
-      layers: 1,
+      layers: 2,
       ops: 8,
       pageW: 600,
       pageH: 6000,
@@ -56,6 +56,7 @@ void main() {
     PdfPageView.debugTileStoreOverride = store;
     PdfPageView.debugTileImageDetailAdoptions = 0;
     PdfPageView.debugTileImageDetailRatio = null;
+    PdfPageView.debugTileImageDetailRegion = null;
   }
 
   tearDown(() {
@@ -63,6 +64,7 @@ void main() {
     PdfPageView.debugTileStoreOverride = null;
     PdfPageView.debugTileImageDetailAdoptions = 0;
     PdfPageView.debugTileImageDetailRatio = null;
+    PdfPageView.debugTileImageDetailRegion = null;
     worker.dispose();
     store.dispose();
   });
@@ -79,13 +81,16 @@ void main() {
 
     // Laid out several times its point width: only a slice fits, and the zoom
     // asks for far more resolution than the capped full-page raster can hold.
+    // Five deliberately lies between tile-pyramid rungs: it rounds up to
+    // sqrt(2)^5. A detail decode at 5x cannot sharpen a tile rasterized at
+    // 5.657x, so the decode must use the snapped tile ratio.
     await tester.pumpWidget(
       Center(
         child: OverflowBox(
           maxWidth: double.infinity,
           maxHeight: double.infinity,
           child: SizedBox(
-            width: page.mediaBox.width * 6,
+            width: page.mediaBox.width * 5,
             child: PdfPageView(page: page, renderWorker: worker),
           ),
         ),
@@ -100,14 +105,47 @@ void main() {
       greaterThan(0),
       reason: 'tiles must not magnify the base scene\'s capped image decode',
     );
-    // The re-decode happens at the zoom's own resolution, not the page
-    // raster's - that difference IS the fix.
+    // The re-decode happens above the tile rung's resolution, not merely at
+    // the continuous view ratio or the page raster's ratio. The same 2x image
+    // headroom used by visible full-page rendering keeps raster underlays from
+    // looking softer than vectors after the tile is flattened and presented.
     final adopted = PdfPageView.debugTileImageDetailRatio!;
+    final tileRatio = store.ladder.ratioFor(store.ladder.rungAtOrAbove(5));
     final pageRasterCap = math.min(
-      math.sqrt((1 << 24) / (page.mediaBox.width * page.mediaBox.height)),
+      math.sqrt(PdfPageRasterGeometry.maxPixels /
+          (page.mediaBox.width * page.mediaBox.height)),
       8192 / math.max(page.mediaBox.width, page.mediaBox.height),
     );
     expect(adopted, greaterThan(pageRasterCap));
+    expect(
+      adopted,
+      closeTo(tileRatio * PdfPageView.focusedImageDecodeHeadroom, 1e-9),
+    );
+
+    // Every retained exact-rung tile must fit inside the image-detail decode.
+    // Previously the decode followed the visible rectangle while the store
+    // rasterized whole cells. A partially covered cell then used the blurry
+    // base scene and was cached forever at this sharp rung.
+    final detailRegion = PdfPageView.debugTileImageDetailRegion!;
+    final retained = store
+        .debugTileFractionsForPage(0)
+        .where((tile) => tile.rung == store.ladder.rungAtOrAbove(5));
+    expect(retained, isNotEmpty);
+    for (final tile in retained) {
+      final region = Rect.fromLTRB(
+        tile.fraction.left * page.mediaBox.width,
+        tile.fraction.top * page.mediaBox.height,
+        tile.fraction.right * page.mediaBox.width,
+        tile.fraction.bottom * page.mediaBox.height,
+      );
+      expect(
+        region.left,
+        greaterThanOrEqualTo(detailRegion.left - 1e-6),
+      );
+      expect(region.top, greaterThanOrEqualTo(detailRegion.top - 1e-6));
+      expect(region.right, lessThanOrEqualTo(detailRegion.right + 1e-6));
+      expect(region.bottom, lessThanOrEqualTo(detailRegion.bottom + 1e-6));
+    }
   });
 
   testWidgets('a page the base raster already covers asks for no re-decode',

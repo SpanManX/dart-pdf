@@ -229,7 +229,7 @@ void main() {
       expect(scheduler.hasPending, isFalse);
     });
 
-    testWidgets('an in-flight render does not block other pages',
+    testWidgets('the focused render lands before neighbouring work fans out',
         (tester) async {
       final scheduler = PdfPageRenderScheduler();
       addTearDown(scheduler.dispose);
@@ -247,9 +247,65 @@ void main() {
       for (var i = 0; i < 4; i++) {
         await tester.pump();
       }
-      // Pacing is unchanged: the drain never awaits a render, only the
-      // frame. Three workers must stay busy while page 0 is recording.
+      expect(order, [0],
+          reason: 'neighbour replies must not compete with focused pixels');
+      gate.complete();
+      for (var i = 0; i < 4; i++) {
+        await tester.pump();
+      }
       expect(order, [0, 1, 2]);
+    });
+
+    testWidgets('moving focus wakes a drain parked behind the old focus',
+        (tester) async {
+      final scheduler = PdfPageRenderScheduler();
+      addTearDown(scheduler.dispose);
+      final oldFocusGate = Completer<void>();
+      final order = <int>[];
+      scheduler
+        ..focus = 0
+        ..request('old-focus', 0, () async {
+          order.add(0);
+          await oldFocusGate.future;
+        })
+        ..request('new-focus', 4, () => order.add(4));
+
+      for (var i = 0; i < 3; i++) {
+        await tester.pump();
+      }
+      expect(order, [0],
+          reason: 'the neighbour waits while page 0 remains the focus');
+
+      scheduler.focus = 4;
+      for (var i = 0; i < 3; i++) {
+        await tester.pump();
+      }
+      expect(order, [0, 4],
+          reason: 'navigation must not wait for the abandoned focus to land');
+
+      oldFocusGate.complete();
+      await tester.pump();
+    });
+
+    testWidgets('a non-focused render still allows worker concurrency',
+        (tester) async {
+      final scheduler = PdfPageRenderScheduler();
+      addTearDown(scheduler.dispose);
+      final gate = Completer<void>();
+      final order = <int>[];
+      scheduler
+        ..focus = 10
+        ..request('a', 1, () => order.add(1))
+        ..request('b', 2, () => order.add(2))
+        ..request('c', 3, () async {
+          order.add(3);
+          await gate.future;
+        });
+
+      for (var i = 0; i < 4; i++) {
+        await tester.pump();
+      }
+      expect(order, [3, 2, 1]);
       gate.complete();
       await tester.pump();
     });

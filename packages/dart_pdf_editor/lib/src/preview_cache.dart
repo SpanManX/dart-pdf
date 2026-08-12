@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:pdf_document/pdf_document.dart';
 
 import 'budgeted_cache.dart';
@@ -11,6 +12,7 @@ import 'perf_log.dart';
 import 'raster_cache.dart';
 import 'raster_warm.dart';
 import 'render_worker.dart';
+import 'retained_scene.dart';
 import 'renderer.dart';
 
 /// Memory policy for full-resolution rasters of pages the user has visited.
@@ -275,8 +277,12 @@ class PdfPagePreviewCache extends ChangeNotifier {
     PdfPagePreviewLodPolicy lodPolicy = const PdfPagePreviewLodPolicy(),
     int maxFullRasterPixels = 8 << 20,
     int maxFullRasterEntryPixels = 4 << 20,
+    int maxRetainedSceneBytes = 64 << 20,
+    int maxRetainedSceneEntries = 4,
   })  : assert(maxFullRasterPixels >= 0),
         assert(maxFullRasterEntryPixels >= 0),
+        assert(maxRetainedSceneBytes >= 0),
+        assert(maxRetainedSceneEntries > 0),
         _intermediateLongestSides = _normalizedIntermediateSides(
           longestSide,
           lodPolicy.intermediateLongestSides,
@@ -284,7 +290,9 @@ class PdfPagePreviewCache extends ChangeNotifier {
         _maxIntermediateBytes = lodPolicy.maxBytes,
         _maxIntermediateEntryBytes = lodPolicy.maxEntryBytes,
         _maxFullRasterBytes = maxFullRasterPixels * 4,
-        _maxFullRasterEntryBytes = maxFullRasterEntryPixels * 4;
+        _maxFullRasterEntryBytes = maxFullRasterEntryPixels * 4,
+        _maxRetainedSceneBytes = maxRetainedSceneBytes,
+        _maxRetainedSceneEntries = maxRetainedSceneEntries;
 
   /// Pixel size of a preview's longest side. Stretched to page size on
   /// screen the result is soft but recognizable - enough to navigate by.
@@ -348,6 +356,8 @@ class PdfPagePreviewCache extends ChangeNotifier {
 
   int _maxFullRasterBytes;
   int _maxFullRasterEntryBytes;
+  final int _maxRetainedSceneBytes;
+  final int _maxRetainedSceneEntries;
 
   // Three shared budgeted LRUs: base previews bounded by entry count,
   // intermediate previews and exact recent-page rasters bounded by bytes. All
@@ -383,6 +393,17 @@ class PdfPagePreviewCache extends ChangeNotifier {
     onEvicted: _logFullRasterEviction,
     clearsUnderMemoryPressure: true,
     debugLabel: 'page-full-raster',
+  );
+  late final PdfBudgetedCache<_RetainedSceneKey, _RetainedSceneEntry>
+      _retainedScenes =
+      PdfBudgetedCache<_RetainedSceneKey, _RetainedSceneEntry>(
+    weigher: (entry) => entry.estimatedBytes,
+    maxWeight: _maxRetainedSceneBytes,
+    maxEntries: _maxRetainedSceneEntries,
+    rejectOversize: true,
+    disposer: (entry) => entry.dropCacheReference(),
+    clearsUnderMemoryPressure: true,
+    debugLabel: 'page-retained-scene',
   );
   bool _disposed = false;
   int _previewGeneration = 0;
@@ -600,11 +621,107 @@ class PdfPagePreviewCache extends ChangeNotifier {
     );
   }
 
-  /// Returns an exact cached raster matching this page and display geometry.
+  /// Returns a complete preview that already meets [width] × [height].
   ///
-  /// The caller owns the returned clone. A mismatch is a miss: page content,
-  /// paper color, annotation visibility, rotation, and physical pixel size
-  /// all affect the baked raster.
+  /// Unlike [imageFor], this rejects command-limited/vector-only previews and
+  /// stale page revisions. A caller may therefore use the returned clone as
+  /// its final display raster instead of interpreting the same page again.
+  /// This matters for mixed-format CAD documents: a panoramic sheet can make
+  /// ordinary pages display at thumbnail size, where the normal 200 px preview
+  /// is already at or above the requested physical resolution.
+  ui.Image? completeImageFor(
+    int index,
+    PdfPage page, {
+    required int width,
+    required int height,
+  }) {
+    final entry = _entries.take(index); // a successful lookup is an LRU use
+    if (entry == null ||
+        !identical(entry.page, page) ||
+        !entry.includesImages ||
+        entry.image.width < width ||
+        entry.image.height < height) {
+      return null;
+    }
+    return entry.image.clone();
+  }
+
+  /// Returns a lease on a complete retained scene for this page and display
+  /// plan, or null when the scene has fallen out of the bounded LRU.
+  ///
+  /// A page widget may leave Flutter's lazy-list cache window while its exact
+  /// raster remains useful. Keeping the matching command scene here means a
+  /// later zoom can replay/cull that already-recorded page instead of asking a
+  /// worker to transfer and reconstruct the whole command stream again. The
+  /// lease pins the scene while the page widget uses it, so an LRU eviction or
+  /// memory-pressure clear cannot dispose it underneath an in-flight replay.
+  PdfRetainedSceneHandle? retainedSceneFor(
+    int index,
+    PdfPage page, {
+    required PdfPageRenderPlan plan,
+  }) {
+    final key = _RetainedSceneKey(index, plan);
+    final entry = _retainedScenes.take(key);
+    if (entry == null) return null;
+    if (!identical(entry.page, page)) {
+      _retainedScenes.evict(key);
+      return null;
+    }
+    return entry.acquire();
+  }
+
+  /// Retains [scene] in the session LRU and returns a lease for the caller.
+  ///
+  /// [estimatedBytes] includes the command scene's estimated heap plus the
+  /// engine picture size observed while building it. Oversize entries remain
+  /// usable by the caller through the returned lease but are not cached.
+  PdfRetainedSceneHandle retainScene(
+    int index,
+    PdfPage page,
+    PdfRetainedScene scene, {
+    required PdfPageRenderPlan plan,
+    required bool fromWorker,
+    double? imagePixelRatio,
+    required int estimatedBytes,
+    ui.Picture? picture,
+  }) {
+    final key = _RetainedSceneKey(index, plan);
+    final entry = _RetainedSceneEntry(
+      page,
+      scene,
+      picture: picture,
+      fromWorker: fromWorker,
+      imagePixelRatio: imagePixelRatio,
+      estimatedBytes: estimatedBytes,
+    );
+    final handle = entry.acquire();
+    _retainedScenes.put(key, entry);
+    if (!identical(_retainedScenes.peek(key), entry)) {
+      // PdfBudgetedCache deliberately leaves an oversize value owned by the
+      // caller. Convert that ownership into the same lease contract used for
+      // admitted entries.
+      entry.dropCacheReference();
+    }
+    return handle;
+  }
+
+  /// Approximate bytes held by the retained-scene LRU.
+  @visibleForTesting
+  int get debugRetainedSceneBytes => _retainedScenes.weight;
+
+  /// Number of complete page scenes retained across lazy page-widget disposal.
+  @visibleForTesting
+  int get debugRetainedSceneCount => _retainedScenes.length;
+
+  /// Returns a cached raster matching this page and display geometry.
+  ///
+  /// The caller owns the returned clone. An exact physical-size hit is
+  /// preferred. Otherwise the smallest sharper raster with the same aspect
+  /// ratio may satisfy the lookup: scaling already-rendered pixels down is
+  /// visually lossless and avoids an unnecessary replay/readback after
+  /// zooming out. A smaller raster is never stretched up through this path.
+  /// Page content, paper color, annotation visibility, and rotation must all
+  /// match.
   ui.Image? fullImageFor(
     int index,
     PdfPage page, {
@@ -642,12 +759,56 @@ class PdfPagePreviewCache extends ChangeNotifier {
     // scarce budget on something nothing can read. Drop every one of them here,
     // where a fresh page object proves the revision moved.
     _dropStaleVariants(index, page);
+    PdfPageRasterSignature? best;
+    for (final candidate in _fullEntries.keys) {
+      if (!_canDownsample(candidate, signature)) continue;
+      if (best == null || candidate.bytes < best.bytes) best = candidate;
+    }
+    if (best != null) {
+      final sharper = _fullEntries.take(best);
+      if (sharper != null && identical(sharper.page, page)) {
+        _logFullRasterLookup(
+          'hit',
+          index,
+          reason: 'sharper-${best.width}x${best.height}',
+          bytes: sharper.bytes,
+        );
+        return sharper.image.clone();
+      }
+    }
     _logFullRasterLookup(
       'miss',
       index,
       reason: entry == null ? 'empty' : 'page-identity',
     );
     return null;
+  }
+
+  /// Whether [candidate] can be scaled down to answer [requested] without
+  /// changing the page pixels or distorting its geometry.
+  ///
+  /// Both dimensions must be at least as large. The cross-product tolerance
+  /// allows the one-pixel differences produced by independently ceiling the
+  /// width and height at each ratio, while rejecting arbitrary images with a
+  /// different aspect ratio stored through the public cache API.
+  static bool _canDownsample(
+    PdfPageRasterSignature candidate,
+    PdfPageRasterSignature requested,
+  ) {
+    if (candidate.pageIndex != requested.pageIndex ||
+        candidate.pageColor != requested.pageColor ||
+        candidate.annotations != requested.annotations ||
+        candidate.rotation != requested.rotation ||
+        candidate.width < requested.width ||
+        candidate.height < requested.height) {
+      return false;
+    }
+    final cross = (candidate.width * requested.height -
+            candidate.height * requested.width)
+        .abs();
+    final roundingTolerance =
+        candidate.width + candidate.height + requested.width + requested.height;
+    return cross <= roundingTolerance;
   }
 
   /// Whether a raster of [signature] for exactly this [page] is retained.
@@ -1104,7 +1265,8 @@ class PdfPagePreviewCache extends ChangeNotifier {
             page, commands,
             pageColor: pageColor,
             rotation: rotation,
-            includeImages: decodeImages);
+            includeImages: decodeImages,
+            maxImagePixelRatio: ratio);
         if (!_acceptsPage(index, page) || (deferUiWork?.call() ?? false)) {
           picture.dispose();
           return;
@@ -1222,7 +1384,9 @@ class PdfPagePreviewCache extends ChangeNotifier {
       final ui.Image image;
       if (commands != null) {
         picture = await PdfPageRenderer.pictureFromCommands(page, commands,
-            pageColor: signature.pageColor, rotation: signature.rotation);
+            pageColor: signature.pageColor,
+            rotation: signature.rotation,
+            maxImagePixelRatio: pixelRatio);
       } else {
         // No worker (or it declined): the walk runs here, exactly as it would
         // when the page arrives on screen. That is the cost being moved into
@@ -1402,6 +1566,11 @@ class PdfPagePreviewCache extends ChangeNotifier {
   Future<void> _putIntermediateLadderFromImage(
       int index, PdfPage page, ui.Image source) async {
     try {
+      // The requested full raster has only just been admitted. Let its ready
+      // callback and compositor frame win before starting any cache-only GPU
+      // downscale/readback work; otherwise a useful LoD side effect can sit in
+      // front of the page the user is waiting to see.
+      await SchedulerBinding.instance.endOfFrame;
       // Serialize promotions for this completed raster. Two simultaneous
       // toImage readbacks can turn a harmless post-paint cache fill into the
       // same completion burst the page scheduler deliberately avoids.
@@ -1510,6 +1679,11 @@ class PdfPagePreviewCache extends ChangeNotifier {
   /// scroll paints blank (then re-renders) instead of flashing now-deleted
   /// content. The rest rebind in place as before.
   void rebind(List<PdfPage> pages, {bool Function(int index)? changed}) {
+    // A retained scene keeps the PdfPage it was recorded from as well as its
+    // command objects. Even an unchanged page in an incremental revision has
+    // a new document graph, so do not rebind these by index the way immutable
+    // raster pixels can be rebound.
+    _retainedScenes.clear();
     bindPages(pages);
     var dropped = false;
     for (final index in _entries.keys.toList()) {
@@ -1553,6 +1727,7 @@ class PdfPagePreviewCache extends ChangeNotifier {
     _entries.clear(); // disposes every retained image
     _intermediateEntries.clear();
     _fullEntries.clear();
+    _retainedScenes.clear();
     // Queued writes belong to the document being left behind.
     _dropPendingFullWrites();
     if (!_disposed) notifyListeners();
@@ -1564,6 +1739,7 @@ class PdfPagePreviewCache extends ChangeNotifier {
     _entries.dispose(); // disposes every retained image
     _intermediateEntries.dispose();
     _fullEntries.dispose();
+    _retainedScenes.dispose();
     // A drain in flight sees _disposed and clears the rest itself; clearing
     // here covers the (usual) case where nothing is draining.
     if (!_drainingFullWrites) _dropPendingFullWrites();
@@ -1587,6 +1763,118 @@ class _PendingFullRasterWrite {
   final bool annotations;
   final int? rotation;
   final String revision;
+}
+
+/// A pinned reference to a complete retained page scene.
+///
+/// Obtained from [PdfPagePreviewCache.retainedSceneFor] or
+/// [PdfPagePreviewCache.retainScene]. Dispose the handle when the page widget
+/// no longer needs the scene. The scene itself remains cached until its LRU
+/// slot is evicted; if eviction happens first, the final live handle releases
+/// it safely.
+class PdfRetainedSceneHandle {
+  PdfRetainedSceneHandle._(this._entry);
+
+  _RetainedSceneEntry? _entry;
+
+  PdfRetainedScene get scene {
+    final entry = _entry;
+    if (entry == null) throw StateError('Retained scene handle is disposed');
+    return entry.scene;
+  }
+
+  bool get fromWorker {
+    final entry = _entry;
+    if (entry == null) throw StateError('Retained scene handle is disposed');
+    return entry.fromWorker;
+  }
+
+  /// The screen-pixel ratio used when the scene's embedded images were
+  /// decoded. Null means the scene has no reduced image LoD to track.
+  double? get imagePixelRatio {
+    final entry = _entry;
+    if (entry == null) throw StateError('Retained scene handle is disposed');
+    return entry.imagePixelRatio;
+  }
+
+  /// The complete page picture retained beside [scene], when the producer had
+  /// one. It is owned by this handle/cache entry; callers must not dispose it.
+  ui.Picture? get picture {
+    final entry = _entry;
+    if (entry == null) throw StateError('Retained scene handle is disposed');
+    return entry.picture;
+  }
+
+  void dispose() {
+    final entry = _entry;
+    if (entry == null) return;
+    _entry = null;
+    entry.release();
+  }
+}
+
+@immutable
+class _RetainedSceneKey {
+  const _RetainedSceneKey(this.pageIndex, this.plan);
+
+  final int pageIndex;
+  final PdfPageRenderPlan plan;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _RetainedSceneKey &&
+      pageIndex == other.pageIndex &&
+      plan == other.plan;
+
+  @override
+  int get hashCode => Object.hash(pageIndex, plan);
+}
+
+class _RetainedSceneEntry {
+  _RetainedSceneEntry(
+    this.page,
+    this.scene, {
+    this.picture,
+    required this.fromWorker,
+    required this.imagePixelRatio,
+    required this.estimatedBytes,
+  });
+
+  final PdfPage page;
+  final PdfRetainedScene scene;
+  final ui.Picture? picture;
+  final bool fromWorker;
+  final double? imagePixelRatio;
+  final int estimatedBytes;
+
+  var _cacheReference = true;
+  var _leases = 0;
+  var _disposed = false;
+
+  PdfRetainedSceneHandle acquire() {
+    if (_disposed) throw StateError('Retained scene is already disposed');
+    _leases++;
+    return PdfRetainedSceneHandle._(this);
+  }
+
+  void dropCacheReference() {
+    if (!_cacheReference) return;
+    _cacheReference = false;
+    _disposeIfUnused();
+  }
+
+  void release() {
+    if (_leases == 0) return;
+    _leases--;
+    _disposeIfUnused();
+  }
+
+  void _disposeIfUnused() {
+    if (_cacheReference || _leases != 0 || _disposed) return;
+    _disposed = true;
+    scene.dispose();
+    picture?.dispose();
+  }
 }
 
 class _PreviewEntry {
