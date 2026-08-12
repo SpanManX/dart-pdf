@@ -3492,7 +3492,6 @@ class _PdfPageViewState extends State<PdfPageView>
     _DetailGeometry? detailGeometry,
     VoidCallback? onPaint,
   }) async {
-    final generation = _renderSession.beginDetail();
     if (_renderPaused) return false;
     // The viewer's global transform reaches cache-window neighbours too. They
     // keep a bounded fit-resolution base, but a detail raster is useful only
@@ -3603,6 +3602,15 @@ class _PdfPageViewState extends State<PdfPageView>
       );
       return true;
     }
+
+    // Claim the detail generation only when this pass is actually about to
+    // produce a replacement patch. The tile route above is a successful
+    // no-op for the single-patch adapter: beginning a generation before that
+    // return used to cancel an already-decoded tight zoom patch during the
+    // follow-up full-render grant. On the large raster CAD sheets that patch
+    // was ready in ~1.5 s, but was discarded immediately before rasterization;
+    // the user then waited for an 8-9 s, ~70 MB tile-prefetch decode instead.
+    final generation = _renderSession.beginDetail();
 
     // Dense strip-routed pages ask for one combined worker result: commands
     // whose images were decoded for this region plus the StripPlan binned
@@ -4094,6 +4102,16 @@ class _PdfPageViewState extends State<PdfPageView>
   /// so the painter's identity check doesn't see a fresh closure every build.
   bool Function(Rect region)? _tileCanRasterize;
 
+  /// Whether the viewport moved beyond the one image-detail record currently
+  /// in flight. Only one region record is allowed at a time; when it finishes,
+  /// the latest stored geometry is re-evaluated once. Before this coalescing,
+  /// every small pan queued another multi-second decode for the same CAD page,
+  /// so the region on screen could sit tens of seconds behind the worker.
+  bool _tileDetailDeferred = false;
+
+  /// Invalidates an async tile-detail result when the page/scene is dropped.
+  int _tileDetailRequestGeneration = 0;
+
   /// Pan-ahead guard band for the tile path's visible slice, as a fraction of
   /// the viewport per side. Zero: the pyramid's prefetch ring already
   /// pre-rasters the border, so - unlike the single patch - the tile slice
@@ -4266,9 +4284,11 @@ class _PdfPageViewState extends State<PdfPageView>
     if (region == null || region.width <= 0 || region.height <= 0) return;
     if (_tileDetailCovers(region, imageRatio)) return;
     final pending = _tileDetailPending;
-    if (pending != null &&
-        pending.$2 >= imageRatio * 0.99 &&
-        _rectCovers(pending.$1, region, 0.5 / tileRatio)) {
+    if (pending != null) {
+      if (pending.$2 < imageRatio * 0.99 ||
+          !_rectCovers(pending.$1, region, 0.5 / tileRatio)) {
+        _tileDetailDeferred = true;
+      }
       return;
     }
     if (widget.renderWorker?.isActive != true) return;
@@ -4291,6 +4311,7 @@ class _PdfPageViewState extends State<PdfPageView>
       Rect region, double tileRatio, double imageRatio) async {
     final pageIndex = widget.previewIndex;
     final intent = _renderIntent(widget);
+    final generation = ++_tileDetailRequestGeneration;
     // Claim the slot BEFORE anything that can return: the `finally` clears the
     // tile veto only for the request that owns it, so an early return that
     // never claimed would leave tiles vetoed for good.
@@ -4309,7 +4330,12 @@ class _PdfPageViewState extends State<PdfPageView>
         imagePixelRatio: imageRatio,
         imageDecodeRegion: _pdfRegionForRasterRegion(region),
       );
-      if (commands == null || !mounted || _abandoned(pageIndex)) return;
+      if (commands == null ||
+          !mounted ||
+          _abandoned(pageIndex) ||
+          generation != _tileDetailRequestGeneration) {
+        return;
+      }
       if (!_intentIsCurrent(intent) || _renderPaused) return;
       final scene = await PdfRetainedScene.fromCommands(
         widget.page,
@@ -4319,7 +4345,10 @@ class _PdfPageViewState extends State<PdfPageView>
             widget.tileRasterBackend.prefersDirectDecodedImageUploads,
         maxImagePixelRatio: imageRatio,
       );
-      if (!mounted || _abandoned(pageIndex) || !_intentIsCurrent(intent)) {
+      if (!mounted ||
+          _abandoned(pageIndex) ||
+          !_intentIsCurrent(intent) ||
+          generation != _tileDetailRequestGeneration) {
         scene.dispose();
         return;
       }
@@ -4327,13 +4356,15 @@ class _PdfPageViewState extends State<PdfPageView>
     } catch (error) {
       PdfPerfLog.log('tile image detail failed page=$pageIndex error=$error');
     } finally {
-      if (_tileDetailPending?.$1 == region &&
-          _tileDetailPending?.$2 == imageRatio) {
+      if (generation == _tileDetailRequestGeneration) {
+        final rerun = _tileDetailDeferred;
+        _tileDetailDeferred = false;
         _tileDetailPending = null;
         // Whether it landed or not, stop holding tiles back: an adopted scene
         // now answers through [_tileDetailCovers], and a declined one must not
         // veto the page's tiles forever.
         _setTileDetailWanted(false);
+        if (rerun && mounted) _ensureTileImageDetail();
       }
     }
   }
@@ -4388,7 +4419,9 @@ class _PdfPageViewState extends State<PdfPageView>
   /// Frees the tile image-detail scene. Called wherever the page's content or
   /// retained scene is replaced - the decode is bound to both.
   void _dropTileImageDetail() {
+    _tileDetailRequestGeneration++;
     _tileDetailPending = null;
+    _tileDetailDeferred = false;
     _tileDetailWanted = false;
     if (_tileDetailScene == null) return;
     _disposeTileRasterSession(_tileDetailScene!);
@@ -4441,8 +4474,8 @@ class _PdfPageViewState extends State<PdfPageView>
   /// tile path is inactive or the page is not zoomed past the base raster.
   ///
   /// [size] is the page-point size (the tile grid space). Placed above the base
-  /// raster so uncovered gaps show it through; it replaces the single detail
-  /// patch when active.
+  /// raster and any completed visible-region patch, so uncovered gaps keep the
+  /// sharpest already-available pixels while exact tiles land over them.
   Widget? _tileLayerWidget(Size size) {
     if (!_useTilePath) return null;
     final scene = _scene;
@@ -4461,6 +4494,7 @@ class _PdfPageViewState extends State<PdfPageView>
         : sceneCap == null
             ? sessionCap
             : math.min(sessionCap, sceneCap);
+    final fallbackOcclusion = _fallbackOcclusionFraction(store, desired);
     return Positioned.fill(
       child: PdfTileLayer(
         store: store,
@@ -4510,8 +4544,35 @@ class _PdfPageViewState extends State<PdfPageView>
         allowCoarserFallback: widget.qualityPageCount == 1 &&
             _slugPicture == null &&
             _directPicture == null,
+        // An old pyramid rung is useful pan-ahead outside the current patch,
+        // but must not cover that sharper patch with stretched pixels. Exact
+        // tiles are not clipped and replace it normally as they land.
+        fallbackOcclusionFraction: fallbackOcclusion,
       ),
     );
+  }
+
+  /// The retained detail patch may hide a coarse tile only when it is at least
+  /// as dense as the sharpest fallback the store can present for this view.
+  ///
+  /// A scale change deliberately keeps the previous patch visible while the
+  /// new pixels are prepared. Without this ratio gate, that old patch (for
+  /// example 2x) could clip out a newer cached fallback (4x) merely because
+  /// the latter is still below the requested exact rung (5.7x), visibly
+  /// stepping the page backwards until the exact tiles landed.
+  Rect? _fallbackOcclusionFraction(PdfTileStore store, double desired) {
+    final detailRatio = _detailPixelRatio;
+    final fraction = _detailFraction;
+    if (_detailImage == null ||
+        detailRatio == null ||
+        fraction == null ||
+        !_detailContentIsCurrent()) {
+      return null;
+    }
+    final rung = store.ladder.rungAtOrAbove(desired);
+    if (rung <= store.ladder.minRung) return null;
+    final sharpestFallbackRatio = store.ladder.ratioFor(rung - 1);
+    return detailRatio >= sharpestFallbackRatio * 0.99 ? fraction : null;
   }
 
   PdfTilePersistence? get _tilePersistence {
@@ -5087,8 +5148,10 @@ class _PdfPageViewState extends State<PdfPageView>
               // Publish this page's patch bounds for the thumbnail debug
               // overlay (report coalesces its notify past this build).
               if (pdfDebugPaintDetailBounds.value) {
-                PdfDebugDetailRegions.instance.report(widget.previewIndex,
-                    tileLayer == null && detail != null ? fraction : null);
+                PdfDebugDetailRegions.instance.report(
+                  widget.previewIndex,
+                  detail != null ? fraction : null,
+                );
               }
               return Stack(
                 alignment: Alignment.topLeft,
@@ -5130,9 +5193,14 @@ class _PdfPageViewState extends State<PdfPageView>
                     ),
                   if (webSurface != null) webSurface,
                   if (webDetail != null) webDetail,
-                  if (tileLayer != null)
-                    tileLayer
-                  else if (detail != null && fraction != null && w.isFinite)
+                  // Keep the fast, viewport-sized refinement underneath the
+                  // pyramid. The tile layer is sparse while its region image
+                  // decode is pending; making these alternatives hid the
+                  // completed refinement and exposed the soft base raster as
+                  // a conspicuous strip until the much larger tile scene
+                  // arrived. Exact tiles paint afterward and therefore can
+                  // only improve—not downgrade—the pixels below.
+                  if (detail != null && fraction != null && w.isFinite)
                     Positioned(
                       left: fraction.left * w,
                       top: fraction.top * h,
@@ -5161,6 +5229,7 @@ class _PdfPageViewState extends State<PdfPageView>
                               ),
                       ),
                     ),
+                  if (tileLayer != null) tileLayer,
                 ],
               );
             },
