@@ -269,7 +269,7 @@ void main() {
   testWidgets(
       'an off-screen page defers its cold and scale raster until visible',
       (tester) async {
-    tester.view.physicalSize = const Size(800, 600);
+    tester.view.physicalSize = const Size(400, 300);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1029,8 +1029,9 @@ void main() {
     await tester.pumpWidget(at(content: 1));
     await tester.pump();
 
-    expect(find.byType(RawImage), findsNWidgets(2),
-        reason: 'the stale detail patch stays up for sharpness');
+    expect(find.byType(RawImage), findsAtLeastNWidgets(2),
+        reason: 'the stale exact patch (and any completed pan-ahead layer) '
+            'stay up for sharpness');
     expect(ready, 1,
         reason: 'the annotation afterimage must stay until a fresh detail '
             'patch is ready');
@@ -1110,7 +1111,7 @@ void main() {
         moreOrLessEquals(10, epsilon: 0.5)); // the uncapped desired ratio
   });
 
-  testWidgets('zoom sharpens a tight patch before restoring the pan guard',
+  testWidgets('zoom and pan sharpen exactly the visible viewport',
       (tester) async {
     tester.view.physicalSize = const Size(800, 600);
     tester.view.devicePixelRatio = 1.0;
@@ -1118,6 +1119,15 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final doc = PdfDocument.open(buildClassicPdf());
     final page = doc.page(0);
+    final logs = <String>[];
+    final oldPerfEnabled = PdfPerfLog.enabled;
+    final oldPerfSink = PdfPerfLog.sink;
+    PdfPerfLog.enabled = true;
+    PdfPerfLog.sink = logs.add;
+    addTearDown(() {
+      PdfPerfLog.enabled = oldPerfEnabled;
+      PdfPerfLog.sink = oldPerfSink;
+    });
     const detailKey = ValueKey('pdf-page-detail-image');
 
     Widget at(double scale, int generation, {double dx = 0}) => Center(
@@ -1164,13 +1174,73 @@ void main() {
     expect(tight.image!.width, closeTo(1600, 2));
     expect(tight.image!.height, closeTo(1200, 2));
 
-    // A later pan at the same scale moves outside that small guard. Its
-    // replacement restores the normal half-viewport headroom: 160x120 page
-    // points at the same ratio, ready for successive small pans to reuse.
+    // A later pan first sharpens the same exact-visible 80x60pt patch. The
+    // historical 50%-per-side guard made this 4x larger and delayed the first
+    // sharp frame on image-heavy CAD pages.
     await tester.pumpWidget(at(2, 2, dx: -200));
-    final guarded = await waitForDetail(differentFrom: tight.image);
-    expect(guarded.image!.width, closeTo(3200, 2));
-    expect(guarded.image!.height, closeTo(2400, 2));
+    final panned = await waitForDetail(differentFrom: tight.image);
+    expect(panned.image!.width, closeTo(1600, 2));
+    expect(panned.image!.height, closeTo(1200, 2));
+    expect(
+      find.byKey(const ValueKey('pdf-page-detail-headroom-image')),
+      findsNothing,
+      reason: 'the fallback must not start an unpreemptible second raster',
+    );
+    final paintLogs = logs.where((line) => line.contains('detail paint'));
+    expect(paintLogs.length, greaterThanOrEqualTo(3));
+    expect(paintLogs, everyElement(contains('pass=visible')),
+        reason: 'foreground time-to-sharp observations must survive later '
+            'pan-ahead scheduling');
+  });
+
+  testWidgets('detail adoption rebalances reclaimable live rasters',
+      (tester) async {
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final budget = PdfLiveRasterBudget.instance;
+    final oldMax = budget.maxBytes;
+    final reclaimable = _BudgetProbeHolder(bytes: 1, distance: 9);
+    addTearDown(() {
+      budget.unregister(reclaimable);
+      budget.maxBytes = oldMax;
+    });
+
+    final doc = PdfDocument.open(buildClassicPdf());
+    Widget page(double scale, int generation) => Center(
+          child: SizedBox(
+            width: 612,
+            child: PdfPageView(
+              page: doc.page(0),
+              baseRasterScale: 4,
+              scale: scale,
+              settleGeneration: generation,
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(page(1, 0));
+    for (var i = 0; i < 200 && find.byType(RawImage).evaluate().isEmpty; i++) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+    }
+    // Drain the base raster's own post-frame rebalance before introducing the
+    // probe. The scale change below retains that capped base and adds only the
+    // exact deep-zoom detail allocation.
+    await tester.pump();
+    budget.register(reclaimable);
+    budget.maxBytes = budget.totalBytes - 1;
+
+    await tester.pumpWidget(page(8, 1));
+    for (var i = 0; i < 300 && !reclaimable.evicted; i++) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 5)),
+      );
+    }
+    expect(reclaimable.evicted, isTrue,
+        reason: 'retaining the new detail image must run the global budget');
   });
 
   testWidgets('deep zoom reuses a current fit raster as its base',
@@ -1214,7 +1284,7 @@ void main() {
         reason: 'deep zoom must not replace the whole-page backing raster');
   });
 
-  testWidgets('detail guard band reuses the patch across small pan settles',
+  testWidgets('exact detail reuse still validates current content',
       (tester) async {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -1262,31 +1332,53 @@ void main() {
 
     await tester.pumpWidget(at(0, 0));
     await waitForDetail();
-    final first = detailImage();
+    final visible = detailImage();
 
-    // The patch is inflated by half a viewport per side. A 100 px pan remains
-    // inside it, so the next settle must reuse the exact raster.
-    await tester.pumpWidget(at(-100, 1));
+    // A settle with unchanged geometry reuses the exact current patch.
+    await tester.pumpWidget(at(0, 1));
     for (var i = 0; i < 20 && PdfPageView.debugDetailPatchReuses == 0; i++) {
       await tester.pump();
     }
     expect(PdfPageView.debugDetailPatchReuses, 1);
-    expect(detailImage(), same(first));
+    expect(detailImage(), same(visible));
 
     // An additive edit leaves the old sharp patch painted while the
     // replacement is rendering. It must not be mistaken for reusable current
     // content even though its geometry still covers the viewport.
-    await tester.pumpWidget(at(-100, 2, contentStamp: 1));
-    await waitForDetail(differentFrom: first);
+    await tester.pumpWidget(at(0, 2, contentStamp: 1));
+    await waitForDetail(differentFrom: visible);
     final edited = detailImage();
     expect(PdfPageView.debugDetailPatchReuses, 1);
 
-    // Move farther than the guard band. The old patch no longer covers the
-    // viewport, so a replacement must land.
+    // A moved viewport no longer fits the exact patch, so a replacement lands.
     await tester.pumpWidget(at(-1000, 3, contentStamp: 1));
     await waitForDetail(differentFrom: edited);
     expect(PdfPageView.debugDetailPatchReuses, 1);
   });
+}
+
+class _BudgetProbeHolder implements PdfLiveRasterHolder {
+  _BudgetProbeHolder({required int bytes, required this.distance})
+      : _bytes = bytes;
+
+  int _bytes;
+  final int distance;
+  bool evicted = false;
+
+  @override
+  int get liveRasterBytes => _bytes;
+
+  @override
+  int get liveRasterDistance => distance;
+
+  @override
+  bool get liveRasterOnScreen => false;
+
+  @override
+  void evictLiveRaster() {
+    evicted = true;
+    _bytes = 0;
+  }
 }
 
 class _DeferredRecordWorker extends PdfRenderWorker {
