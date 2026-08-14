@@ -65,7 +65,7 @@
 
   "dev_eyebrow": "นักพัฒนา",
   "dev_h2": "เอนจิน PDF แบบ pure-Dart ที่คุณก็ใช้ได้เช่นกัน",
-  "dev_p": "เอนจินใช้ Dart แทน PDFium หรือ native bindings ดังนั้นจึงทำงานได้ทุกที่ที่ Dart และ Flutter ทำงาน\n          แพ็กเกจใช้สัญญาอนุญาต Apache-2.0 และเผยแพร่บน pub.dev อ่าน<a href=\"/sdk\"\n            style=\"color:#6fd0ff;font-weight:700;\">ภาพรวม Flutter PDF SDK</a> เพื่อดูเบนช์มาร์กและการเปรียบเทียบกับ\n          SDK เชิงพาณิชย์",
+  "dev_p": "เอนจินใช้ Dart แทน PDFium หรือ native bindings ดังนั้นจึงทำงานได้ทุกที่ที่ Dart และ Flutter ทำงาน\n          แพ็กเกจใช้สัญญาอนุญาต Apache-2.0 และเผยแพร่บน pub.dev อ่าน<a href=\"/flutter-pdf-editor\"\n            style=\"color:#6fd0ff;font-weight:700;\">ภาพรวม Flutter PDF SDK</a> เพื่อดูเบนช์มาร์กและการเปรียบเทียบกับ\n          SDK เชิงพาณิชย์",
   "dev_ctaGithub": "ดูบน GitHub",
   "dev_ctaPub": "แพ็กเกจบน pub.dev",
   "dev_bTitle": "แพ็กเกจโอเพนซอร์ส",

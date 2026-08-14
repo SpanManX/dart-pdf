@@ -65,7 +65,7 @@
 
   "dev_eyebrow": "Entwickler",
   "dev_h2": "Eine reine Dart-PDF-Engine, die auch Sie nutzen können.",
-  "dev_p": "Die Engine verwendet Dart anstelle von PDFium oder nativen Bindungen und läuft daher überall dort, wo Dart und Flutter laufen. Die Pakete sind unter Apache-2.0 lizenziert und auf pub.dev veröffentlicht. Lesen Sie die <a href=\"/sdk\" style=\"color:#6fd0ff;font-weight:700;\">Flutter PDF SDK-Übersicht</a> für Benchmarks und einen Vergleich mit kommerziellen SDKs.",
+  "dev_p": "Die Engine verwendet Dart anstelle von PDFium oder nativen Bindungen und läuft daher überall dort, wo Dart und Flutter laufen. Die Pakete sind unter Apache-2.0 lizenziert und auf pub.dev veröffentlicht. Lesen Sie die <a href=\"/flutter-pdf-editor\" style=\"color:#6fd0ff;font-weight:700;\">Flutter PDF SDK-Übersicht</a> für Benchmarks und einen Vergleich mit kommerziellen SDKs.",
   "dev_ctaGithub": "Auf GitHub ansehen",
   "dev_ctaPub": "Pakete auf pub.dev",
   "dev_bTitle": "Open-Source-Pakete",

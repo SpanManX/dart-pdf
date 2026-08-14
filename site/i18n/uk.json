@@ -65,7 +65,7 @@
 
   "dev_eyebrow": "Розробникам",
   "dev_h2": "Рушій PDF на чистому Dart, який можете використати й ви.",
-  "dev_p": "Рушій використовує Dart замість PDFium чи нативних прив'язок, тож він працює всюди, де працюють Dart і Flutter. Пакети\n          ліцензовані під Apache-2.0 і опубліковані на pub.dev. Прочитайте <a href=\"/sdk\"\n            style=\"color:#6fd0ff;font-weight:700;\">огляд Flutter PDF SDK</a> для бенчмарків і порівняння з\n          комерційними SDK.",
+  "dev_p": "Рушій використовує Dart замість PDFium чи нативних прив'язок, тож він працює всюди, де працюють Dart і Flutter. Пакети\n          ліцензовані під Apache-2.0 і опубліковані на pub.dev. Прочитайте <a href=\"/flutter-pdf-editor\"\n            style=\"color:#6fd0ff;font-weight:700;\">огляд Flutter PDF SDK</a> для бенчмарків і порівняння з\n          комерційними SDK.",
   "dev_ctaGithub": "Переглянути на GitHub",
   "dev_ctaPub": "Пакети на pub.dev",
   "dev_bTitle": "Пакети з відкритим кодом",

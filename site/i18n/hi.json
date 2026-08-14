@@ -65,7 +65,7 @@
 
   "dev_eyebrow": "डेवलपर्स",
   "dev_h2": "एक शुद्ध-Dart PDF इंजन जिसे आप भी उपयोग कर सकते हैं।",
-  "dev_p": "यह इंजन PDFium या नेटिव बाइंडिंग के बजाय Dart का उपयोग करता है, इसलिए यह हर जगह चलता है जहाँ Dart और Flutter चलते हैं।\n          पैकेज Apache-2.0 लाइसेंस वाले हैं और pub.dev पर प्रकाशित हैं। बेंचमार्क और कमर्शियल SDK के साथ तुलना के लिए <a href=\"/sdk\"\n            style=\"color:#6fd0ff;font-weight:700;\">Flutter PDF SDK अवलोकन</a> पढ़ें।",
+  "dev_p": "यह इंजन PDFium या नेटिव बाइंडिंग के बजाय Dart का उपयोग करता है, इसलिए यह हर जगह चलता है जहाँ Dart और Flutter चलते हैं।\n          पैकेज Apache-2.0 लाइसेंस वाले हैं और pub.dev पर प्रकाशित हैं। बेंचमार्क और कमर्शियल SDK के साथ तुलना के लिए <a href=\"/flutter-pdf-editor\"\n            style=\"color:#6fd0ff;font-weight:700;\">Flutter PDF SDK अवलोकन</a> पढ़ें।",
   "dev_ctaGithub": "GitHub पर देखें",
   "dev_ctaPub": "pub.dev पर पैकेज",
   "dev_bTitle": "ओपन सोर्स पैकेज",

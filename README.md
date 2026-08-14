@@ -1,4 +1,6 @@
-![dart-pdf, pure-Dart PDF renderer & editor for Flutter](doc/banner.png)
+![dart-pdf, an open-source Flutter PDF editor and pure-Dart renderer](doc/banner.png)
+
+# dart-pdf: Flutter PDF editor and renderer
 
 [![CI](https://github.com/ben-milanko/dart-pdf/actions/workflows/ci.yml/badge.svg)](https://github.com/ben-milanko/dart-pdf/actions/workflows/ci.yml)
 [![dart_pdf_editor on pub.dev](https://img.shields.io/pub/v/dart_pdf_editor.svg)](https://pub.dev/packages/dart_pdf_editor)
@@ -14,8 +16,8 @@
 
 [![DartPDF, the official PDF editor app, built on this SDK. Get the app at dart-pdf.com](doc/app-banner.svg)](https://dart-pdf.com)
 
-A PDF renderer and editor written entirely in Dart, for use in Flutter
-apps. No PDFium, no platform channels.
+An open-source Flutter PDF editor, viewer, and renderer written entirely in
+Dart. No PDFium, no platform channels.
 
 The goal is a PSPDFKit-class SDK built natively for Flutter: a fast
 viewer, a full annotation suite with appearance-stream generation,
@@ -38,6 +40,9 @@ signatures.
 Live demo: <https://dart-pdf-demo.web.app> (the example app built for
 the web; it opens onto a six-page feature showcase, and the open button
 loads your own PDF).
+
+Developer overview: [Flutter PDF editor](https://dart-pdf.com/flutter-pdf-editor)
+with installation, architecture, supported editing features, and benchmarks.
 
 Visual render results, browsable directly in GitHub: the checked-in
 [PDF.js corpus comparison gallery](test_corpora/pdfjs/_renders/README.md)

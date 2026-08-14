@@ -65,7 +65,7 @@
 
   "dev_eyebrow": "Développeurs",
   "dev_h2": "Un moteur PDF en pur Dart que vous pouvez aussi utiliser.",
-  "dev_p": "Le moteur utilise Dart plutôt que PDFium ou des liaisons natives, il fonctionne donc partout où Dart et Flutter tournent. Les\n          packages sont sous licence Apache-2.0 et publiés sur pub.dev. Consultez la <a href=\"/sdk\"\n            style=\"color:#6fd0ff;font-weight:700;\">présentation du SDK PDF Flutter</a> pour les benchmarks et une comparaison avec\n          les SDK commerciaux.",
+  "dev_p": "Le moteur utilise Dart plutôt que PDFium ou des liaisons natives, il fonctionne donc partout où Dart et Flutter tournent. Les\n          packages sont sous licence Apache-2.0 et publiés sur pub.dev. Consultez la <a href=\"/flutter-pdf-editor\"\n            style=\"color:#6fd0ff;font-weight:700;\">présentation du SDK PDF Flutter</a> pour les benchmarks et une comparaison avec\n          les SDK commerciaux.",
   "dev_ctaGithub": "Voir sur GitHub",
   "dev_ctaPub": "Packages sur pub.dev",
   "dev_bTitle": "Packages open source",

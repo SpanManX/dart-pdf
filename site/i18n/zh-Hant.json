@@ -65,7 +65,7 @@
 
   "dev_eyebrow": "開發者",
   "dev_h2": "一套您也能使用的純 Dart PDF 引擎。",
-  "dev_p": "此引擎使用 Dart 而非 PDFium 或原生繫結，因此可在任何支援 Dart 與 Flutter 的環境執行。這些\n          套件採用 Apache-2.0 授權並發佈於 pub.dev。請閱讀 <a href=\"/sdk\"\n            style=\"color:#6fd0ff;font-weight:700;\">Flutter PDF SDK 概覽</a> 以了解基準測試以及\n          與商業 SDK 的比較。",
+  "dev_p": "此引擎使用 Dart 而非 PDFium 或原生繫結，因此可在任何支援 Dart 與 Flutter 的環境執行。這些\n          套件採用 Apache-2.0 授權並發佈於 pub.dev。請閱讀 <a href=\"/flutter-pdf-editor\"\n            style=\"color:#6fd0ff;font-weight:700;\">Flutter PDF SDK 概覽</a> 以了解基準測試以及\n          與商業 SDK 的比較。",
   "dev_ctaGithub": "在 GitHub 上檢視",
   "dev_ctaPub": "pub.dev 上的套件",
   "dev_bTitle": "開放原始碼套件",
