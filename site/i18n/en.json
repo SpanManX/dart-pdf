@@ -53,7 +53,8 @@
 
   "dl_eyebrow": "Download",
   "dl_h2": "Get DartPDF on your platform.",
-  "dl_intro": "Get it from the App Store, Google Play, or Microsoft Store, install the desktop app, or use it right in your browser.",
+  "dl_intro": "We'll show the best downloads for this device. Every other platform is still one tap away.",
+  "dl_otherPlatforms": "Other platforms",
   "dl_get": "Download",
   "dl_open": "Open",
   "dlMac_meta": "Direct .dmg · signed & notarized",

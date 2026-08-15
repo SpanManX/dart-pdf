@@ -53,7 +53,8 @@
 
   "dl_eyebrow": "다운로드",
   "dl_h2": "당신의 플랫폼에서 DartPDF를 사용하세요.",
-  "dl_intro": "App Store와 Google Play에서 받거나, 데스크톱 앱을 설치하거나, 브라우저에서 바로 사용하세요.",
+  "dl_intro": "이 기기에 가장 적합한 다운로드를 표시합니다. 다른 모든 플랫폼도 한 번만 클릭하면 볼 수 있습니다.",
+  "dl_otherPlatforms": "기타 플랫폼",
   "dl_get": "다운로드",
   "dl_open": "열기",
   "dlMac_meta": "직접 .dmg · 서명 및 공증 완료",

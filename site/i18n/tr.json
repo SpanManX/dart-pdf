@@ -53,7 +53,8 @@
 
   "dl_eyebrow": "İndir",
   "dl_h2": "DartPDF'i kendi platformunuzda edinin.",
-  "dl_intro": "App Store ve Google Play'den edinin, masaüstü uygulamasını yükleyin veya doğrudan tarayıcınızda kullanın.",
+  "dl_intro": "Bu cihaz için en uygun indirmeleri gösteriyoruz. Diğer tüm platformlara tek tıkla ulaşabilirsiniz.",
+  "dl_otherPlatforms": "Diğer platformlar",
   "dl_get": "İndir",
   "dl_open": "Aç",
   "dlMac_meta": "Doğrudan .dmg · imzalı ve noterli",

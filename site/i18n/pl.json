@@ -53,7 +53,8 @@
 
   "dl_eyebrow": "Pobieranie",
   "dl_h2": "Pobierz DartPDF na swoją platformę.",
-  "dl_intro": "Pobierz go z App Store i Google Play, zainstaluj aplikację na komputer lub korzystaj z niego bezpośrednio w przeglądarce.",
+  "dl_intro": "Pokażemy najlepsze opcje pobierania dla tego urządzenia. Pozostałe platformy są dostępne jednym kliknięciem.",
+  "dl_otherPlatforms": "Inne platformy",
   "dl_get": "Pobierz",
   "dl_open": "Otwórz",
   "dlMac_meta": "Bezpośrednio .dmg · podpisany i notaryzowany",
