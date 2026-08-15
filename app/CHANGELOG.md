@@ -6,6 +6,7 @@
   windows, with crash-safe session ownership and correct input routing.
 - Bundle the new `dartpdf` command-line and MCP sidecar in desktop releases for
   inspecting PDFs, extracting bounded text, and listing forms or annotations.
+- Sandbox the bundled command-line helper correctly in Mac App Store archives.
 - Make annotation panels easier to navigate, keep selections visible across
   edits, and preserve FreeText opacity while editing and rendering.
 - Preserve Bluebeam FreeText alignment, spacing, and caret placement.
