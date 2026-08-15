@@ -52,12 +52,10 @@ not the next rolling build.
 > `xcodebuild archive` + `-exportArchive` for macOS) and staged into
 > `app/build/releases/<version>/`.
 >
-> A local `flutter build appbundle --release` currently **fails** on
-> `:onnxruntime:checkReleaseAarMetadata` - the plugin pins
-> `compileSdkVersion 33` while a transitive `androidx.fragment` needs 34+.
-> CI works around this in `release-app.yml`'s `patch_gradle()` step, which
-> rewrites the hosted plugin Gradle files in `~/.pub-cache`; apply the same
-> patch locally before building.
+> Keep the hosted Android compatibility patch in `release-app.yml` until the
+> affected plugins migrate to Flutter's current Android toolchain. Local
+> release builds use the app's configured compile SDK and should be verified
+> before each Play upload.
 
 ## In-app update checker
 

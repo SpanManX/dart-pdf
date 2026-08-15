@@ -20,9 +20,9 @@ dependencies:
   args: ^2.7.0
   mcp_dart: ^2.4.0
   path: ^1.9.0
-  pdf_cos: ^3.5.1
-  pdf_document: ^3.5.1
-  pdf_graphics: ^3.5.1
+  pdf_cos: ^3.6.0
+  pdf_document: ^3.6.0
+  pdf_graphics: ^3.6.0
 
 dev_dependencies:
   lints: ^6.1.0

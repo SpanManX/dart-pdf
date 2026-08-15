@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.6.0
+
+- Open documents in multiple native desktop windows and drag tabs between
+  windows, with crash-safe session ownership and correct input routing.
+- Bundle the new `dartpdf` command-line and MCP sidecar in desktop releases for
+  inspecting PDFs, extracting bounded text, and listing forms or annotations.
+- Make annotation panels easier to navigate, keep selections visible across
+  edits, and preserve FreeText opacity while editing and rendering.
+- Preserve Bluebeam FreeText alignment, spacing, and caret placement.
+- Fix stale page rendering after edits on macOS, reveal cloud-backed files in
+  Finder reliably, and improve substituted text spacing on the web.
+
 ## 3.5.1
 
 - Fix Open in Finder for PDFs stored in sandboxed OneDrive folders.
