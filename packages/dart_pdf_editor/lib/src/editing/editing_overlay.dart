@@ -876,6 +876,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   double _textEditSize = 14; // pt
   Color _textEditColor = const Color(0xFF000000);
   Color? _textEditFill; // the box background the commit will paint
+  double _textEditOpacity = 1;
   // box-level layout the inline editor previews so the live text matches
   // what commits: alignment (/Q), line height, character spacing, and
   // horizontal glyph scaling
@@ -1013,6 +1014,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     double size,
     Color color,
     Color? fill,
+    double opacity,
     bool washed,
     double rotation,
     PdfTextAlign? align,
@@ -2045,6 +2047,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     double size,
     Color color,
     Color? fill,
+    double opacity,
     PdfTextAlign align,
     bool underline,
     double lineSpacing,
@@ -2073,6 +2076,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       fill: parsed.fillColor != null
           ? Color(0xFF000000 | parsed.fillColor!)
           : null,
+      opacity: annotation.appearanceOpacity,
       align: parsed.alignment,
       underline: parsed.underline,
       lineSpacing: parsed.lineSpacing,
@@ -2401,15 +2405,18 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       final ls = _controller.lineSpacing;
       final cs = _controller.charSpacing;
       final ul = _controller.textUnderline;
+      final opacity = _controller.preferences.opacity;
       final defaultUnderline = _textEditText.defaultStyle.underline;
       if (align != _textEditAlign ||
           ls != _textEditLineSpacing ||
           cs != _textEditCharSpacing ||
+          opacity != _textEditOpacity ||
           (ul != defaultUnderline && !_textEditText.hasRichStyles)) {
         setState(() {
           _textEditAlign = align;
           _textEditLineSpacing = ls;
           _textEditCharSpacing = cs;
+          _textEditOpacity = opacity;
           if (ul != defaultUnderline && !_textEditText.hasRichStyles) {
             _textEditText.resetStyles(
                 _textEditText.defaultStyle.merge(underline: ul));
@@ -2708,6 +2715,9 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
               ? Color(0xFF000000 | parsed!.fillColor!)
               : null)
           : _controller.preferences.textFillColor;
+      _textEditOpacity = existing
+          ? (annotation?.appearanceOpacity ?? 1)
+          : _controller.preferences.opacity;
     });
     _beginInteraction(PdfEditingInteractionIntent.text, _lastPointerKind);
     _controller.setEditingText(true);
@@ -2765,7 +2775,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         return (
           terminus,
           base,
-          Color(0xFF000000 | rgb),
+          Color(0xFF000000 | rgb)
+              .withValues(alpha: annotation.appearanceOpacity),
           width > 0 ? width : _geometry.scale,
         );
       }
@@ -2776,7 +2787,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       return (
         terminus,
         _nearestBoxEdge(_textEditRect!, terminus),
-        _controller.preferences.textBorderColor ?? _controller.color,
+        (_controller.preferences.textBorderColor ?? _controller.color)
+            .withValues(alpha: _controller.preferences.opacity),
         _controller.preferences.strokeWidth * _geometry.scale,
       );
     }
@@ -2813,6 +2825,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _textEditSize = formSize;
       _textEditColor = const Color(0xFF000000);
       _textEditFill = null;
+      _textEditOpacity = 1;
     });
     _beginInteraction(PdfEditingInteractionIntent.text, _lastPointerKind);
     _controller.setEditingText(true);
@@ -2853,6 +2866,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         size: size,
         color: const Color(0xFF000000),
         fill: null,
+        opacity: 1,
         washed: true, // cover the old value until the raster lands
         rotation: 0,
         align: PdfTextAlign.left,
@@ -2870,6 +2884,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final size = _textEditSize;
     final color = _textEditColor;
     final fill = _textEditFill;
+    final opacity = _textEditOpacity;
     final rotation = _textEditRotation;
     final calloutTarget = _textEditCalloutTarget;
     _closeTextEditor();
@@ -2903,6 +2918,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       size: size,
       color: color,
       fill: fill,
+      opacity: opacity,
       washed: existing,
       rotation: rotation,
       align: _textEditAlign,
@@ -3641,6 +3657,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
             size: wrapStyle.size,
             color: wrapStyle.color,
             fill: wrapStyle.fill,
+            opacity: wrapStyle.opacity,
             // with the lift up the box keeps its true (maybe transparent)
             // fill and the lift hides the old footprint; only without a
             // lift does it fall back to the opaque-paper wash
@@ -4977,6 +4994,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     required double size,
     required Color color,
     required Color? background,
+    Color? wash,
+    double opacity = 1,
     required double rotation,
     PdfTextAlign? align,
     bool underline = false,
@@ -4996,7 +5015,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       PdfTextAlign.center => Alignment.topCenter,
       PdfTextAlign.right => Alignment.topRight,
     };
-    final box = Container(
+    final content = Container(
       key: key,
       color: background,
       padding: EdgeInsets.all(3 * _geometry.scale),
@@ -5023,6 +5042,15 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         ),
       ),
     );
+    final faded = opacity >= 1
+        ? content
+        : Opacity(opacity: opacity.clamp(0.0, 1.0), child: content);
+    final box = wash == null
+        ? faded
+        : Stack(
+            fit: StackFit.expand,
+            children: [ColoredBox(color: wash), faded],
+          );
     return Positioned.fromRect(
       rect: rect,
       child: IgnorePointer(
@@ -5436,6 +5464,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                   size: wrapResize.size,
                   color: wrapResize.color,
                   background: wrapResize.fill,
+                  opacity: wrapResize.opacity,
                   rotation: _resizeAngle,
                   align: wrapResize.align,
                   underline: wrapResize.underline,
@@ -5451,10 +5480,11 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                   font: after.font,
                   size: after.size,
                   color: after.color,
-                  background: after.fill ??
-                      (after.washed
-                          ? widget.pageColor.withValues(alpha: 0.92)
-                          : null),
+                  background: after.fill,
+                  wash: after.washed
+                      ? widget.pageColor.withValues(alpha: 0.92)
+                      : null,
+                  opacity: after.opacity,
                   rotation: after.rotation,
                   align: after.align,
                   underline: after.underline,
@@ -5607,7 +5637,10 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                                 // in view pixels, same leading/spacing,
                                 // matching family, color and underline
                                 style: TextStyle(
-                                  color: _textEditColor,
+                                  color: _textEditFieldName == null
+                                      ? _textEditColor.withValues(
+                                          alpha: _textEditOpacity.clamp(0.0, 1.0))
+                                      : _textEditColor,
                                   fontSize: _textEditSize * _geometry.scale,
                                   height: _textEditLineSpacing,
                                   letterSpacing:

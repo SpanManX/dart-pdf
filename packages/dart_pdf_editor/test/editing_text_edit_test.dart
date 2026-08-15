@@ -149,6 +149,25 @@ void main() {
       expect(style.borderWidth, 3);
     });
 
+    test('text opacity flows through creation, restyling, and text edits', () {
+      final editing = PdfEditingController(buildMultiPagePdf(1))
+        ..preferences.opacity = 0.4
+        ..addFreeText(0, const PdfRect(100, 600, 300, 660), 'Faded');
+      expect(editing.selectAnnotation(0, 0), isTrue);
+      expect(editing.selectedAnnotation!.behavior.supportsOpacity, isTrue);
+      expect(
+          editing.selectedAnnotation!.appearanceOpacity, closeTo(0.4, 1e-9));
+
+      expect(editing.restyleSelected(opacity: 0.65), isTrue);
+      expect(
+          editing.selectedAnnotation!.appearanceOpacity, closeTo(0.65, 1e-9));
+
+      editing.setSelectedText('Still faded');
+      expect(editing.selectedAnnotation!.contents, 'Still faded');
+      expect(
+          editing.selectedAnnotation!.appearanceOpacity, closeTo(0.65, 1e-9));
+    });
+
     test('restyleSelectedText sets, keeps, and clears fill and border', () {
       final editing = PdfEditingController(buildMultiPagePdf(1))
         ..addFreeText(0, const PdfRect(100, 600, 300, 660), 'Plain');
@@ -358,6 +377,27 @@ void main() {
       final annotation = editing.document.page(0).annotations.single;
       expect(annotation.subtype, 'FreeText');
       expect(annotation.contents, 'Hello in place');
+      await settle(tester);
+    });
+
+    testWidgets('the inline text editor previews opacity changes',
+        (tester) async {
+      final (editing, _) = await pumpEditor(tester);
+      editing
+        ..preferences.opacity = 0.25
+        ..tool = PdfEditTool.freeText;
+      await tester.pump();
+
+      await drag(tester, view(100, 700), view(300, 640));
+      TextField field() => tester.widget<TextField>(find.byKey(editorKey));
+      expect(field().style!.color!.a, closeTo(0.25, 1e-6));
+
+      editing.preferences.opacity = 0.6;
+      await tester.pump();
+      expect(field().style!.color!.a, closeTo(0.6, 1e-6));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
       await settle(tester);
     });
 
