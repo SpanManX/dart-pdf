@@ -1,8 +1,15 @@
 import 'dart:convert';
 
+// This regression must inspect the same experimental internal feature gate
+// that MaterialApp/showDialog read.
+// ignore_for_file: implementation_imports, invalid_use_of_internal_member
+
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/src/foundation/_features.dart' show isWindowingEnabled;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf_document/pdf_document.dart';
@@ -19,6 +26,27 @@ import 'package:dart_pdf_editor_app/window_support.dart';
 // failure safety, process-service isolation, and the native close handshake.
 void main() {
   late PdfEditingPreferences prefs;
+
+  test('desktop startup enables windowing by default before binding', () {
+    final original = isWindowingEnabled;
+    final originalPlatform = debugDefaultTargetPlatformOverride;
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      isWindowingEnabled = false;
+      expect(multiWindowSupported, isFalse);
+
+      enableDartPdfWindowing();
+      expect(multiWindowSupported, isTrue);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      isWindowingEnabled = false;
+      enableDartPdfWindowing();
+      expect(isWindowingEnabled, isFalse);
+    } finally {
+      isWindowingEnabled = original;
+      debugDefaultTargetPlatformOverride = originalPlatform;
+    }
+  });
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});

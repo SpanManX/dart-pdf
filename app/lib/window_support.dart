@@ -1,9 +1,8 @@
 // Flutter's desktop windowing API remains experimental in 3.47. Keep every
 // internal import and lifecycle assumption quarantined in this file so the
 // rest of the app has a small, replaceable surface when Flutter publishes the
-// API. Production remains single-window unless the process explicitly opts in
-// with DARTPDF_EXPERIMENTAL_WINDOWING=1 and Flutter enables its own windowing
-// feature.
+// API. DartPDF enables it before binding initialization, and the desktop native
+// runners always use the matching headless engine bootstrap.
 
 // ignore_for_file: implementation_imports, invalid_use_of_internal_member
 
@@ -16,8 +15,6 @@ import 'package:flutter/src/widgets/_window.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import 'window_support_environment.dart';
-
 const Size _defaultWindowSize = Size(1100, 800);
 final _windowLifetime = _WindowLifetime();
 
@@ -29,17 +26,20 @@ bool get _desktopPlatform => switch (defaultTargetPlatform) {
       _ => false,
     };
 
+/// Enables Flutter's windowing owner for DartPDF's desktop process.
+///
+/// This must be called before [WidgetsFlutterBinding.ensureInitialized]. The
+/// binding chooses its windowing owner during construction, so changing the
+/// feature after that point is too late even though Flutter currently exposes
+/// the feature gate as mutable internal state.
+void enableDartPdfWindowing() {
+  if (!kIsWeb && _desktopPlatform) isWindowingEnabled = true;
+}
+
 /// Whether this process can expose DartPDF's experimental multi-window UI.
 ///
-/// Requiring both flags is deliberate: Flutter's flag makes the internal API
-/// available, while DartPDF's process flag selects the matching native runner
-/// bootstrap. A normal Store/release launch therefore stays on [runApp] even
-/// when a developer has enabled Flutter windowing globally.
 bool get multiWindowSupported =>
-    dartPdfWindowingRequested &&
-    isWindowingEnabled &&
-    !kIsWeb &&
-    _desktopPlatform;
+    isWindowingEnabled && !kIsWeb && _desktopPlatform;
 
 /// Starts DartPDF with an explicit primary native window when the experimental
 /// path is enabled, otherwise uses the unchanged single-window bootstrap.
@@ -49,35 +49,29 @@ void runDartPdfApp(Widget root) {
     return;
   }
 
-  try {
-    final registry = _DartPdfWindowRegistry();
-    final closeCoordinator = DartPdfWindowCloseCoordinator();
-    late final _DartPdfWindowEntry entry;
-    _windowLifetime.opened();
-    final controller = RegularWindowController(
-      size: _defaultWindowSize,
-      title: 'DartPDF',
-      delegate: _RegisteredWindowDelegate(
-        onUnregister: () => registry.unregister(entry),
-        closeCoordinator: closeCoordinator,
-        onDestroyed: _windowLifetime.closed,
-      ),
-    );
-    entry = _DartPdfWindowEntry(
-      controller: controller,
-      builder: (_) => DartPdfWindowCloseScope(
-        coordinator: closeCoordinator,
-        child: root,
-      ),
-    );
-    registry.register(entry);
-    runWidget(_DartPdfWindowHost(registry: registry));
-  } on UnsupportedError {
-    _windowLifetime.abandonOpen();
-    // A platform may compile the experimental framework API without providing
-    // a backing window implementation. Keep DartPDF usable in that case.
-    runApp(root);
-  }
+  final registry = _DartPdfWindowRegistry();
+  final closeCoordinator = DartPdfWindowCloseCoordinator();
+  late final _DartPdfWindowEntry entry;
+  _windowLifetime.opened();
+  final controller = RegularWindowController(
+    size: _defaultWindowSize,
+    title: 'DartPDF',
+    delegate: _RegisteredWindowDelegate(
+      onUnregister: () => registry.unregister(entry),
+      closeCoordinator: closeCoordinator,
+      onDestroyed: _windowLifetime.closed,
+    ),
+  );
+  entry = _DartPdfWindowEntry(
+    controller: controller,
+    builder: (_) => DartPdfWindowCloseScope(
+      coordinator: closeCoordinator,
+      child: root,
+    ),
+  );
+  registry.register(entry);
+  controller.activate();
+  runWidget(_DartPdfWindowHost(registry: registry));
 }
 
 /// Opens a new top-level window and returns whether it was registered.
@@ -117,6 +111,7 @@ bool openRegularWindow(
       ),
     );
     registry.register(entry);
+    controller.activate();
     return true;
   } on UnsupportedError {
     _windowLifetime.abandonOpen();

@@ -4,14 +4,9 @@ import FlutterMacOS
 import PDFKit
 
 enum DartPdfWindowingBootstrap {
-  static var isEnabled: Bool {
-    guard let value = ProcessInfo.processInfo.environment[
-      "DARTPDF_EXPERIMENTAL_WINDOWING"
-    ]?.lowercased() else {
-      return false
-    }
-    return value == "1" || value == "true"
-  }
+  // Dart enables Flutter's matching framework feature before binding
+  // initialization. The runner must therefore never attach an implicit view.
+  static let isEnabled = true
 }
 
 /// Runs security-scoped filesystem work away from AppKit's main thread.
