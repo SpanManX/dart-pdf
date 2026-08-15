@@ -861,6 +861,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   // refreshes _textEditRect from this through the live geometry
   PdfRect? _textEditPageRect;
   bool _textEditExisting = false;
+  (int, int)? _textEditAnnotationSlot;
   PdfEditTool? _textEditTool;
   // when non-null the open editor is a callout: this is the page-space point
   // (the terminus) the committed box's leader line will point at
@@ -1069,6 +1070,26 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
   double get _chromeScale {
     final zoom = widget.zoom;
     return zoom.isFinite && zoom > 0 ? 1 / zoom : 1.0;
+  }
+
+  /// Keeps Flutter's Apple-platform two-device-pixel cursor nudge constant in
+  /// screen space. The editor lives inside the viewer transform, so the stock
+  /// `-2 / devicePixelRatio` local offset otherwise grows with deep zoom and
+  /// leaves the caret visibly detached from both ends of centred text.
+  Widget _zoomAwareCursor(BuildContext context, Widget child) {
+    final media = MediaQuery.of(context);
+    final platform = Theme.of(context).platform;
+    if (platform != TargetPlatform.iOS && platform != TargetPlatform.macOS) {
+      return child;
+    }
+    final scale = _chromeScale;
+    if (!scale.isFinite || scale <= 0) return child;
+    return MediaQuery(
+      data: media.copyWith(
+        devicePixelRatio: media.devicePixelRatio / scale,
+      ),
+      child: child,
+    );
   }
 
   /// Null while the eyedropper is armed without a tool, or while a
@@ -2380,6 +2401,18 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         });
       }
     }
+    if (_textEditExisting && _textEditFieldName == null) {
+      // The opacity control restyles the selected annotation in place while
+      // its inline editor stays open. Follow the new appearance alpha so the
+      // live glyphs do not remain opaque and make the control look inert.
+      final opacity = _controller.selectedAnnotationSlot ==
+              _textEditAnnotationSlot
+          ? _controller.selectedAnnotation?.appearanceOpacity
+          : null;
+      if (opacity != null && opacity != _textEditOpacity) {
+        setState(() => _textEditOpacity = opacity);
+      }
+    }
     if (_controller.shouldKeepEditingTextFocused &&
         _textEditRect != null &&
         !_textEditFocus.hasFocus) {
@@ -2657,6 +2690,8 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
     final style = existing ? _controller.selectedTextStyle : null;
     // /DA carries the text color; /C is the box background for free text
     final annotation = existing ? _controller.selectedAnnotation : null;
+    final annotationSlot =
+        existing ? _controller.selectedAnnotationSlot : null;
     final parsed = annotation?.behavior.style.freeText;
     final annotationColor = annotation?.behavior.style.color;
     // an already-rotated box edits in its rotated frame: take the chrome's
@@ -2694,11 +2729,18 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _textEditText.resetStyles(fallbackStyle);
       _textEditText.text = existing ? (_controller.selectedText ?? '') : '';
     }
+    // TextEditingController.text invalidates the selection. Focus normally
+    // repairs it, but at the extreme zoom used for large CAD sheets Flutter
+    // can briefly paint the caret at the field origin. Seed the intended
+    // insertion point explicitly so it is always after the last glyph.
+    _textEditText.selection =
+        TextSelection.collapsed(offset: _textEditText.text.length);
     setState(() {
       _textEditRect = rect;
       _textEditPageRect = _geometry.toPageRect(rect);
       _textEditRotation = rotation;
       _textEditExisting = existing;
+      _textEditAnnotationSlot = annotationSlot;
       _textEditTool = _tool;
       _textEditFont =
           defaultFont is PdfStandardFont ? defaultFont : _controller.fontFamily;
@@ -2816,6 +2858,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
       _textEditPageRect = rect;
       _textEditRotation = 0;
       _textEditExisting = false;
+      _textEditAnnotationSlot = null;
       _textEditTool = _tool;
       _textEditFieldName = field.name;
       _textEditMultiline = field.isMultiline;
@@ -2981,11 +3024,13 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
         _textEditRect = null;
         _textEditPageRect = null;
         _textEditFieldName = null;
+        _textEditAnnotationSlot = null;
       });
     } else {
       _textEditRect = null;
       _textEditPageRect = null;
       _textEditFieldName = null;
+      _textEditAnnotationSlot = null;
     }
     _controller.setEditingText(false);
     // hand the keyboard back so the viewer's shortcuts work again right away
@@ -5576,7 +5621,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                             final direction = _flutterTextDirection(value.text);
                             return Directionality(
                               textDirection: direction,
-                              child: TextField(
+                              child: _zoomAwareCursor(context, TextField(
                                 key: ValueKey(_textEditFieldName == null
                                     ? 'pdf-freetext-editor'
                                     : 'pdf-form-text-editor'),
@@ -5678,7 +5723,7 @@ class _EditingPageOverlayState extends State<EditingPageOverlay>
                                     3 * _geometry.scale,
                                   ),
                                 ),
-                              ),
+                              )),
                             );
                           },
                         ),
