@@ -95,6 +95,14 @@
     <!-- Generated from app/fastlane/metadata/android/en-US/changelogs/ and
          app/release-notes/. Newest first; keep the top entry in sync with the
          version the Flatpak/AUR packages pin. -->
+    <release version="3.6.1" date="2026-08-16">
+      <description>
+        <ul>
+          <li>Fix the Linux app exiting at launch by disabling the experimental multi-window bootstrap on Linux only.</li>
+          <li>Fix the Snap package failing to start under strict confinement.</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.6.0" date="2026-08-15">
       <description>
         <ul>
