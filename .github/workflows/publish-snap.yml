@@ -108,14 +108,30 @@ jobs:
           retention-days: 30
 
       - name: Publish stable channel
+        id: upload
         if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
         run: |
+          set -euo pipefail
           snap_file="$(find "$RUNNER_TEMP/snap-output" -name 'dartpdf_*.snap' -print -quit)"
           snapcraft whoami
-          snapcraft upload --release=stable "$snap_file"
+          # A new interface attribute (e.g. the dartpdf-dbus slot) queues the
+          # revision for human Store review: snapcraft exits non-zero with
+          # "will need manual review". The upload itself succeeded and the
+          # revision releases automatically once approved, so warn instead of
+          # failing the workflow.
+          echo "needs_review=false" >> "$GITHUB_OUTPUT"
+          upload_log="$RUNNER_TEMP/snapcraft-upload.log"
+          if ! snapcraft upload --release=stable "$snap_file" 2>&1 | tee "$upload_log"; then
+            if grep -q "will need manual review" "$upload_log"; then
+              echo "::warning::Snap uploaded but queued for manual Store review; it releases to stable after approval."
+              echo "needs_review=true" >> "$GITHUB_OUTPUT"
+            else
+              exit 1
+            fi
+          fi
 
       - name: Verify clean install from Snap Store
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && steps.upload.outputs.needs_review != 'true'
         env:
           EXPECTED_VERSION: ${{ steps.release.outputs.version }}
         run: |
