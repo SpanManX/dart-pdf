@@ -395,6 +395,145 @@ void main() {
     sharpest.image.dispose();
   });
 
+  testWidgets('the ladder builds every rung from a retained scene',
+      (tester) async {
+    // #699: the ladder was the half of the "build the page once" fix left
+    // interpreting. A page the viewer is still holding has already been
+    // walked; its retained scene carries exactly the commands a worker record
+    // would ship back, so the whole ladder should cost replays and rasters -
+    // no content-stream walk at all.
+    final document = PdfDocument.open(buildClassicPdf());
+    final page = document.page(0);
+    const levels = [400.0, 800.0];
+    final cache = PdfPagePreviewCache(
+      lodPolicy: const PdfPagePreviewLodPolicy(
+        intermediateLongestSides: levels,
+        maxBytes: 8 * 1024 * 1024,
+        maxEntryBytes: 4 * 1024 * 1024,
+      ),
+    );
+    addTearDown(cache.dispose);
+    const plan = PdfPageRenderPlan(
+      pageColor: Color(0xFFFFFFFF),
+      annotations: true,
+      rotation: null,
+    );
+
+    late final int ops;
+    final logs = <String>[];
+    await tester.runAsync(() async {
+      final scene = await PdfRetainedScene.record(page, plan: plan);
+      cache
+          .retainScene(0, page, scene,
+              plan: plan, fromWorker: false, estimatedBytes: 1 << 20)
+          .dispose(); // the cache keeps its own reference
+      PdfPerf.enabled = true;
+      addTearDown(() => PdfPerf.enabled = false);
+      PdfPerf.reset();
+      PdfPerfLog.enabled = true;
+      PdfPerfLog.sink = logs.add;
+      addTearDown(() {
+        PdfPerfLog.enabled = false;
+        PdfPerfLog.sink = null;
+      });
+      await cache.renderPreview(0, page, alsoFillLongestSides: levels);
+      ops = PdfPerf.snapshot().count(PdfPerfCount.contentOps);
+    });
+
+    expect(ops, 0,
+        reason: 'the retained scene is replayed, never re-interpreted');
+    expect(cache.isFresh(0, page, requireImages: true), isTrue);
+    expect(cache.hasIntermediate(0, targetLongestSide: levels[0]), isTrue);
+    expect(cache.hasIntermediate(0, targetLongestSide: levels[1]), isTrue);
+    expect(
+      logs.where((line) => line.contains('prerender page=0')).length,
+      3,
+      reason: 'every rung still reports its own cost',
+    );
+    expect(logs.every((line) => !line.contains('prerender page=0') ||
+        line.contains('retained ')), isTrue);
+    final sharpest = cache.previewFor(0)!;
+    expect(sharpest.targetLongestSide, levels[1]);
+    expect(math.max(sharpest.image.width, sharpest.image.height),
+        inInclusiveRange(790, 800));
+    sharpest.image.dispose();
+  });
+
+  testWidgets('a ladder deferred mid-flight releases the scene it leased',
+      (tester) async {
+    // Taking a lease and then bailing out has to give it back: a leaked lease
+    // pins the scene past the cache's own reference, so the memory the LRU
+    // thinks it freed is still held. The motion gate makes this the common
+    // exit, not a rare one.
+    final document = PdfDocument.open(buildClassicPdf());
+    final page = document.page(0);
+    final cache = PdfPagePreviewCache();
+    const plan = PdfPageRenderPlan(
+      pageColor: Color(0xFFFFFFFF),
+      annotations: true,
+      rotation: null,
+    );
+
+    late final PdfRetainedScene scene;
+    await tester.runAsync(() async {
+      scene = await PdfRetainedScene.record(page, plan: plan);
+      cache
+          .retainScene(0, page, scene,
+              plan: plan, fromWorker: false, estimatedBytes: 1 << 20)
+          .dispose(); // the cache keeps its own reference
+      await cache.renderPreview(0, page, deferUiWork: () => true);
+    });
+
+    expect(cache.isFresh(0, page, requireImages: true), isFalse,
+        reason: 'the pass declined before storing anything');
+    cache.dispose(); // drops the cache's own reference
+    expect(() => scene.replay(pixelRatio: 1), throwsAssertionError,
+        reason: 'with the lease returned, disposing the cache frees the scene');
+  });
+
+  testWidgets('a soft-image retained scene is declined by the ladder',
+      (tester) async {
+    // The guard the reuse rests on: a scene whose images were decoded below
+    // the sharpest rung's ratio would draw them softer than a fresh record,
+    // so the ordinary interpret runs instead.
+    final document = PdfDocument.open(buildSyntheticRasterUnderlaySheet(
+      underlays: const [PdfUnderlaySpec(width: 256, height: 256)],
+      layers: 1,
+      ops: 0,
+      pageW: 256,
+      pageH: 256,
+    ));
+    final page = document.page(0);
+    final cache = PdfPagePreviewCache();
+    addTearDown(cache.dispose);
+    const plan = PdfPageRenderPlan(
+      pageColor: Color(0xFFFFFFFF),
+      annotations: true,
+      rotation: null,
+    );
+
+    late final int ops;
+    await tester.runAsync(() async {
+      final scene = await PdfRetainedScene.record(page, plan: plan);
+      cache
+          .retainScene(0, page, scene,
+              plan: plan,
+              fromWorker: false,
+              estimatedBytes: 1 << 20,
+              imagePixelRatio: 0.1)
+          .dispose();
+      PdfPerf.enabled = true;
+      addTearDown(() => PdfPerf.enabled = false);
+      PdfPerf.reset();
+      await cache.renderPreview(0, page);
+      ops = PdfPerf.snapshot().count(PdfPerfCount.contentOps);
+    });
+
+    expect(ops, greaterThan(0),
+        reason: 'a scene decoded below the rung ratio must not serve it');
+    expect(cache.isFresh(0, page, requireImages: true), isTrue);
+  });
+
   testWidgets('a ladder build skips rungs that are already fresh',
       (tester) async {
     final document = PdfDocument.open(buildClassicPdf());
