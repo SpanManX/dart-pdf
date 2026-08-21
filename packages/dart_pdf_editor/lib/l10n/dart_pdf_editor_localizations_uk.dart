@@ -414,6 +414,9 @@ class DartPdfEditorLocalizationsUk extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Вилучити вузол';
 
   @override
+  String get menuSaveToStamps => 'Зберегти у штампи';
+
+  @override
   String get menuSetAsDefaultStyle => 'Установити як стиль за замовчуванням';
 
   @override
@@ -901,6 +904,33 @@ class DartPdfEditorLocalizationsUk extends DartPdfEditorLocalizations {
   String get searchRegex => 'Регулярний вираз';
 
   @override
+  String get searchReplace => 'Замінити';
+
+  @override
+  String get searchReplaceAll => 'Замінити все';
+
+  @override
+  String get searchReplaceHint => 'Замінити на';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'Цей збіг не можна замінити окремо — скористайтеся «Замінити все» або відредагуйте його інструментом вмісту';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Замінено $count збігу',
+      many: 'Замінено $count збігів',
+      few: 'Замінено $count збіги',
+      one: 'Замінено 1 збіг',
+      zero: 'Нічого не замінено',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Результати пошуку';
 
   @override
@@ -1004,6 +1034,10 @@ class DartPdfEditorLocalizationsUk extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Показувати анотації';
+
+  @override
+  String get shellShowScrollbarChapters =>
+      'Показувати розділи на смузі прокручування';
 
   @override
   String get shellTabHere => 'Вкладка тут';
@@ -1235,6 +1269,9 @@ class DartPdfEditorLocalizationsUk extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'Новий штамп';
+
+  @override
+  String get stampSavedToCollection => 'Збережено у штампи';
 
   @override
   String get stampSelectTextToEdit => 'Виберіть текст для редагування';

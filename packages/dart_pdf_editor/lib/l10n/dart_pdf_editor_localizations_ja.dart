@@ -408,6 +408,9 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
   String get menuRemoveNode => '頂点を削除';
 
   @override
+  String get menuSaveToStamps => 'スタンプに保存';
+
+  @override
   String get menuSetAsDefaultStyle => 'デフォルトのスタイルに設定';
 
   @override
@@ -885,6 +888,31 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
   String get searchRegex => '正規表現';
 
   @override
+  String get searchReplace => '置換';
+
+  @override
+  String get searchReplaceAll => 'すべて置換';
+
+  @override
+  String get searchReplaceHint => '置換後の文字列';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'この一致は単独では置換できません。「すべて置換」を使うか、コンテンツツールで編集してください';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件を置換しました',
+      one: '1 件を置換しました',
+      zero: '置換されませんでした',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => '検索結果';
 
   @override
@@ -987,6 +1015,9 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => '注釈を表示';
+
+  @override
+  String get shellShowScrollbarChapters => 'スクロールバーに章を表示';
 
   @override
   String get shellTabHere => 'ここにタブ';
@@ -1215,6 +1246,9 @@ class DartPdfEditorLocalizationsJa extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => '新規スタンプ';
+
+  @override
+  String get stampSavedToCollection => 'スタンプに保存しました';
 
   @override
   String get stampSelectTextToEdit => '編集するテキストを選択';

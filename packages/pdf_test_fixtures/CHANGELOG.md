@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.7.0
+
+- Add `buildTextLinesPdf`, a one-page fixture drawing each line as its own text
+  run, for content-editing tests that need several runs whose text is the same
+  or deliberately different.
+
+## 3.6.0
+
+- Add a Bluebeam-style FreeText fixture covering `/DS` and rich-text `/RC`
+  CSS fallbacks for alignment, leading, letter spacing, font stretch, and
+  underline.
+
+## 3.5.1
+
+- Add JBIG2 refinement and JPEG 2000 fixtures used to verify scanned MRC masks
+  and refined text symbols.
+
+## 3.5.0
+
+- Lockstep minor release to align the dart-pdf package suite at 3.5.0. No
+  public fixture API changes since 3.4.0.
+
+## 3.4.0
+
+- Lockstep minor release to align the dart-pdf package suite at 3.4.0. No
+  public fixture API changes since 3.3.1.
+
 ## 3.3.1
 
 - Add `buildIndirectAnnotsPdf()`, a regression fixture for annotation arrays

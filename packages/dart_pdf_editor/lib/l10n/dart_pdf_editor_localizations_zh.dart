@@ -408,6 +408,9 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
   String get menuRemoveNode => '移除节点';
 
   @override
+  String get menuSaveToStamps => '保存到图章';
+
+  @override
   String get menuSetAsDefaultStyle => '设为默认样式';
 
   @override
@@ -884,6 +887,30 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
   String get searchRegex => '正则表达式';
 
   @override
+  String get searchReplace => '替换';
+
+  @override
+  String get searchReplaceAll => '全部替换';
+
+  @override
+  String get searchReplaceHint => '替换为';
+
+  @override
+  String get searchReplaceNotTargetable => '无法单独替换该匹配项 — 请使用“全部替换”，或用内容工具编辑';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已替换 $count 个匹配项',
+      one: '已替换 1 个匹配项',
+      zero: '未替换任何内容',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => '搜索结果';
 
   @override
@@ -986,6 +1013,9 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => '显示注释';
+
+  @override
+  String get shellShowScrollbarChapters => '在滚动条上显示章节';
 
   @override
   String get shellTabHere => '停靠为标签页';
@@ -1214,6 +1244,9 @@ class DartPdfEditorLocalizationsZh extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => '新建图章';
+
+  @override
+  String get stampSavedToCollection => '已保存到图章';
 
   @override
   String get stampSelectTextToEdit => '选择要编辑的文本';
@@ -2395,6 +2428,9 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
   String get menuRemoveNode => '移除節點';
 
   @override
+  String get menuSaveToStamps => '儲存至戳記';
+
+  @override
   String get menuSetAsDefaultStyle => '設為預設樣式';
 
   @override
@@ -2871,6 +2907,30 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
   String get searchRegex => '正規表示式';
 
   @override
+  String get searchReplace => '取代';
+
+  @override
+  String get searchReplaceAll => '全部取代';
+
+  @override
+  String get searchReplaceHint => '取代為';
+
+  @override
+  String get searchReplaceNotTargetable => '無法單獨取代此相符項目 — 請使用「全部取代」，或以內容工具編輯';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已取代 $count 個相符項目',
+      one: '已取代 1 個相符項目',
+      zero: '未取代任何項目',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => '搜尋結果';
 
   @override
@@ -2973,6 +3033,9 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
 
   @override
   String get shellShowAnnotations => '顯示註解';
+
+  @override
+  String get shellShowScrollbarChapters => '在捲動軸上顯示章節';
 
   @override
   String get shellTabHere => '在此建立分頁';
@@ -3201,6 +3264,9 @@ class DartPdfEditorLocalizationsZhHant extends DartPdfEditorLocalizationsZh {
 
   @override
   String get stampNewStampTitle => '新增戳記';
+
+  @override
+  String get stampSavedToCollection => '已儲存至戳記';
 
   @override
   String get stampSelectTextToEdit => '選取文字以編輯';

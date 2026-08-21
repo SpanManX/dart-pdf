@@ -415,6 +415,9 @@ class DartPdfEditorLocalizationsRu extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Удалить узел';
 
   @override
+  String get menuSaveToStamps => 'Сохранить в штампы';
+
+  @override
   String get menuSetAsDefaultStyle => 'Задать стилем по умолчанию';
 
   @override
@@ -902,6 +905,33 @@ class DartPdfEditorLocalizationsRu extends DartPdfEditorLocalizations {
   String get searchRegex => 'Регулярное выражение';
 
   @override
+  String get searchReplace => 'Заменить';
+
+  @override
+  String get searchReplaceAll => 'Заменить все';
+
+  @override
+  String get searchReplaceHint => 'Заменить на';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'Это совпадение нельзя заменить отдельно — используйте «Заменить все» или измените его инструментом содержимого';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Заменено $count совпадения',
+      many: 'Заменено $count совпадений',
+      few: 'Заменено $count совпадения',
+      one: 'Заменено 1 совпадение',
+      zero: 'Ничего не заменено',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Результаты поиска';
 
   @override
@@ -1005,6 +1035,10 @@ class DartPdfEditorLocalizationsRu extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Показывать аннотации';
+
+  @override
+  String get shellShowScrollbarChapters =>
+      'Показывать главы на полосе прокрутки';
 
   @override
   String get shellTabHere => 'Вкладка сюда';
@@ -1237,6 +1271,9 @@ class DartPdfEditorLocalizationsRu extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'Новый штамп';
+
+  @override
+  String get stampSavedToCollection => 'Сохранено в штампы';
 
   @override
   String get stampSelectTextToEdit => 'Выберите текст для редактирования';

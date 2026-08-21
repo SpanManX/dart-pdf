@@ -2,7 +2,7 @@
 
 Monorepo using **pub workspaces** (root `pubspec.yaml` lists members under
 `packages/`). Flutter is managed with **fvm** (see `.fvmrc`); use
-`fvm flutter` / `fvm dart`, or the binaries in `~/fvm/versions/3.44.8/bin/`.
+`fvm flutter` / `fvm dart`, or the binaries in `~/fvm/versions/3.47.0/bin/`.
 
 ## Commands
 
@@ -87,7 +87,30 @@ policy live on the handler, shared with the loader's `decryptObjectGraph`);
 signing encrypted files stays refused). Annotation authoring is in:
 `PdfEditor` creates highlights/ink/shapes/free text/notes/stamps with
 generated appearance streams (`annotation_editor.dart`) and can flatten
-them into page content. AcroForm support is in: `PdfAcroForm`/`PdfFormField`
+them into page content. A template stamp records its design - unresolved,
+so `{{date}}` stays live - as private metadata (`DartPdfStampTemplate` →
+`PdfAnnotation.stampTemplate`, skipped past
+`maxStampTemplateMetadataBytes`), which is how the editor's right-click
+"Save to stamps" (`customStampOf` / `saveSelectedAsCustomStamp`) puts a
+placed stamp back into the collection; see
+doc/dev-log/2026-08-06-save-stamp-from-page.md. Annotation geometry is
+**not confined to the crop box**: a point the user picked is authoritative,
+so placements, drags, resizes and paste-at-a-point commit off the page edge
+and the renderer's page clip trims them. The only tethered placement is the
+point-less paste cascade (`PdfEditingController._tetherShift` /
+`pageTether`, which keeps 24pt on the paper so repeats can't march copies
+out of sight); auto-sizing still caps a stamp/image/signature at 90% of the
+page, which is a size rule, not a boundary one. The off-page half is
+grabbable too: `PdfEditingReach` (`editing_reach.dart`, wrapped immediately
+outside the item's `FractionallySizedBox` - the outermost box that would
+refuse a margin position) routes those presses into the page at its nearest
+inside point, which is sound because hit testing only picks the target while
+`PointerEvent.localPosition` still comes from the true position. It claims
+only presses on the selection (`selectionGrabAt` + `_selectionGrabMargin`),
+never the whole margin - the canvas stays the touch-scroll gesture's, and
+`_touchPanEnabledAt` draws the same line. Starting a *new* annotation still
+has to happen on the page. See
+doc/dev-log/2026-08-20-annotations-past-the-page-edge.md. AcroForm support is in: `PdfAcroForm`/`PdfFormField`
 model (`form.dart`) plus filling with regenerated appearances
 (`form_editor.dart` - text/checkbox/radio/choice, auto-size, quadding).
 Page manipulation is in (`page_editor.dart`): reorder/move/remove flatten
@@ -269,6 +292,38 @@ the real gate there, not the total: `pageBytes ~/ 8` admits nothing over 8 MB
 under a 64 MB budget, and a letter page at DPR 2 is ~10 MB. See
 doc/dev-log/2026-07-29-idle-full-raster-warm-614.md and
 doc/dev-log/2026-07-31-warm-auto-memory-floor-614.md.
+Ordinary pages render **through** a scroll rather than waiting it out. Two
+halves: a page on screen with nothing of its own to paint asks for its render
+on every rebuild (guarded by `PdfPageRenderScheduler.isQueued`) - nothing in
+the render intent changes as a page scrolls in, so before this only the
+end-of-scroll settle bump queued it, which was the whole "scroll two pages,
+wait half a second"; and a request may declare itself `motionSafe` to
+`PdfPageRenderScheduler` and re-declare it at `paceUiWork` once the record's
+size is known
+(`PdfPageView.motionSafeRenders`/`motionSafeMaxCommands`/
+`motionSafeMaxImagePixels`; the verdict is a live worker + page-level
+XObjects declaring <=1 MP up front, then <=4000 commands and <=1 MP of
+actual image draws when the buffer lands, revoked the moment a pass falls
+through to a local walk). Ask an image how big it is (/Width x /Height,
+`PdfPageRenderer.imageDrawPixels`) rather than treating "has an image" as
+"expensive": the first cut of this gate refused any page with an /XObject
+and so switched itself off across every ordinary report with a letterhead
+mark (`test_corpora/dartpdf/letterhead-report-40p.pdf`, scenario
+`wheel-letterhead`, is that class). A cached retained scene is likewise
+adopted when it is sharp at the *current* zoom, not only when it carries the
+2x `focusedImageDecodeHeadroom` a fresh render aims for - the headroom
+arrives as a soft-to-sharp refinement behind the painted page.
+While a scroll is in flight grants stay near the destination (`motionSafeHoldRadius`) so a fling does not record every page
+it passes. Retention pairs with it: the retained-scene LRU is governed by an
+honest byte price (`PdfPagePreviewCache.priceRetainedScene` floors an entry
+at the raster it stands in for - the engine's picture estimate under-reports
+a text page ~18x) against `pdfDefaultRetainedSceneBytes`. Measure this area with the web
+harness's `wheel` scenarios (`tool/perf.sh web wheel-text`) - a continuous
+scroll sampled every frame, which is the journey a reader actually makes -
+and the `read` ones (`read-text`) for page-to-page navigation. The two are
+gated by different things; `read` alone hid the scrolling problem entirely.
+See doc/dev-log/2026-08-19-motion-safe-renders.md and
+doc/dev-log/2026-08-19-motion-lane-image-budget.md.
 Crash recovery for unsaved edits is in (app): while a document is dirty its
 bytes are mirrored outside the process, so a crash/OOM kill/closed browser
 tab loses nothing. `AutosaveController` (`app/lib/autosave.dart`) tracks a
@@ -335,6 +390,15 @@ size slider (`thumbnailViewTileWidth` pref), custom drag reorder
 onActivatePage`). `PdfEditorView` overlays it over the live viewer as a
 view mode (`showThumbnailView`, toggled from View options alongside
 reflow; `altView` = reflow-or-grid suppresses the panels/toolbar).
+Both panels take an external PDF **dropped between two tiles**:
+`PdfThumbnailDropController` (editing_thumbnail_drop.dart) is the seam -
+panels register a global-position→slot resolver and paint the insertion
+marker, the host (which owns the platform drag stream) drives
+`dragOver`/`indexAt`/`endDrag` and inserts at the returned index.
+`PdfEditorView(thumbnailDropController:)` forwards it; the app wires it
+to its `desktop_drop` `DropTarget`, so a positioned drop skips the
+open-or-insert dialog. See
+doc/dev-log/2026-08-06-thumbnail-file-drop-position.md.
 
 ## Development session log
 

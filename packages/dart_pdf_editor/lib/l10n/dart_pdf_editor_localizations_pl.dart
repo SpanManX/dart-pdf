@@ -415,6 +415,9 @@ class DartPdfEditorLocalizationsPl extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Usuń węzeł';
 
   @override
+  String get menuSaveToStamps => 'Zapisz w stemplach';
+
+  @override
   String get menuSetAsDefaultStyle => 'Ustaw jako styl domyślny';
 
   @override
@@ -902,6 +905,33 @@ class DartPdfEditorLocalizationsPl extends DartPdfEditorLocalizations {
   String get searchRegex => 'Wyrażenie regularne';
 
   @override
+  String get searchReplace => 'Zamień';
+
+  @override
+  String get searchReplaceAll => 'Zamień wszystko';
+
+  @override
+  String get searchReplaceHint => 'Zamień na';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'Tego dopasowania nie można zamienić osobno — użyj opcji „Zamień wszystko” lub edytuj je narzędziem zawartości';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Zamieniono $count dopasowania',
+      many: 'Zamieniono $count dopasowań',
+      few: 'Zamieniono $count dopasowania',
+      one: 'Zamieniono 1 dopasowanie',
+      zero: 'Nic nie zamieniono',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Wyniki wyszukiwania';
 
   @override
@@ -1005,6 +1035,10 @@ class DartPdfEditorLocalizationsPl extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Pokaż adnotacje';
+
+  @override
+  String get shellShowScrollbarChapters =>
+      'Pokaż rozdziały na pasku przewijania';
 
   @override
   String get shellTabHere => 'Dodaj jako kartę';
@@ -1236,6 +1270,9 @@ class DartPdfEditorLocalizationsPl extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'Nowy stempel';
+
+  @override
+  String get stampSavedToCollection => 'Zapisano w stemplach';
 
   @override
   String get stampSelectTextToEdit => 'Wybierz tekst do edycji';

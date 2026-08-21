@@ -1,5 +1,183 @@
 # Changelog
 
+## 3.7.0
+
+- Anchor thumbnail context menus to the correct position when the editor is
+  hosted inside an offset nested navigator.
+- Render ordinary pages *through* a scroll instead of waiting it out.
+  `PdfPageRenderScheduler` gains a motion lane: a request declares a
+  `PdfRenderMotionClass`, evaluated at grant time rather than baked in, so a
+  worker-backed page renders during any motion, a small page without a worker
+  renders in the scroll-quiet window, and anything heavier keeps the old hold.
+  A page on screen with nothing to paint now asks for its render on every
+  rebuild (guarded by `isQueued`), which is what was missing for a page the
+  reader scrolled onto.
+- Weigh an image by its declared size rather than its existence:
+  `PdfPageView.motionSafeMaxImagePixels` and `PdfPageRenderer.imageDrawPixels`
+  admit the letterhead mark that every page of a corporate report carries,
+  which the first cut of the gate refused outright.
+- Price retained scenes honestly. `PdfPagePreviewCache.priceRetainedScene`
+  floors an entry at the raster it stands in for - the engine's own picture
+  estimate under-reports a text page by ~18x - and the budget becomes
+  platform-aware (`pdfDefaultRetainedSceneBytes`), so the entry cap goes back
+  to being a backstop. A cached scene is now adopted when it is sharp at the
+  current zoom, not only when it carries a fresh render's decode headroom.
+- Add find **and replace** to the search panel. `PdfSearchResultsPanel(editing:)`
+  reveals a replacement field behind a disclosure in the options row, with
+  Replace and Replace all (one undo step); a null `editing` leaves it a pure
+  find panel. Backed by `replaceMatchText` and `replaceTextOnPages` on the
+  editing controller, and persisted through
+  `PdfEditingPreferences.searchReplaceExpanded`.
+- Fix the element strip's "Replace text" rewriting every matching run on the
+  page: both element-strip entry points now use the targeted
+  `replaceElementText`, as the selection menu already did.
+- Report the text of a remapped or subsetted simple font correctly in the
+  content tool, through `pdf_document`'s new `SimpleFont`.
+- Yield a frame between thumbnail tiles and re-read the busy gate, so the strip
+  can no longer run 400-500 ms of tile work ahead of the page the reader landed
+  on.
+- Say when the render worker fails to start. A failed isolate spawn was
+  swallowed, leaving every page to interpret on the UI thread for the rest of
+  the document with nothing in any log; it now reaches `PdfPerfLog` and prints
+  a debug warning, and the interpret line distinguishes `recorded(no-worker)`
+  from `recorded(declined)`.
+- Translate the new search and replace strings into all 19 non-English locales.
+
+## 3.6.0
+
+- Add `showPdfDialog`, a view-local Material dialog helper for hosts using
+  Flutter's desktop multi-window support.
+- Keep the annotation sidebar's selected item visible, make page and
+  annotation navigation more reliable across edits, and preserve FreeText
+  opacity in live editing and raster output.
+- Preserve substituted glyph advances on the worker-owned web Canvas2D
+  surface. Unembedded Century Gothic and Avant Garde use the metric-compatible
+  TeX Gyre Adventor fallback supplied by the optional assets package.
+- Preserve Bluebeam FreeText alignment, spacing, and caret placement while
+  editing annotations that describe their style through CSS metadata.
+
+## 3.5.1
+
+- Keep image soft-mask compositing correct on Impeller by applying the mask at
+  the layer boundary, preventing masked images from rendering as black blocks.
+
+## 3.5.0
+
+- Sharpen deep-zoom pages visible-first: the foreground render now covers the
+  exact viewport. Once that sharp frame paints, tile-capable pages grow bounded
+  pan-ahead underneath it; fallback pages avoid a second unpreemptible raster.
+  Translation settles cannot abandon an in-flight exact recovery, and tile
+  admission is bounded across frames so unrelated repaints cannot build a long
+  GPU queue. Foreground paint telemetry remains distinct, and every retained
+  detail allocation rebalances the live-raster budget, preventing visible
+  quality and memory from stepping backwards.
+- Promote fast-scroll page previews through a configurable 200 -> 400 -> 800
+  px LoD ladder before the final display raster. Intermediate levels warm only
+  around the viewport, share a 32 MiB byte-budgeted LRU, and are generated from
+  completed page rasters by serial image blits when possible; live pages never
+  downgrade when a cached level is evicted. Expose LoD occupancy and evictions
+  through `PdfViewerController.pagePreviewLodStats` and perf logs.
+- Let a tile raster session opt out of adjacent-tile slab batching and cap new
+  work admitted by each paint, while preserving Canvas batching and existing
+  third-party session compatibility. Expose the exact visible-tile budget
+  decision in diagnostics so single-patch fallbacks are explainable.
+- Keep off-screen neighbour pages at fit-resolution base rasters during deep
+  zoom, promoting them only when they enter the viewport, so navigation no
+  longer allocates high-zoom full-page rasters that are immediately replaced.
+  Cache-restored fit rasters now trigger that same promotion instead of
+  remaining enlarged after entering an already-zoomed viewport.
+- Require 750 ms of continuous viewer idle time before whole-document
+  thumbnail warming starts or resumes, and restart that quiet window when
+  navigation changes focus.
+- Let optional tile backends expose their latest session rejection reason and
+  include requested backend, actual route, reason, and command count in perf
+  logs.
+- Add an optional persistent tier for 512 px LoD tiles. Disk reads race live
+  rendering, writes happen after display admission, cache keys include the
+  complete page visual identity, and the existing byte-budgeted memory LRU and
+  coarse-tile fallback remain authoritative. Export the retained-scene bounds
+  and content-stable image-key helpers used by optional raster backends.
+- Let `PdfComparisonView` receive the same optional tile raster backend as the
+  reader, editor, and viewer, so hosts can switch every mounted view together.
+- Stop treating a page that shares the screen with the current one as an
+  off-screen prefetch neighbour: `PdfPageView.onScreen` now gates the
+  reduced-resolution image decode and the live-raster reclaim, so pages above
+  and below no longer soften and blank as they cross the viewport edge on
+  large-format scans (#657). `PdfLiveRasterHolder` implementations must add
+  `liveRasterOnScreen`.
+
+## 3.4.0
+
+- Add a reproducible Chromium/PDFium competitive harness and reduce deep-zoom
+  memory pressure by reserving large rasters for visible-region detail,
+  reusing fit rasters as zoom bases, immediately settling discrete zooms, and
+  prioritising the focused page ahead of speculative neighbours. On web,
+  proactive off-screen preview warming now waits for a one-second idle window so
+  CanvasKit readbacks cannot extend the visible navigation response tail;
+  fast-scroll vector previews remain immediate. Small resource-simple pages
+  may take one startup-only local first paint while the worker boots, and a
+  completed web raster no longer performs an immediate duplicate preview
+  readback. Below-fit layout zooms now defer mounted neighbour refreshes just
+  like transform zooms, so only the focused page sharpens on the interaction's
+  critical path. The harness can also build SkWasm and validate its offscreen
+  canvas through symmetric full-compositor screenshot polling; custom build
+  output paths are resolved before changing directories so an A/B cannot
+  silently serve a stale bundle, and per-action Flutter frame timings make
+  page/zoom presentation tails directly attributable in the result artifact.
+  Competitive records now pin Chrome's GPU/Skia backend and diagnostics-only
+  no-capture runs cannot be used as parity gates. A prepared or revisited
+  exact raster is adopted synchronously in the focused page's first build,
+  avoiding a placeholder frame without blocking navigation to create it. A
+  default-off worker-owned Canvas2D path now covers ordinary path/text pages
+  and correctness-gated decoded images while declining unsupported command
+  profiles to the established renderer. Browser-native grayscale frames avoid
+  a Dart RGBA upload for common scans, and deep zoom overlays a viewport-sized
+  region on a retained 2× base instead of committing a full 3× page canvas.
+  A real-Chrome pixel gate checks representative pages/zooms for channel error,
+  foreground recall/precision, and foreground-coverage bounds before benchmark
+  results are accepted. The competitive runner now calibrates full-screenshot
+  pixel sampling separately from JPEG response completion, excludes its
+  pre-navigation baseline capture from cold-open time, preserves page-side
+  readiness timestamps across delayed CDP polls, and emits wheel events at a
+  fixed hardware cadence without serial acknowledgement throttling. This
+  removes capture/driver floors from page, zoom, and scroll comparisons while
+  retaining screenshot hashes as the common visible-output boundary. Cold-open
+  diagnostics now retain both full app-shell and first-PDF-request clocks, so
+  pre-Flutter startup is separated from document/render work without removing
+  application startup from the parity gate. The benchmark bootstrap can now
+  fetch once and paint page zero in the render worker before Flutter/SkWasm
+  starts, then hold that canvas through an exact hydrated-surface handoff.
+  Focused worker surfaces render directly at requested zoom-out sizes for
+  thin-line fidelity, use a 120 ms interaction settle, and retain an exact-size
+  `ImageBitmap` LRU capped at 8 MP / 32 MiB per live surface. Five-run gates for
+  the plan, scan, text, and ultra-dense diagram scenarios now meet every
+  configured PDFium p50/p95 interaction and RSS budget while the path remains
+  experimental and default-off.
+- Extend the competitive gate with a deterministic 138-page CAD journey that
+  measures normalized scrollbar scrubs, same-process warm reopen, continuous
+  peak RSS, and settled memory, plus a matched HTTP Range scenario that records
+  document first paint, complete background handoff, bytes, requests, and RSS.
+  Both five-sample gates meet their PDFium budgets. Progressive shells can stop
+  their sparse page-tree walk after the requested first-paint pages, render that
+  preview locally, then hand the complete document to the worker renderer;
+  immutable web revisions share one identity-keyed `SharedArrayBuffer` across
+  sibling workers instead of copying the full file per worker. A weekly
+  Chromium/PDFium workflow and `tool/perf.sh pdfium-gate` run all six acceptance
+  scenarios with checked-in budgets.
+- Add `PdfAnnotationSnapshotClipboard`, shared by default across editing
+  controllers, so annotations copied in one document can be pasted into
+  another open document (#653).
+- Add `PdfThumbnailDropController` and thumbnail-panel drop targets, enabling
+  hosts to insert externally dropped PDFs at an exact page position (#654).
+- Save eligible placed stamps back into the custom stamp collection while
+  preserving unresolved template fields, type, tags, and colour (#651).
+- Add optional persistent scrollbar chapter markers and surface the selected
+  annotation's colour in editing style controls (#643, #652).
+- Align selection, search, and substituted-font painting to the PDF's exact
+  per-character advances for proportional fonts (#647, #648, #649, #655).
+- Keep the touch text-selection menu under the viewer zoom transform and hide
+  page-colour editing from reader-only shells (#650, #656).
+
 ## 3.3.1
 
 - Fix annotation property edits duplicating an annotation in PDFs that store

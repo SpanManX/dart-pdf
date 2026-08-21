@@ -95,6 +95,63 @@
     <!-- Generated from app/fastlane/metadata/android/en-US/changelogs/ and
          app/release-notes/. Newest first; keep the top entry in sync with the
          version the Flatpak/AUR packages pin. -->
+    <release version="3.7.0" date="2026-08-19">
+      <description>
+        <ul>
+          <li>Pages render as you scroll instead of arriving after you stop, and pages you have already read come back instantly.</li>
+          <li>Find and replace in the search panel: replace one match or all of them in a single undo step.</li>
+          <li>Fix scrambled text and wrong edits in the content tool on documents with subsetted fonts.</li>
+          <li>Fix a crash when opening or saving a file.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.6.1" date="2026-08-16">
+      <description>
+        <ul>
+          <li>Fix the Linux app exiting at launch by disabling the experimental multi-window bootstrap on Linux only.</li>
+          <li>Fix the Snap package failing to start under strict confinement.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.6.0" date="2026-08-15">
+      <description>
+        <ul>
+          <li>Annotation panels are easier to navigate, keep selections visible after edits, and preserve text-box opacity.</li>
+          <li>Bluebeam text boxes retain their alignment, spacing, and caret position.</li>
+          <li>Multiple document windows now support dragging tabs between them.</li>
+          <li>Substituted text has more natural spacing, with fixes for stale pages and cloud-folder reveal actions.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.5.1" date="2026-08-14">
+      <description>
+        <ul>
+          <li>Scanned MRC and JBIG2 pages now keep their text, background, and mask layers.</li>
+          <li>Soft-masked images no longer render as black blocks with Impeller or the optional GPU renderer.</li>
+          <li>Android document scans reliably read results returned through the system content provider.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.5.0" date="2026-08-13">
+      <description>
+        <ul>
+          <li>Large and highly detailed PDFs remain responsive and sharpen the visible area first.</li>
+          <li>Page previews progress through clearer detail levels during fast navigation.</li>
+          <li>Pages stay sharp and visible as they cross viewport edges.</li>
+          <li>Remote and web documents load faster with more predictable memory use.</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.4.0" date="2026-08-09">
+      <description>
+        <ul>
+          <li>Copy and paste annotations between open documents and save placed stamps back to the stamp collection.</li>
+          <li>Drop PDFs between page thumbnails to insert pages at an exact position.</li>
+          <li>Text selection and substituted-font rendering align more precisely.</li>
+          <li>Tab grids, trackpad zooming, progressive file access, and print previews are more reliable.</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.3.1" date="2026-08-02">
       <description>
         <ul>

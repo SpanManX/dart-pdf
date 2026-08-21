@@ -408,6 +408,9 @@ class DartPdfEditorLocalizationsKo extends DartPdfEditorLocalizations {
   String get menuRemoveNode => '노드 제거';
 
   @override
+  String get menuSaveToStamps => '스탬프에 저장';
+
+  @override
   String get menuSetAsDefaultStyle => '기본 스타일로 설정';
 
   @override
@@ -885,6 +888,31 @@ class DartPdfEditorLocalizationsKo extends DartPdfEditorLocalizations {
   String get searchRegex => '정규 표현식';
 
   @override
+  String get searchReplace => '바꾸기';
+
+  @override
+  String get searchReplaceAll => '모두 바꾸기';
+
+  @override
+  String get searchReplaceHint => '바꿀 내용';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      '이 일치 항목은 단독으로 바꿀 수 없습니다. ‘모두 바꾸기’를 사용하거나 콘텐츠 도구로 편집하세요';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '일치 $count개 바꿈',
+      one: '일치 1개 바꿈',
+      zero: '바꾼 항목 없음',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => '검색 결과';
 
   @override
@@ -987,6 +1015,9 @@ class DartPdfEditorLocalizationsKo extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => '주석 표시';
+
+  @override
+  String get shellShowScrollbarChapters => '스크롤바에 장 표시';
 
   @override
   String get shellTabHere => '여기에 탭';
@@ -1216,6 +1247,9 @@ class DartPdfEditorLocalizationsKo extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => '새 스탬프';
+
+  @override
+  String get stampSavedToCollection => '스탬프에 저장됨';
 
   @override
   String get stampSelectTextToEdit => '편집할 텍스트 선택';

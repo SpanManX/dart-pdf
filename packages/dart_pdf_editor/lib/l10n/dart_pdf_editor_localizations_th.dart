@@ -408,6 +408,9 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'นำจุดออก';
 
   @override
+  String get menuSaveToStamps => 'บันทึกไปยังตราประทับ';
+
+  @override
   String get menuSetAsDefaultStyle => 'ตั้งเป็นสไตล์เริ่มต้น';
 
   @override
@@ -888,6 +891,31 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
   String get searchRegex => 'นิพจน์ทั่วไป';
 
   @override
+  String get searchReplace => 'แทนที่';
+
+  @override
+  String get searchReplaceAll => 'แทนที่ทั้งหมด';
+
+  @override
+  String get searchReplaceHint => 'แทนที่ด้วย';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'ไม่สามารถแทนที่รายการที่ตรงกันนี้เพียงรายการเดียว — ใช้ “แทนที่ทั้งหมด” หรือแก้ไขด้วยเครื่องมือเนื้อหา';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'แทนที่แล้ว $count รายการ',
+      one: 'แทนที่แล้ว 1 รายการ',
+      zero: 'ไม่ได้แทนที่รายการใด',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'ผลการค้นหา';
 
   @override
@@ -990,6 +1018,9 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'แสดงคำอธิบายประกอบ';
+
+  @override
+  String get shellShowScrollbarChapters => 'แสดงบทบนแถบเลื่อน';
 
   @override
   String get shellTabHere => 'แท็บที่นี่';
@@ -1219,6 +1250,9 @@ class DartPdfEditorLocalizationsTh extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'ตราประทับใหม่';
+
+  @override
+  String get stampSavedToCollection => 'บันทึกไปยังตราประทับแล้ว';
 
   @override
   String get stampSelectTextToEdit => 'เลือกข้อความเพื่อแก้ไข';

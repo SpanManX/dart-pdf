@@ -79,6 +79,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   List<String> _recentFonts = const [];
   Color _pageColor = const Color(0xFFFFFFFF);
   bool _showAnnotations = true;
+  bool _showScrollbarChapters = false;
   bool _highlightFormFields = true;
   bool _showReflowView = false;
   bool _showThumbnailView = false;
@@ -89,6 +90,7 @@ class PdfEditingPreferences extends ChangeNotifier {
   bool _searchWholeWord = false;
   bool _searchRegex = false;
   bool _searchAnnotations = true;
+  bool _searchReplaceExpanded = false;
   double? _thumbnailSidebarWidth;
   double? _bookmarkSidebarWidth;
   double? _annotationSidebarWidth;
@@ -238,6 +240,9 @@ class PdfEditingPreferences extends ChangeNotifier {
       if (pageColor != null) _pageColor = Color(pageColor);
       _showAnnotations =
           store.getBool('${_prefix}showAnnotations') ?? _showAnnotations;
+      _showScrollbarChapters =
+          store.getBool('${_prefix}showScrollbarChapters') ??
+              _showScrollbarChapters;
       _highlightFormFields = store.getBool('${_prefix}highlightFormFields') ??
           _highlightFormFields;
       _showReflowView =
@@ -266,8 +271,11 @@ class PdfEditingPreferences extends ChangeNotifier {
       _searchWholeWord =
           store.getBool('${_prefix}searchWholeWord') ?? _searchWholeWord;
       _searchRegex = store.getBool('${_prefix}searchRegex') ?? _searchRegex;
-      _searchAnnotations = store.getBool('${_prefix}searchAnnotations') ??
-          _searchAnnotations;
+      _searchAnnotations =
+          store.getBool('${_prefix}searchAnnotations') ?? _searchAnnotations;
+      _searchReplaceExpanded =
+          store.getBool('${_prefix}searchReplaceExpanded') ??
+              _searchReplaceExpanded;
       _propertiesPanelWidth =
           store.getDouble('${_prefix}propertiesPanelWidth') ??
               _propertiesPanelWidth;
@@ -979,6 +987,17 @@ class PdfEditingPreferences extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether document outline entries appear as chapter markers on the
+  /// viewer's main scrollbar. A display setting only, off by default.
+  bool get showScrollbarChapters => _showScrollbarChapters;
+
+  set showScrollbarChapters(bool value) {
+    if (value == _showScrollbarChapters) return;
+    _showScrollbarChapters = value;
+    _write((s) => s.setBool('${_prefix}showScrollbarChapters', value));
+    notifyListeners();
+  }
+
   /// Whether form-field widgets are washed with the visibility tint
   /// (see [PdfViewer.highlightFormFields]). A display setting only.
   bool get highlightFormFields => _highlightFormFields;
@@ -1309,6 +1328,20 @@ class PdfEditingPreferences extends ChangeNotifier {
     if (value == _searchMatchCase) return;
     _searchMatchCase = value;
     _write((s) => s.setBool('${_prefix}searchMatchCase', value));
+    notifyListeners();
+  }
+
+  /// Whether the search panel's replace controls are expanded. They are
+  /// collapsed by default - find is the common case and the replacement field
+  /// plus its two buttons are a lot of vertical space to spend on a panel
+  /// whose job is listing hits. Persisted, so a user who works in replace
+  /// keeps it open across sessions.
+  bool get searchReplaceExpanded => _searchReplaceExpanded;
+
+  set searchReplaceExpanded(bool value) {
+    if (value == _searchReplaceExpanded) return;
+    _searchReplaceExpanded = value;
+    _write((s) => s.setBool('${_prefix}searchReplaceExpanded', value));
     notifyListeners();
   }
 

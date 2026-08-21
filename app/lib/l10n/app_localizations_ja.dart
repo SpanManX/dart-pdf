@@ -415,6 +415,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get editorMenuNewDocument => '新規ドキュメント…';
 
   @override
+  String get editorMenuNewWindow => '新しいウィンドウ';
+
+  @override
+  String get editorMoveToNewWindow => '新しいウィンドウに移動';
+
+  @override
+  String get editorUnableToOpenNewWindow => '新しいウィンドウを開けませんでした';
+
+  @override
   String get editorMenuOcr => 'OCR…';
 
   @override
@@ -727,6 +736,51 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get printDlgTitle => '印刷中';
+
+  @override
+  String get printPreviewAll => 'すべて';
+
+  @override
+  String get printPreviewCurrent => '現在のページ';
+
+  @override
+  String get printPreviewFrom => '開始';
+
+  @override
+  String get printPreviewNextPage => '次のページ';
+
+  @override
+  String printPreviewPageOf(int page, int total) {
+    return '$total ページ中 $page ページ';
+  }
+
+  @override
+  String get printPreviewPreviousPage => '前のページ';
+
+  @override
+  String get printPreviewPrint => '印刷';
+
+  @override
+  String get printPreviewRange => '範囲';
+
+  @override
+  String printPreviewRangeError(int total) {
+    return '1 〜 $total の範囲でページを入力してください。';
+  }
+
+  @override
+  String printPreviewSelection(int count) {
+    return '印刷するページ数: $count';
+  }
+
+  @override
+  String get printPreviewTitle => '印刷プレビュー';
+
+  @override
+  String get printPreviewTo => '終了';
+
+  @override
+  String get printPreviewUnavailable => 'プレビューを利用できません';
 
   @override
   String get redo => 'やり直し';

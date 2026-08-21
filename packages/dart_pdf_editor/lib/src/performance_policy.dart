@@ -75,20 +75,19 @@ bool pdfDefaultTileStoreDetail() => true;
 /// - **Mobile** takes 128 MB: it still covers 94% of documents outright, and on
 ///   the documents it cannot hold, the ~100 MB it gives back matters under an
 ///   iOS jetsam limit far more than 2 ms/page does.
-/// - **Web** takes 128 MB, less on a small device. A tab is the tightest target
-///   (Chrome caps the JS heap near 4 GB) and CanvasKit's wasm heap, where
-///   decoded pixels live, never shrinks back. Notably this budget is *not* what
-///   pressures a tab: measured over a 62-page scroll, tab memory ran to ~2.3 GB
-///   whatever the budget, of which the image cache was ~60-200 MB - the rest is
-///   per-page retention (issue #283). 128 MB is cheap insurance under a
-///   ceiling that other retention is already spending, not a fix for it.
+/// - **Web** takes 64 MB. A tab is the tightest target (Chrome caps the JS heap
+///   near 4 GB) and CanvasKit image resources are also retained by the active
+///   page pictures and worker records. The matched real-world PDFium journey
+///   showed that dropping below this tier does not reliably lower CanvasKit's
+///   high-water RSS, while a true 1 MB run slowed page first-visual/navigation.
+///   The smaller ceiling still avoids the old 128 MB tier duplicating a large
+///   decoded working set beside those pictures and records.
 int pdfDefaultImageCacheBytes({
   PdfPerformancePlatform? platform,
   double? deviceMemoryGb,
 }) {
   const mb = 1024 * 1024;
   final family = platform ?? detectedPdfPerformancePlatform;
-  final ram = deviceMemoryGb ?? detectedPdfDeviceMemoryGb;
   return switch (family) {
     PdfPerformancePlatform.desktop => 256 * mb,
     PdfPerformancePlatform.mobile => 128 * mb,
@@ -96,8 +95,11 @@ int pdfDefaultImageCacheBytes({
     // the constant is the common case rather than the fallback. A device that
     // admits to 2 GB or less is a phone browser, where the tab's ceiling is
     // lower than the desktop's by more than this budget is wide.
-    PdfPerformancePlatform.web =>
-      ram != null && ram <= 2 ? 64 * mb : 128 * mb,
+    // The PDFium journey retained the same navigation/zoom latency at 32 MiB
+    // while removing another decoded-pixel working set from the browser tab.
+    // Native keeps its larger budgets; web can re-decode from the worker
+    // record/source when this smaller LRU misses.
+    PdfPerformancePlatform.web => 32 * mb,
     PdfPerformancePlatform.other => 128 * mb,
   };
 }
@@ -123,6 +125,58 @@ int pdfDefaultLiveRasterBudgetBytes({
     PdfPerformancePlatform.mobile => 192 * mb,
     PdfPerformancePlatform.web => ram != null && ram <= 2 ? 128 * mb : 192 * mb,
     PdfPerformancePlatform.other => 192 * mb,
+  };
+}
+
+/// The default byte budget for retained page scenes
+/// (`PdfPagePreviewCache`'s retained-scene LRU) on this platform.
+///
+/// A retained scene is a page the viewer can put back on screen with no
+/// record, no replay and no worker round trip - the cheapest possible
+/// scroll-back - and it is priced at the raster it stands in for
+/// (`PdfPagePreviewCache.priceRetainedScene`), so these numbers convert
+/// directly into pages: an ordinary letter page at fit width is ~8 MB, so web
+/// keeps about four of them and desktop about sixteen.
+///
+/// ## What it buys, and what it costs
+///
+/// Measured on a 40-page text report (`tool/perf.sh web read-text` /
+/// `wheel-text`), the tier is worth exactly what it retains: with it off,
+/// revisiting a page costs a full record + replay again (readBackSettleP50
+/// ~220 ms, 4% of arrivals already sharp); with it on, every revisit inside
+/// the budget is free (0.03 ms, 100%). It is NOT what makes scrolling forward
+/// smooth - that is the render scheduler's motion-safe lane, which costs no
+/// memory at all.
+///
+/// The cost is real and close to the budget: this tier measured as ~97 MB of
+/// extra browser-agent memory at 64 MB on that document, because what sits
+/// around it (preview LoDs, live page state) grows with it.
+///
+/// ## Why not simply smaller
+///
+/// A budget under the *warm window* is worse than a small one - it is wasted
+/// work. The speculative warm records and builds scenes several pages either
+/// side of the reader; if the tier cannot hold that window, those scenes are
+/// evicted before anybody arrives on them and the warm pays for nothing.
+/// Measured at 32 MB on web (about four letter pages against a warm window of
+/// seven), tab memory fell to +25 MB but forward arrivals lost their warm
+/// entirely: readFirstSettleP50 went from ~0 ms back to ~180 ms, while
+/// scroll-back stayed free. So the floor here is "the warm window", not a
+/// round number.
+///
+/// Desktop keeps a chapter's worth - the machine has tens of GB. Web and
+/// mobile keep the warm window and no more. A host that wants the smaller
+/// footprint should lower the warm radius with it rather than this alone; the
+/// app's Auto memory mode can move both, and the process-wide
+/// `PdfCacheRegistry` trims every registered cache under a coordinated
+/// ceiling.
+int pdfDefaultRetainedSceneBytes({PdfPerformancePlatform? platform}) {
+  const mb = 1024 * 1024;
+  return switch (platform ?? detectedPdfPerformancePlatform) {
+    PdfPerformancePlatform.desktop => 128 * mb,
+    PdfPerformancePlatform.mobile => 64 * mb,
+    PdfPerformancePlatform.web => 64 * mb,
+    PdfPerformancePlatform.other => 64 * mb,
   };
 }
 
@@ -308,7 +362,11 @@ class PdfPerformancePolicy {
     final platformBase = switch (env.platform) {
       PdfPerformancePlatform.mobile => 2,
       PdfPerformancePlatform.desktop => 3,
-      PdfPerformancePlatform.web => 3,
+      // One matched the two-worker pool's page/zoom latency on the real-world
+      // Quickstart journey while removing another parsed document and decode
+      // working set from Chrome's renderer process (about 110 MiB). Native
+      // desktop/mobile retain their parallel pools.
+      PdfPerformancePlatform.web => 1,
       PdfPerformancePlatform.other => 2,
     };
     var count = math.min(platformBase, math.min(available, mode.maxWorkers));

@@ -437,6 +437,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get editorMenuNewDocument => 'مستند جديد…';
 
   @override
+  String get editorMenuNewWindow => 'نافذة جديدة';
+
+  @override
+  String get editorMoveToNewWindow => 'نقل إلى نافذة جديدة';
+
+  @override
+  String get editorUnableToOpenNewWindow => 'تعذّر فتح نافذة جديدة';
+
+  @override
   String get editorMenuOcr => 'OCR…';
 
   @override
@@ -763,6 +772,51 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get printDlgTitle => 'جارٍ الطباعة';
+
+  @override
+  String get printPreviewAll => 'الكل';
+
+  @override
+  String get printPreviewCurrent => 'الحالية';
+
+  @override
+  String get printPreviewFrom => 'من';
+
+  @override
+  String get printPreviewNextPage => 'الصفحة التالية';
+
+  @override
+  String printPreviewPageOf(int page, int total) {
+    return 'الصفحة $page من $total';
+  }
+
+  @override
+  String get printPreviewPreviousPage => 'الصفحة السابقة';
+
+  @override
+  String get printPreviewPrint => 'طباعة';
+
+  @override
+  String get printPreviewRange => 'نطاق';
+
+  @override
+  String printPreviewRangeError(int total) {
+    return 'أدخل نطاق صفحات بين 1 و$total.';
+  }
+
+  @override
+  String printPreviewSelection(int count) {
+    return 'الصفحات المطلوب طباعتها: $count';
+  }
+
+  @override
+  String get printPreviewTitle => 'معاينة الطباعة';
+
+  @override
+  String get printPreviewTo => 'إلى';
+
+  @override
+  String get printPreviewUnavailable => 'المعاينة غير متاحة';
 
   @override
   String get redo => 'إعادة';

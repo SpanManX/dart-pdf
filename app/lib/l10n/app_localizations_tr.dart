@@ -423,6 +423,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get editorMenuNewDocument => 'Yeni belge…';
 
   @override
+  String get editorMenuNewWindow => 'Yeni pencere';
+
+  @override
+  String get editorMoveToNewWindow => 'Yeni pencereye taşı';
+
+  @override
+  String get editorUnableToOpenNewWindow => 'Yeni pencere açılamadı';
+
+  @override
   String get editorMenuOcr => 'OCR…';
 
   @override
@@ -739,6 +748,51 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get printDlgTitle => 'Yazdırılıyor';
+
+  @override
+  String get printPreviewAll => 'Tümü';
+
+  @override
+  String get printPreviewCurrent => 'Geçerli';
+
+  @override
+  String get printPreviewFrom => 'Başlangıç';
+
+  @override
+  String get printPreviewNextPage => 'Sonraki sayfa';
+
+  @override
+  String printPreviewPageOf(int page, int total) {
+    return 'Sayfa $page / $total';
+  }
+
+  @override
+  String get printPreviewPreviousPage => 'Önceki sayfa';
+
+  @override
+  String get printPreviewPrint => 'Yazdır';
+
+  @override
+  String get printPreviewRange => 'Aralık';
+
+  @override
+  String printPreviewRangeError(int total) {
+    return '1 ile $total arasında bir sayfa aralığı girin.';
+  }
+
+  @override
+  String printPreviewSelection(int count) {
+    return 'Yazdırılacak sayfa: $count';
+  }
+
+  @override
+  String get printPreviewTitle => 'Yazdırma önizlemesi';
+
+  @override
+  String get printPreviewTo => 'Bitiş';
+
+  @override
+  String get printPreviewUnavailable => 'Önizleme kullanılamıyor';
 
   @override
   String get redo => 'Yinele';

@@ -410,6 +410,9 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Rimuovi nodo';
 
   @override
+  String get menuSaveToStamps => 'Salva nei timbri';
+
+  @override
   String get menuSetAsDefaultStyle => 'Imposta come stile predefinito';
 
   @override
@@ -891,6 +894,31 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
   String get searchRegex => 'Espressione regolare';
 
   @override
+  String get searchReplace => 'Sostituisci';
+
+  @override
+  String get searchReplaceAll => 'Sostituisci tutto';
+
+  @override
+  String get searchReplaceHint => 'Sostituisci con';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'Questa corrispondenza non può essere sostituita da sola: usa «Sostituisci tutto» oppure modificala con lo strumento contenuto';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count corrispondenze sostituite',
+      one: '1 corrispondenza sostituita',
+      zero: 'Nessuna sostituzione',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Risultati della ricerca';
 
   @override
@@ -994,6 +1022,10 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Mostra annotazioni';
+
+  @override
+  String get shellShowScrollbarChapters =>
+      'Mostra capitoli sulla barra di scorrimento';
 
   @override
   String get shellTabHere => 'Scheda qui';
@@ -1224,6 +1256,9 @@ class DartPdfEditorLocalizationsIt extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'Nuovo timbro';
+
+  @override
+  String get stampSavedToCollection => 'Salvato nei timbri';
 
   @override
   String get stampSelectTextToEdit => 'Seleziona il testo da modificare';

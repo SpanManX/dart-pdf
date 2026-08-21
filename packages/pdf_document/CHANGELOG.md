@@ -1,5 +1,55 @@
 # Changelog
 
+## 3.7.0
+
+- Add `SimpleFont`, the simple-font counterpart to `Type0Font`: one place that
+  resolves a character code to text the way the renderer does (`/ToUnicode`,
+  `/Encoding` `/Differences`, the built-in Symbol and ZapfDingbats encodings,
+  then the base encoding), plus the reverse table for re-encoding replacements
+  and the `/Widths` lookup.
+- Fix content editing against fonts that remap their codes. `PdfPageElements`
+  decoded a simple font's show string as Latin-1, so a subsetted font reported
+  text such as `-=>-/>?-?@` for a page reading `05/08/2026`, and replacements
+  were written back as raw code units. Element text, both run codecs, the `'`
+  and `"` operators, and paragraph reflow now all go through the font's own
+  encoding.
+- Restrict a replacement to codes the font actually declares - a glyph name
+  from the base encoding or `/Differences`, or a `/ToUnicode` entry - so a
+  subset that dropped a character declines the edit instead of drawing notdef.
+  Decoding keeps its lenient Latin-1 fallback. A named base encoding declares
+  printable ASCII (0x20-0x7E) per Annex D.
+- Move the Adobe glyph-name tables down from `pdf_graphics` to
+  `src/fonts/encodings.dart` and export them, so the content editor and the
+  font engine share one copy.
+
+## 3.6.0
+
+- Read Bluebeam FreeText paragraph styling from `/DS` and rich-text `/RC` when
+  standard PDF entries are absent, preserving alignment, leading, character
+  spacing, horizontal scale, and underline when editing or regenerating an
+  appearance.
+- Let FreeText annotations participate in opacity restyling, write opacity on
+  creation, and rebuild their appearances without losing the selected alpha.
+
+## 3.5.1
+
+- Lockstep patch release for the scanned-page rendering fixes in `pdf_cos`,
+  `pdf_graphics`, and `dart_pdf_editor`. No public document API changes.
+
+## 3.5.0
+
+- Let `PdfDocument.openSource` expose its requested first-paint page count as a
+  temporary page-count hint when the source deliberately omits the rest of the
+  page-tree walk. The full document opened during progressive handoff remains
+  authoritative, while sparse page-one previews avoid recovery-scanning every
+  intentionally absent leaf reference.
+
+## 3.4.0
+
+- Preserve the unresolved vector template on authored stamp annotations and
+  expose it through `PdfAnnotation.stampTemplate`, allowing a placed stamp to
+  return to a reusable collection without losing dynamic fields (#651).
+
 ## 3.3.1
 
 - Fix annotation property edits duplicating the annotation when a page stores

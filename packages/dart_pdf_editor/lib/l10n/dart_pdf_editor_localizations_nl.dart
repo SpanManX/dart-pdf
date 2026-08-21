@@ -409,6 +409,9 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Knooppunt verwijderen';
 
   @override
+  String get menuSaveToStamps => 'Opslaan bij stempels';
+
+  @override
   String get menuSetAsDefaultStyle => 'Als standaardstijl instellen';
 
   @override
@@ -890,6 +893,31 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
   String get searchRegex => 'Reguliere expressie';
 
   @override
+  String get searchReplace => 'Vervangen';
+
+  @override
+  String get searchReplaceAll => 'Alles vervangen';
+
+  @override
+  String get searchReplaceHint => 'Vervangen door';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'Die overeenkomst kan niet afzonderlijk worden vervangen — gebruik Alles vervangen of bewerk hem met het inhoudsgereedschap';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count overeenkomsten vervangen',
+      one: '1 overeenkomst vervangen',
+      zero: 'Niets vervangen',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Zoekresultaten';
 
   @override
@@ -993,6 +1021,10 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Annotaties tonen';
+
+  @override
+  String get shellShowScrollbarChapters =>
+      'Hoofdstukken op de schuifbalk tonen';
 
   @override
   String get shellTabHere => 'Tabblad hier';
@@ -1223,6 +1255,9 @@ class DartPdfEditorLocalizationsNl extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'Nieuwe stempel';
+
+  @override
+  String get stampSavedToCollection => 'Opgeslagen bij stempels';
 
   @override
   String get stampSelectTextToEdit => 'Selecteer tekst om te bewerken';

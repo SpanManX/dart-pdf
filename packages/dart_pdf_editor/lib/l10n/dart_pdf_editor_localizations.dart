@@ -848,6 +848,12 @@ abstract class DartPdfEditorLocalizations {
   /// **'Remove node'**
   String get menuRemoveNode;
 
+  /// Annotation context-menu item that saves the selected stamp annotation into the user's reusable stamp collection.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to stamps'**
+  String get menuSaveToStamps;
+
   /// Annotation context-menu item that captures the selected annotation's appearance as the default for new annotations of the same kind.
   ///
   /// In en, this message translates to:
@@ -1724,6 +1730,36 @@ abstract class DartPdfEditorLocalizations {
   /// **'Regular expression'**
   String get searchRegex;
 
+  /// Label on the search panel button that replaces the current match.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get searchReplace;
+
+  /// Label on the search panel button that replaces every match in the document.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace all'**
+  String get searchReplaceAll;
+
+  /// Placeholder in the search panel's replacement text field.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace with'**
+  String get searchReplaceHint;
+
+  /// Shown when a single search match cannot be pinned to one editable text run, so Replace did nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'That match can’t be replaced on its own — use Replace all, or edit it with the content tool'**
+  String get searchReplaceNotTargetable;
+
+  /// Confirmation after replacing search matches.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{Nothing replaced} =1{1 match replaced} other{{count} matches replaced}}'**
+  String searchReplaced(int count);
+
   /// Title of the docked search results panel.
   ///
   /// In en, this message translates to:
@@ -1927,6 +1963,12 @@ abstract class DartPdfEditorLocalizations {
   /// In en, this message translates to:
   /// **'Show annotations'**
   String get shellShowAnnotations;
+
+  /// Toggle label controlling whether PDF outline chapters appear as markers on the scrollbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Show chapters on scrollbar'**
+  String get shellShowScrollbarChapters;
 
   /// Drop hint shown when dragging a docked panel over another panel to combine them into a tabbed group.
   ///
@@ -2329,6 +2371,12 @@ abstract class DartPdfEditorLocalizations {
   /// In en, this message translates to:
   /// **'New stamp'**
   String get stampNewStampTitle;
+
+  /// Snackbar shown after a stamp on the page was saved into the user's stamp collection.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to stamps'**
+  String get stampSavedToCollection;
 
   /// Placeholder label shown on the stamp text input when no text component is selected.
   ///

@@ -409,6 +409,9 @@ class DartPdfEditorLocalizationsVi extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Xóa nút';
 
   @override
+  String get menuSaveToStamps => 'Lưu vào con dấu';
+
+  @override
   String get menuSetAsDefaultStyle => 'Đặt làm kiểu mặc định';
 
   @override
@@ -890,6 +893,31 @@ class DartPdfEditorLocalizationsVi extends DartPdfEditorLocalizations {
   String get searchRegex => 'Biểu thức chính quy';
 
   @override
+  String get searchReplace => 'Thay thế';
+
+  @override
+  String get searchReplaceAll => 'Thay thế tất cả';
+
+  @override
+  String get searchReplaceHint => 'Thay bằng';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'Không thể thay thế riêng kết quả khớp này — hãy dùng Thay thế tất cả, hoặc chỉnh sửa bằng công cụ nội dung';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Đã thay thế $count kết quả khớp',
+      one: 'Đã thay thế 1 kết quả khớp',
+      zero: 'Không thay thế gì',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Kết quả tìm kiếm';
 
   @override
@@ -993,6 +1021,9 @@ class DartPdfEditorLocalizationsVi extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Hiện chú thích';
+
+  @override
+  String get shellShowScrollbarChapters => 'Hiện các chương trên thanh cuộn';
 
   @override
   String get shellTabHere => 'Ghép thẻ tại đây';
@@ -1222,6 +1253,9 @@ class DartPdfEditorLocalizationsVi extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'Con dấu mới';
+
+  @override
+  String get stampSavedToCollection => 'Đã lưu vào con dấu';
 
   @override
   String get stampSelectTextToEdit => 'Chọn văn bản để chỉnh sửa';

@@ -425,6 +425,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get editorMenuNewDocument => 'Neues Dokument…';
 
   @override
+  String get editorMenuNewWindow => 'Neues Fenster';
+
+  @override
+  String get editorMoveToNewWindow => 'In neues Fenster verschieben';
+
+  @override
+  String get editorUnableToOpenNewWindow =>
+      'Neues Fenster konnte nicht geöffnet werden';
+
+  @override
   String get editorMenuOcr => 'OCR…';
 
   @override
@@ -749,6 +759,51 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get printDlgTitle => 'Wird gedruckt';
+
+  @override
+  String get printPreviewAll => 'Alle';
+
+  @override
+  String get printPreviewCurrent => 'Aktuell';
+
+  @override
+  String get printPreviewFrom => 'Von';
+
+  @override
+  String get printPreviewNextPage => 'Nächste Seite';
+
+  @override
+  String printPreviewPageOf(int page, int total) {
+    return 'Seite $page von $total';
+  }
+
+  @override
+  String get printPreviewPreviousPage => 'Vorherige Seite';
+
+  @override
+  String get printPreviewPrint => 'Drucken';
+
+  @override
+  String get printPreviewRange => 'Bereich';
+
+  @override
+  String printPreviewRangeError(int total) {
+    return 'Geben Sie einen Seitenbereich zwischen 1 und $total ein.';
+  }
+
+  @override
+  String printPreviewSelection(int count) {
+    return 'Zu druckende Seiten: $count';
+  }
+
+  @override
+  String get printPreviewTitle => 'Druckvorschau';
+
+  @override
+  String get printPreviewTo => 'Bis';
+
+  @override
+  String get printPreviewUnavailable => 'Vorschau nicht verfügbar';
 
   @override
   String get redo => 'Wiederholen';

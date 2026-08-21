@@ -411,6 +411,9 @@ class DartPdfEditorLocalizationsFr extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Supprimer le nœud';
 
   @override
+  String get menuSaveToStamps => 'Enregistrer dans les tampons';
+
+  @override
   String get menuSetAsDefaultStyle => 'Définir comme style par défaut';
 
   @override
@@ -892,6 +895,31 @@ class DartPdfEditorLocalizationsFr extends DartPdfEditorLocalizations {
   String get searchRegex => 'Expression régulière';
 
   @override
+  String get searchReplace => 'Remplacer';
+
+  @override
+  String get searchReplaceAll => 'Tout remplacer';
+
+  @override
+  String get searchReplaceHint => 'Remplacer par';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'Cette correspondance ne peut pas être remplacée seule : utilisez « Tout remplacer » ou modifiez-la avec l’outil de contenu';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count correspondances remplacées',
+      one: '1 correspondance remplacée',
+      zero: 'Rien n’a été remplacé',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Résultats de recherche';
 
   @override
@@ -995,6 +1023,10 @@ class DartPdfEditorLocalizationsFr extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Afficher les annotations';
+
+  @override
+  String get shellShowScrollbarChapters =>
+      'Afficher les chapitres dans la barre de défilement';
 
   @override
   String get shellTabHere => 'Onglet ici';
@@ -1225,6 +1257,9 @@ class DartPdfEditorLocalizationsFr extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'Nouveau tampon';
+
+  @override
+  String get stampSavedToCollection => 'Enregistré dans les tampons';
 
   @override
   String get stampSelectTextToEdit => 'Sélectionnez du texte à modifier';

@@ -408,6 +408,9 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Remove node';
 
   @override
+  String get menuSaveToStamps => 'Save to stamps';
+
+  @override
   String get menuSetAsDefaultStyle => 'Set as default style';
 
   @override
@@ -887,6 +890,31 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
   String get searchRegex => 'Regular expression';
 
   @override
+  String get searchReplace => 'Replace';
+
+  @override
+  String get searchReplaceAll => 'Replace all';
+
+  @override
+  String get searchReplaceHint => 'Replace with';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'That match can’t be replaced on its own — use Replace all, or edit it with the content tool';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count matches replaced',
+      one: '1 match replaced',
+      zero: 'Nothing replaced',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Search results';
 
   @override
@@ -990,6 +1018,9 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Show annotations';
+
+  @override
+  String get shellShowScrollbarChapters => 'Show chapters on scrollbar';
 
   @override
   String get shellTabHere => 'Tab here';
@@ -1220,6 +1251,9 @@ class DartPdfEditorLocalizationsEn extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'New stamp';
+
+  @override
+  String get stampSavedToCollection => 'Saved to stamps';
 
   @override
   String get stampSelectTextToEdit => 'Select text to edit';

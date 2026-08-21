@@ -408,6 +408,9 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
   String get menuRemoveNode => 'Düğümü kaldır';
 
   @override
+  String get menuSaveToStamps => 'Damgalara kaydet';
+
+  @override
   String get menuSetAsDefaultStyle => 'Varsayılan stil olarak ayarla';
 
   @override
@@ -888,6 +891,31 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
   String get searchRegex => 'Düzenli ifade';
 
   @override
+  String get searchReplace => 'Değiştir';
+
+  @override
+  String get searchReplaceAll => 'Tümünü değiştir';
+
+  @override
+  String get searchReplaceHint => 'Şununla değiştir';
+
+  @override
+  String get searchReplaceNotTargetable =>
+      'Bu eşleşme tek başına değiştirilemez — “Tümünü değiştir” seçeneğini kullanın veya içerik aracıyla düzenleyin';
+
+  @override
+  String searchReplaced(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count eşleşme değiştirildi',
+      one: '1 eşleşme değiştirildi',
+      zero: 'Hiçbir şey değiştirilmedi',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get searchResultsTitle => 'Arama sonuçları';
 
   @override
@@ -991,6 +1019,10 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
 
   @override
   String get shellShowAnnotations => 'Ek açıklamaları göster';
+
+  @override
+  String get shellShowScrollbarChapters =>
+      'Kaydırma çubuğunda bölümleri göster';
 
   @override
   String get shellTabHere => 'Buraya sekmele';
@@ -1220,6 +1252,9 @@ class DartPdfEditorLocalizationsTr extends DartPdfEditorLocalizations {
 
   @override
   String get stampNewStampTitle => 'Yeni damga';
+
+  @override
+  String get stampSavedToCollection => 'Damgalara kaydedildi';
 
   @override
   String get stampSelectTextToEdit => 'Düzenlemek için metin seçin';

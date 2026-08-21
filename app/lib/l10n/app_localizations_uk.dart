@@ -426,6 +426,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get editorMenuNewDocument => 'Новий документ…';
 
   @override
+  String get editorMenuNewWindow => 'Нове вікно';
+
+  @override
+  String get editorMoveToNewWindow => 'Перемістити до нового вікна';
+
+  @override
+  String get editorUnableToOpenNewWindow => 'Не вдалося відкрити нове вікно';
+
+  @override
   String get editorMenuOcr => 'OCR…';
 
   @override
@@ -752,6 +761,51 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get printDlgTitle => 'Друк';
+
+  @override
+  String get printPreviewAll => 'Усі';
+
+  @override
+  String get printPreviewCurrent => 'Поточна';
+
+  @override
+  String get printPreviewFrom => 'Від';
+
+  @override
+  String get printPreviewNextPage => 'Наступна сторінка';
+
+  @override
+  String printPreviewPageOf(int page, int total) {
+    return 'Сторінка $page з $total';
+  }
+
+  @override
+  String get printPreviewPreviousPage => 'Попередня сторінка';
+
+  @override
+  String get printPreviewPrint => 'Друк';
+
+  @override
+  String get printPreviewRange => 'Діапазон';
+
+  @override
+  String printPreviewRangeError(int total) {
+    return 'Введіть діапазон сторінок від 1 до $total.';
+  }
+
+  @override
+  String printPreviewSelection(int count) {
+    return 'Сторінок для друку: $count';
+  }
+
+  @override
+  String get printPreviewTitle => 'Попередній перегляд друку';
+
+  @override
+  String get printPreviewTo => 'До';
+
+  @override
+  String get printPreviewUnavailable => 'Перегляд недоступний';
 
   @override
   String get redo => 'Повторити';
