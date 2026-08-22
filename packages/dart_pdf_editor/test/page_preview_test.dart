@@ -75,6 +75,33 @@ void main() {
     clone.dispose();
   });
 
+  testWidgets('pure reorder moves previews to their page identities',
+      (tester) async {
+    final document = PdfDocument.open(buildMultiPagePdf(2));
+    final page0 = document.page(0);
+    final page1 = document.page(1);
+    final cache = PdfPagePreviewCache();
+    addTearDown(cache.dispose);
+    await tester.runAsync(() async {
+      await cache.renderPreview(0, page0);
+      await cache.renderPreview(1, page1, targetLongestSide: 400);
+    });
+
+    cache.reorder([page1, page0], [1, 0]);
+
+    expect(cache.isFresh(1, page0, requireImages: true), isTrue);
+    expect(
+      cache.isFresh(
+        0,
+        page1,
+        requireImages: true,
+        targetLongestSide: 400,
+      ),
+      isTrue,
+    );
+    expect(cache.isFresh(0, page0, requireImages: true), isFalse);
+  });
+
   testWidgets('a complete preview can satisfy a smaller physical raster',
       (tester) async {
     final document = PdfDocument.open(buildClassicPdf());
@@ -102,6 +129,31 @@ void main() {
       isNull,
     );
     preview.dispose();
+  });
+
+  testWidgets('a complete intermediate preview satisfies a thumbnail',
+      (tester) async {
+    final document = PdfDocument.open(buildClassicPdf());
+    final page = document.page(0);
+    final cache = PdfPagePreviewCache();
+    addTearDown(cache.dispose);
+    await tester.runAsync(() => cache.renderPreview(
+          0,
+          page,
+          targetLongestSide: 400,
+        ));
+
+    final sufficient = cache.completeImageFor(
+      0,
+      page,
+      width: 256,
+      height: 330,
+    );
+    expect(sufficient, isNotNull,
+        reason: 'the sharpest preview tier is not limited to the 200px base');
+    final image = sufficient!;
+    expect(math.max(image.width, image.height), 400);
+    image.dispose();
   });
 
   testWidgets('a sufficient preview bypasses first-render hold',
