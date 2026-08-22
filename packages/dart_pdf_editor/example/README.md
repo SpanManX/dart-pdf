@@ -43,6 +43,19 @@ patrol test --device macos
 patrol test --device chrome --web-headless
 ```
 
+The CI web journey enables `PdfPerfLog` and uploads `patrol-perf.log`,
+`patrol-perf.json`, and `patrol-perf.md` inside the `patrol-web-results`
+artifact. Pull requests also show the Markdown summary in the Actions run.
+These wall-clock measurements are review evidence rather than a pass/fail gate;
+compare the JSON with a recent `main` run from the same hosted-runner lane. The
+summary keeps global aggregates for continuity and a scenario breakdown for
+elapsed time, jank, reconciliation, raster work, worker phases, decoded-image
+cache pressure and per-request hit/miss deltas, and worker outcomes, so a slow
+heavy-document journey is not hidden inside the other browser journeys. The
+performance target includes an image-heavy, ultra-wide CAD scenario that
+deep-zooms and pans through distant regions, verifying worker-backed image
+detail and reusable tile delivery.
+
 When using this repository's FVM SDK, prefix the commands with
 `PATROL_FLUTTER_COMMAND="fvm flutter"`. Patrol supports Android, iOS, macOS,
 and web. Its runner does not support Windows or Linux; those platforms remain
@@ -50,9 +63,18 @@ covered by Flutter unit/widget tests and the existing build/smoke jobs.
 
 ## Web worker
 
-On web, `dart_pdf_editor` uses its bundled render worker asset automatically.
-No example-app setup is needed. The worker falls back to main-thread rendering
-if the browser cannot load it.
+The repository example self-hosts its render worker at
+`web/pdf_render_worker.dart.js`. Generate it before a local web run:
+
+```sh
+fvm dart run dart_pdf_editor:build_web_worker
+```
+
+`tool/build_web.sh` does this automatically before a production build, as do
+the preview, deploy, and Patrol workflows. The Patrol performance target fails
+unless a real off-thread request completes, so CI cannot silently benchmark the
+main-thread fallback. Published apps may instead use the prebuilt worker from
+`dart_pdf_editor_assets` via `registerBundledEditorAssets()`.
 
 ## OCR
 
