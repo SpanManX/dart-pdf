@@ -12,7 +12,7 @@ void main(List<String> arguments) {
     stdout.writeln(
       'Usage: dart tool/patrol_perf_summary.dart <patrol-log> '
       '--output <directory> [--markdown <file>] [--baseline <json>] '
-      '[--label <platform>]',
+      '[--label <platform>] [--require-scenario-runs <name>=<count>]',
     );
     exit(arguments.contains('--help') ? 0 : 64);
   }
@@ -22,6 +22,7 @@ void main(List<String> arguments) {
   String? markdownOutput;
   String? baselineInput;
   var label = 'web';
+  final requiredScenarioRuns = <String, int>{};
   for (var i = 1; i < arguments.length; i++) {
     switch (arguments[i]) {
       case '--output':
@@ -32,6 +33,19 @@ void main(List<String> arguments) {
         baselineInput = _nextArgument(arguments, ++i, '--baseline');
       case '--label':
         label = _nextArgument(arguments, ++i, '--label');
+      case '--require-scenario-runs':
+        final raw = _nextArgument(arguments, ++i, '--require-scenario-runs');
+        final separator = raw.lastIndexOf('=');
+        final name = separator < 0 ? '' : raw.substring(0, separator);
+        final count =
+            separator < 0 ? null : int.tryParse(raw.substring(separator + 1));
+        if (name.isEmpty || count == null || count < 1) {
+          stderr.writeln(
+            '--require-scenario-runs expects <name>=<positive-count>: $raw',
+          );
+          exit(64);
+        }
+        requiredScenarioRuns[name] = count;
       default:
         stderr.writeln('Unknown argument: ${arguments[i]}');
         exit(64);
@@ -83,9 +97,45 @@ void main(List<String> arguments) {
     File(markdownOutput).writeAsStringSync(markdown, mode: FileMode.append);
   }
 
+  final shortfalls = patrolPerfScenarioRunShortfalls(
+    current,
+    requiredScenarioRuns,
+  );
+  if (shortfalls.isNotEmpty) {
+    for (final entry in shortfalls.entries) {
+      stderr.writeln(
+        'Scenario ${entry.key} produced ${entry.value} complete run(s); '
+        'required ${requiredScenarioRuns[entry.key]}.',
+      );
+    }
+    exit(65);
+  }
+
   stdout.writeln(
     'Collected ${trace.lines.length} Patrol perf events in ${directory.path}',
   );
+}
+
+/// Returns the observed run count for every required scenario that did not
+/// produce enough complete start/end pairs.
+///
+/// CI uses this after writing the report artifacts: a flaky Patrol invocation
+/// remains diagnosable, but cannot silently turn a three-sample comparison
+/// into a one- or two-sample result.
+Map<String, int> patrolPerfScenarioRunShortfalls(
+  Map<String, Object?> trace,
+  Map<String, int> required,
+) {
+  final shortfalls = <String, int>{};
+  for (final entry in required.entries) {
+    final actual = _jsonNumber(
+          trace,
+          ['scenarioMetrics', entry.key, 'runs'],
+        )?.round() ??
+        0;
+    if (actual < entry.value) shortfalls[entry.key] = actual;
+  }
+  return shortfalls;
 }
 
 String _nextArgument(List<String> arguments, int index, String option) {
@@ -339,13 +389,23 @@ class PatrolPerfTrace {
             : 'Current Patrol $label trace. Lower timing is better.',
       );
     if (lines.isEmpty) return '${buffer.toString()}\n';
+    if (_scenarioMetrics.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln(
+          'Scenario elapsed uses p50 across repeated runs; phase and tail '
+          'signals remain p95.',
+        );
+    }
     buffer
       ..writeln()
       ..writeln('| Signal | Result |')
       ..writeln('| --- | ---: |');
     for (final name in _scenarioMetrics.keys.toList()..sort()) {
-      buffer.writeln('| Scenario ${_code(name)} elapsed p95 | '
-          '${_p95Text(_scenarioMetrics[name]!.elapsedMs)} |');
+      final elapsed = _scenarioMetrics[name]!.elapsedMs;
+      buffer.writeln('| Scenario ${_code(name)} elapsed p50 '
+          '(${elapsed.length} ${elapsed.length == 1 ? 'run' : 'runs'}) | '
+          '${_p50Text(elapsed)} |');
     }
     buffer
       ..writeln('| Jank frames | ${jankTotalMs.length} |')
@@ -501,7 +561,7 @@ class PatrolPerfComparison {
   String toHeadlineMarkdown({String? label}) {
     final baselineScenarios = _jsonCountMap(baseline, const ['scenarios']);
     final currentScenarios = _jsonCountMap(current, const ['scenarios']);
-    final sameCoverage = _sameCountMap(baselineScenarios, currentScenarios);
+    final sameCoverage = _sameMapKeys(baselineScenarios, currentScenarios);
     final measuredScenarios = <String>{
       ..._jsonMapKeys(baseline, const ['scenarioMetrics']),
       ..._jsonMapKeys(current, const ['scenarioMetrics']),
@@ -517,6 +577,45 @@ class PatrolPerfComparison {
         'Lower timing is better. Structural counts should stay stable unless '
         'the PR intentionally changes the exercised path.',
       );
+    if (measuredScenarios.isNotEmpty) {
+      final samples = measuredScenarios.map((scenario) {
+        final before = _jsonNumber(
+          baseline,
+          ['scenarioMetrics', scenario, 'runs'],
+        );
+        final after = _jsonNumber(
+          current,
+          ['scenarioMetrics', scenario, 'runs'],
+        );
+        return '${_code(scenario)} ${_numberText(before)} / '
+            '${_numberText(after)}';
+      }).join(', ');
+      final sparseSamples = measuredScenarios.any((scenario) {
+        final before = _jsonNumber(
+          baseline,
+          ['scenarioMetrics', scenario, 'runs'],
+        );
+        final after = _jsonNumber(
+          current,
+          ['scenarioMetrics', scenario, 'runs'],
+        );
+        return before == null || after == null || before < 3 || after < 3;
+      });
+      buffer
+        ..writeln()
+        ..writeln(
+          'Scenario elapsed uses p50 across repeated runs; phase and tail '
+          'signals remain p95. Samples (main / PR): $samples.',
+        );
+      if (sparseSamples) {
+        buffer
+          ..writeln()
+          ..writeln(
+            '⚠️ At least one scenario has fewer than three samples; treat '
+            'its timing delta as provisional.',
+          );
+      }
+    }
     if (!sameCoverage) {
       buffer
         ..writeln()
@@ -551,8 +650,8 @@ class PatrolPerfComparison {
 
     for (final scenario in measuredScenarios) {
       timingRow(
-        'Scenario ${_code(scenario)} elapsed p95',
-        ['scenarioMetrics', scenario, 'elapsedMs', 'p95'],
+        'Scenario ${_code(scenario)} elapsed p50',
+        ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
       );
     }
     timingRow('Jank total p95', const ['jank', 'totalMs', 'p95']);
@@ -586,7 +685,7 @@ class PatrolPerfComparison {
   String toMarkdown({String? label}) {
     final baselineScenarios = _jsonCountMap(baseline, const ['scenarios']);
     final currentScenarios = _jsonCountMap(current, const ['scenarios']);
-    final sameCoverage = _sameCountMap(baselineScenarios, currentScenarios);
+    final sameCoverage = _sameMapKeys(baselineScenarios, currentScenarios);
     final measuredScenarios = <String>{
       ..._jsonMapKeys(baseline, const ['scenarioMetrics']),
       ..._jsonMapKeys(current, const ['scenarioMetrics']),
@@ -687,6 +786,10 @@ class PatrolPerfComparison {
       countRow(
         'Scenario $scenario runs',
         ['scenarioMetrics', scenario, 'runs'],
+      );
+      timingRow(
+        'Scenario $scenario elapsed p50',
+        ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
       );
       timingRow(
         'Scenario $scenario elapsed p95',
@@ -1149,6 +1252,11 @@ String _p95Text(List<double> values) {
   return distribution == null ? 'n/a' : _formatMs(distribution['p95']!);
 }
 
+String _p50Text(List<double> values) {
+  final distribution = _distribution(values);
+  return distribution == null ? 'n/a' : _formatMs(distribution['p50']!);
+}
+
 String _mapText(Map<String, int> values) {
   if (values.isEmpty) return 'none';
   final entries = values.entries.toList()
@@ -1209,9 +1317,8 @@ Set<String> _jsonMapKeys(Object? root, List<String> path) {
       : const {};
 }
 
-bool _sameCountMap(Map<String, int> a, Map<String, int> b) =>
-    a.length == b.length &&
-    a.entries.every((entry) => b[entry.key] == entry.value);
+bool _sameMapKeys(Map<String, int> a, Map<String, int> b) =>
+    a.length == b.length && a.keys.every(b.containsKey);
 
 String _mapComparisonRow(
   String label,
