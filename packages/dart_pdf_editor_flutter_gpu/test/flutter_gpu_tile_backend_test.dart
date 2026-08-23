@@ -70,6 +70,69 @@ void main() {
     });
   });
 
+  testWidgets('pipeline warm-up is shared by the Impeller context',
+      (tester) async {
+    await tester.runAsync(() async {
+      if (!_gpuAvailable()) {
+        markTestSkipped('run with --enable-impeller --enable-flutter-gpu');
+        return;
+      }
+      final first = FlutterGpuTileRasterBackend();
+      await first.warmUp();
+      expect(first.stats.warmUpRequests, 1);
+      expect(first.stats.warmUpSubmissions, 1);
+      expect(first.stats.warmUpCompletions, 1);
+      expect(first.stats.warmUpFailures, 0);
+      expect(first.stats.warmUpMicros, greaterThan(0));
+
+      await first.warmUp();
+      expect(first.stats.warmUpRequests, 2);
+      expect(first.stats.warmUpSubmissions, 1,
+          reason: 'the same backend reuses the completed context warm-up');
+
+      final second = FlutterGpuTileRasterBackend();
+      await second.warmUp();
+      expect(second.stats.warmUpRequests, 1);
+      expect(second.stats.warmUpSubmissions, 0,
+          reason: 'backend instances share context-owned pipeline work');
+      expect(second.stats.warmUpCompletions, 1);
+    });
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  testWidgets('scene warm-up prepares retained resources before the first tile',
+      (tester) async {
+    await tester.runAsync(() async {
+      if (!_gpuAvailable()) {
+        markTestSkipped('run with --enable-impeller --enable-flutter-gpu');
+        return;
+      }
+      final scene = await PdfRetainedScene.record(
+          PdfDocument.open(buildEmbeddedFontImagePdf()).page(0));
+      addTearDown(scene.dispose);
+      final backend = FlutterGpuTileRasterBackend();
+      final session = backend.createSession(scene);
+      expect(session, isA<PdfTileRasterWarmUp>(),
+          reason: backend.stats.lastRejection);
+      addTearDown(session!.dispose);
+
+      await (session as PdfTileRasterWarmUp).warmUp();
+      expect(backend.stats.sceneWarmUpRequests, 1);
+      expect(backend.stats.sceneWarmUpCompletions, 1);
+      expect(backend.stats.sceneWarmUpFailures, 0);
+      expect(backend.stats.scenesCompiled, 1);
+      expect(backend.stats.tilesRendered, 0);
+
+      final image = await session.rasterizeRegion(
+        const Rect.fromLTWH(40, 50, 330, 190),
+        pixelRatio: 2,
+      );
+      addTearDown(image.dispose);
+      expect(backend.stats.scenesCompiled, 1,
+          reason: 'the first real tile reuses the prepared scene');
+      expect(backend.stats.tilesRendered, 1);
+    });
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   testWidgets('compiles once and replays retained buffers across tiles',
       (tester) async {
     await tester.runAsync(() async {
@@ -175,6 +238,218 @@ void main() {
         difference += (expected[i] - actual[i]).abs();
       }
       expect(difference / expected.length, lessThan(3));
+    });
+  });
+
+  testWidgets('tiling cells expand once and preserve painter order',
+      (tester) async {
+    await tester.runAsync(() async {
+      if (!_gpuAvailable()) {
+        markTestSkipped('run with --enable-impeller --enable-flutter-gpu');
+        return;
+      }
+      final page = PdfDocument.open(buildClassicPdf()).page(0);
+      final scene = await PdfRetainedScene.fromCommands(page, [
+        PdfDrawTiledCellCommand(
+          [
+            PdfFillPathCommand(
+              _rect(80, 180, 170, 300),
+              const PdfColor(0.9, 0.1, 0.15),
+              PdfFillRule.nonzero,
+              0.55,
+            ),
+            PdfFillPathCommand(
+              _rect(135, 225, 225, 345),
+              const PdfColor(0.05, 0.25, 0.9),
+              PdfFillRule.nonzero,
+              0.55,
+            ),
+            PdfDrawTiledCellCommand(
+              [
+                PdfFillPathCommand(
+                  _rect(112, 205, 128, 221),
+                  const PdfColor(0.1, 0.75, 0.25),
+                  PdfFillRule.nonzero,
+                  0.8,
+                ),
+              ],
+              Float64List.fromList([0, 24]),
+              Float64List.fromList([0, 18]),
+            ),
+          ],
+          Float64List.fromList([0, 55, 110, 165]),
+          Float64List.fromList([0, 35, 70, 105]),
+        ),
+      ]);
+      addTearDown(scene.dispose);
+      final backend = FlutterGpuTileRasterBackend();
+      final session = backend.createSession(scene);
+      expect(session, isNotNull, reason: backend.stats.lastRejection);
+      addTearDown(session!.dispose);
+
+      const region = Rect.fromLTWH(50, 120, 430, 420);
+      final canvas = await scene.rasterizeRegion(region, pixelRatio: 1.25);
+      final accelerated =
+          await session.rasterizeRegion(region, pixelRatio: 1.25);
+      addTearDown(canvas.dispose);
+      addTearDown(accelerated.dispose);
+      final expected = await _pixels(canvas);
+      final actual = await _pixels(accelerated);
+      var difference = 0;
+      for (var i = 0; i < expected.length; i++) {
+        difference += (expected[i] - actual[i]).abs();
+      }
+      expect(difference / expected.length, lessThan(4),
+          reason: 'overlapping cell repeats must retain tile-major order');
+    });
+  });
+
+  testWidgets('axial gradients use exact path stencil and stop geometry',
+      (tester) async {
+    await tester.runAsync(() async {
+      if (!_gpuAvailable()) {
+        markTestSkipped('run with --enable-impeller --enable-flutter-gpu');
+        return;
+      }
+      final page = PdfDocument.open(buildClassicPdf()).page(0);
+      const path = PdfPath([
+        PdfMoveTo(45, 120),
+        PdfLineTo(520, 120),
+        PdfLineTo(520, 510),
+        PdfLineTo(45, 510),
+        PdfClosePath(),
+        PdfMoveTo(210, 245),
+        PdfLineTo(355, 245),
+        PdfLineTo(355, 390),
+        PdfLineTo(210, 390),
+        PdfClosePath(),
+      ]);
+      final scene = await PdfRetainedScene.fromCommands(page, [
+        const PdfFillPathGradientCommand(
+          path,
+          PdfFillRule.evenOdd,
+          PdfGradient(
+            isRadial: false,
+            coords: [0, 0, 180, 0],
+            colors: [
+              PdfColor(0.9, 0.05, 0.1),
+              PdfColor(0.1, 0.75, 0.2),
+              PdfColor(0.05, 0.2, 0.95),
+            ],
+            stops: [0, 0.38, 1],
+            transform: PdfMatrix(2.1, 0.35, -0.2, 1.6, 90, 170),
+            extendStart: false,
+            extendEnd: false,
+          ),
+          0.72,
+        ),
+        const PdfDrawTextCommand(PdfTextRun(
+          text: 'H',
+          transform: PdfMatrix(150, 12, 8, 165, 185, 185),
+          color: PdfColor.black,
+          width: 1,
+          fontName: 'EmbeddedGradient',
+          fontSize: 1,
+          fillAlpha: 0.68,
+          glyphs: [
+            PdfGlyphPlacement(
+              offset: 0,
+              outline: PdfPath([
+                PdfMoveTo(0, 0),
+                PdfLineTo(0.18, 0),
+                PdfLineTo(0.18, 0.42),
+                PdfLineTo(0.62, 0.42),
+                PdfLineTo(0.62, 0),
+                PdfLineTo(0.8, 0),
+                PdfLineTo(0.8, 1),
+                PdfLineTo(0.62, 1),
+                PdfLineTo(0.62, 0.6),
+                PdfLineTo(0.18, 0.6),
+                PdfLineTo(0.18, 1),
+                PdfLineTo(0, 1),
+                PdfClosePath(),
+              ]),
+            ),
+          ],
+          gradient: PdfGradient(
+            isRadial: false,
+            coords: [170, 180, 330, 360],
+            colors: [PdfColor(1, 0.5, 0), PdfColor(0.4, 0, 0.9)],
+            stops: [0, 1],
+            transform: PdfMatrix.identity,
+          ),
+        )),
+      ]);
+      addTearDown(scene.dispose);
+      final backend = FlutterGpuTileRasterBackend();
+      final session = backend.createSession(scene);
+      expect(session, isNotNull, reason: backend.stats.lastRejection);
+      addTearDown(session!.dispose);
+
+      const region = Rect.fromLTWH(20, 90, 540, 450);
+      final canvas = await scene.rasterizeRegion(region, pixelRatio: 1.25);
+      final accelerated =
+          await session.rasterizeRegion(region, pixelRatio: 1.25);
+      addTearDown(canvas.dispose);
+      addTearDown(accelerated.dispose);
+      final expected = await _pixels(canvas);
+      final actual = await _pixels(accelerated);
+      var difference = 0;
+      for (var i = 0; i < expected.length; i++) {
+        difference += (expected[i] - actual[i]).abs();
+      }
+      expect(difference / expected.length, lessThan(8),
+          reason: 'translucent gradient and stencil AA must stay within the '
+              'GPU corpus parity budget');
+    });
+  });
+
+  testWidgets('nested radial gradients use bounded ring geometry',
+      (tester) async {
+    await tester.runAsync(() async {
+      if (!_gpuAvailable()) {
+        markTestSkipped('run with --enable-impeller --enable-flutter-gpu');
+        return;
+      }
+      final page = PdfDocument.open(buildClassicPdf()).page(0);
+      final scene = await PdfRetainedScene.fromCommands(page, [
+        PdfFillPathGradientCommand(
+          _rect(35, 90, 560, 610),
+          PdfFillRule.nonzero,
+          const PdfGradient(
+            isRadial: true,
+            coords: [150, 220, 18, 205, 250, 190],
+            colors: [
+              PdfColor(1, 0.9, 0.1),
+              PdfColor(0.9, 0.1, 0.2),
+              PdfColor(0.05, 0.15, 0.8),
+            ],
+            stops: [0, 0.45, 1],
+            transform: PdfMatrix(1.15, 0.12, -0.08, 1.05, 35, 20),
+            extendStart: true,
+            extendEnd: true,
+          ),
+          0.8,
+        ),
+      ]);
+      addTearDown(scene.dispose);
+      final backend = FlutterGpuTileRasterBackend();
+      final session = backend.createSession(scene);
+      expect(session, isNotNull, reason: backend.stats.lastRejection);
+      addTearDown(session!.dispose);
+
+      const region = Rect.fromLTWH(10, 70, 580, 570);
+      final canvas = await scene.rasterizeRegion(region, pixelRatio: 1);
+      final accelerated = await session.rasterizeRegion(region, pixelRatio: 1);
+      addTearDown(canvas.dispose);
+      addTearDown(accelerated.dispose);
+      final expected = await _pixels(canvas);
+      final actual = await _pixels(accelerated);
+      var difference = 0;
+      for (var i = 0; i < expected.length; i++) {
+        difference += (expected[i] - actual[i]).abs();
+      }
+      expect(difference / expected.length, lessThan(12));
     });
   });
 
@@ -616,7 +891,68 @@ void main() {
       addTearDown(substituted.dispose);
       final backend = FlutterGpuTileRasterBackend();
       expect(backend.createSession(substituted), isNull);
-      expect(backend.stats.lastRejection, contains('text'));
+      expect(backend.stats.lastRejection,
+          'unsupported text: missing glyph outlines');
+
+      final radial = await PdfRetainedScene.fromCommands(page, [
+        PdfFillPathGradientCommand(
+          _rect(40, 40, 300, 300),
+          PdfFillRule.nonzero,
+          const PdfGradient(
+            isRadial: true,
+            coords: [80, 100, 50, 260, 100, 60],
+            colors: [PdfColor(1, 0, 0), PdfColor(0, 0, 1)],
+            stops: [0, 1],
+            transform: PdfMatrix.identity,
+          ),
+          1,
+        ),
+      ]);
+      addTearDown(radial.dispose);
+      expect(backend.createSession(radial), isNull);
+      expect(backend.stats.lastRejection,
+          'unsupported non-nested radial gradient');
+
+      final stencilSource = _decodedImage(
+        Uint8List.fromList([
+          0,
+          0,
+          0,
+          255,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          255,
+        ]),
+        const PdfMatrix(40, 0, 0, 40, 100, 100),
+        'tiled-stencil',
+      ).request;
+      final tiledStencil = await PdfRetainedScene.fromCommands(page, [
+        PdfDrawTiledCellCommand(
+          [
+            PdfDrawImageCommand(PdfImageRequest(
+              stream: stencilSource.stream,
+              transform: stencilSource.transform,
+              isStencil: true,
+              stencilColor: const PdfColor(0.1, 0.2, 0.8),
+              decoded: stencilSource.decoded,
+            )),
+          ],
+          Float64List.fromList([0]),
+          Float64List.fromList([0]),
+        ),
+      ]);
+      addTearDown(tiledStencil.dispose);
+      expect(backend.createSession(tiledStencil), isNull);
+      expect(backend.stats.lastRejection, 'unsupported tiled stencil image');
 
       final nonRectClip = await PdfRetainedScene.fromCommands(page, [
         const PdfSaveCommand(),

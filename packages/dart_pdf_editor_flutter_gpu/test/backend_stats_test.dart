@@ -1,7 +1,34 @@
 import 'package:dart_pdf_editor_flutter_gpu/dart_pdf_editor_flutter_gpu.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('proactive warm-up defaults to desktop and remains opt-in on mobile',
+      () {
+    final previous = debugDefaultTargetPlatformOverride;
+    try {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final mobile = FlutterGpuTileRasterBackend();
+      expect(mobile.supportsWarmUp, isFalse);
+      expect(mobile.supportsSessionWarmUp, isFalse);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      final desktop = FlutterGpuTileRasterBackend();
+      expect(desktop.supportsWarmUp, isTrue);
+      expect(desktop.supportsSessionWarmUp, isTrue);
+
+      final optedIn = FlutterGpuTileRasterBackend(enableProactiveWarmUp: true);
+      expect(optedIn.supportsWarmUp, isTrue);
+      expect(optedIn.supportsSessionWarmUp, isTrue);
+      final optedOut =
+          FlutterGpuTileRasterBackend(enableProactiveWarmUp: false);
+      expect(optedOut.supportsWarmUp, isFalse);
+      expect(optedOut.supportsSessionWarmUp, isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = previous;
+    }
+  });
+
   test('JSON snapshot includes outcomes and reset preserves live gauges', () {
     final stats = FlutterGpuTileBackendStats()
       ..sessionsCreated = 4
@@ -11,6 +38,16 @@ void main() {
       ..lastContextIdentity = 1234
       ..contextsSeen = 2
       ..contextSwitches = 3
+      ..warmUpRequests = 2
+      ..warmUpSubmissions = 1
+      ..warmUpCompletions = 2
+      ..warmUpMicros = 12000
+      ..sceneWarmUpRequests = 3
+      ..sceneWarmUpCompletions = 2
+      ..sceneWarmUpFailures = 1
+      ..sceneWarmUpCancellations = 1
+      ..sceneWarmUpMicros = 18000
+      ..lastSceneWarmUpError = 'test scene warm-up failure'
       ..activeSessions = 3
       ..peakActiveSessions = 4
       ..activeTextureLeases = 5
@@ -37,6 +74,13 @@ void main() {
     expect(stats.toJson(), containsPair('lastContextIdentity', 1234));
     expect(stats.toJson(), containsPair('contextsSeen', 2));
     expect(stats.toJson(), containsPair('contextSwitches', 3));
+    expect(stats.toJson(), containsPair('warmUpSubmissions', 1));
+    expect(stats.toJson(), containsPair('warmUpMicros', 12000));
+    expect(stats.toJson(), containsPair('sceneWarmUpRequests', 3));
+    expect(stats.toJson(), containsPair('sceneWarmUpCompletions', 2));
+    expect(stats.toJson(), containsPair('sceneWarmUpFailures', 1));
+    expect(stats.toJson(), containsPair('sceneWarmUpCancellations', 1));
+    expect(stats.toJson(), containsPair('sceneWarmUpMicros', 18000));
 
     stats.reset();
     expect(stats.sessionsCreated, 0);
@@ -44,6 +88,16 @@ void main() {
     expect(stats.lastContextIdentity, 1234);
     expect(stats.contextsSeen, 2);
     expect(stats.contextSwitches, 0);
+    expect(stats.warmUpRequests, 0);
+    expect(stats.warmUpSubmissions, 0);
+    expect(stats.warmUpCompletions, 0);
+    expect(stats.warmUpMicros, 0);
+    expect(stats.sceneWarmUpRequests, 0);
+    expect(stats.sceneWarmUpCompletions, 0);
+    expect(stats.sceneWarmUpFailures, 0);
+    expect(stats.sceneWarmUpCancellations, 0);
+    expect(stats.sceneWarmUpMicros, 0);
+    expect(stats.lastSceneWarmUpError, isNull);
     expect(stats.lastRejection, isNull);
     expect(stats.lastTileRoute, isNull);
     expect(stats.activeSessions, 3);

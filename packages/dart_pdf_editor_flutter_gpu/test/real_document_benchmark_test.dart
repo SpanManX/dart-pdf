@@ -10,6 +10,7 @@ import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:flutter_test/flutter_test.dart';
 
 const _defaultPages = [27, 30, 29, 32, 31, 34, 37, 39, 28];
+const _buildCommit = String.fromEnvironment('PDF_BUILD_COMMIT');
 
 bool _gpuAvailable() {
   try {
@@ -28,6 +29,24 @@ List<int> _pages() {
       .map((part) => int.tryParse(part.trim()))
       .whereType<int>()
       .toList();
+}
+
+String? _scenarioName(String? label, String stage, {int? page}) {
+  if (label == null || label.isEmpty) return null;
+  return 'gpu-$label${page == null ? '' : '-page-$page'}-$stage';
+}
+
+void _startScenario(String? name) {
+  if (name != null) PdfPerfLog.log('scenario name=$name phase=start');
+}
+
+void _finishScenario(String? name, int elapsedUs, {int? page}) {
+  if (name == null) return;
+  PdfPerfLog.log(
+    'raster page=${page ?? '-'} kind=$name '
+    'ms=${(elapsedUs / 1000).toStringAsFixed(3)}',
+  );
+  PdfPerfLog.log('scenario name=$name phase=validated');
 }
 
 Future<(int, ByteData, int, int)> _render(
@@ -65,6 +84,8 @@ double _meanDiff(ByteData a, ByteData b) {
 }
 
 void main() {
+  if (_buildCommit.isNotEmpty) PdfPerfLog.buildTag = 'commit=$_buildCommit';
+
   testWidgets('real document: cold scene plus two 512px LoDs', (tester) async {
     final path = Platform.environment['PDF_GPU_BENCHMARK_PDF'];
     if (path == null) {
@@ -77,6 +98,20 @@ void main() {
         return;
       }
       final document = PdfDocument.open(File(path).readAsBytesSync());
+      final configuredPages =
+          Platform.environment['PDF_GPU_BENCHMARK_PAGES']?.trim();
+      final scenarioLabel =
+          Platform.environment['PDF_GPU_BENCHMARK_SCENARIO']?.trim();
+      final requestedPages = _pages();
+      final pages = [
+        for (final page in requestedPages)
+          if (page >= 0 && page < document.pageCount) page,
+      ];
+      if (pages.isEmpty &&
+          (configuredPages == null || configuredPages.isEmpty) &&
+          document.pageCount > 0) {
+        pages.add(0);
+      }
       final msaa = Platform.environment['PDF_GPU_BENCHMARK_MSAA'] != '0';
       final approximateOverprint =
           Platform.environment['PDF_GPU_BENCHMARK_OVERPRINT'] != '0';
@@ -84,14 +119,23 @@ void main() {
         msaa: msaa,
         allowOverprintApproximation: approximateOverprint,
       );
+      if (Platform.environment['PDF_GPU_BENCHMARK_WARMUP'] == '1') {
+        final scenario = _scenarioName(scenarioLabel, 'pipeline-warm');
+        _startScenario(scenario);
+        final warmUp = Stopwatch()..start();
+        await backend.warmUp();
+        final elapsedUs = warmUp.elapsedMicroseconds;
+        // ignore: avoid_print
+        print('REAL_GPU_BENCHMARK warmUpUs=$elapsedUs');
+        _finishScenario(scenario, elapsedUs);
+      }
       final output = Platform.environment['PDF_GPU_BENCHMARK_OUT'];
       if (output != null) Directory(output).createSync(recursive: true);
       final rssStart = ProcessInfo.currentRss;
       var peakRss = rssStart;
       final rows = <String>[];
 
-      for (final pageIndex in _pages()) {
-        if (pageIndex < 0 || pageIndex >= document.pageCount) continue;
+      for (final pageIndex in pages) {
         PdfImageCache.instance.clear();
         final timing = PdfSceneBuildTiming();
         final record = Stopwatch()..start();
@@ -110,6 +154,21 @@ void main() {
             continue;
           }
           try {
+            if (Platform.environment['PDF_GPU_BENCHMARK_SCENE_WARMUP'] == '1' &&
+                session is PdfTileRasterWarmUp) {
+              final scenario = _scenarioName(
+                scenarioLabel,
+                'scene-warm',
+                page: pageIndex,
+              );
+              _startScenario(scenario);
+              final warmUp = Stopwatch()..start();
+              await (session as PdfTileRasterWarmUp).warmUp();
+              final elapsedUs = warmUp.elapsedMicroseconds;
+              // ignore: avoid_print
+              print('REAL_GPU_BENCHMARK sceneWarmUpUs=$elapsedUs');
+              _finishScenario(scenario, elapsedUs, page: pageIndex);
+            }
             final size = scene.pageSize;
             final center = Offset(size.width / 2, size.height / 2);
             final lod1 = 1.0;
@@ -119,16 +178,34 @@ void main() {
               height: math.min(size.height, 512 / lod1),
             );
             try {
+              final coldScenario = _scenarioName(
+                scenarioLabel,
+                'first-tile',
+                page: pageIndex,
+              );
+              _startScenario(coldScenario);
               final coldGpu = await _render(
                 () => session.rasterizeRegion(region1, pixelRatio: lod1),
                 pngPath:
                     output == null ? null : '$output/page-$pageIndex-gpu.png',
               );
+              _finishScenario(coldScenario, coldGpu.$1, page: pageIndex);
+              final canvasScenario = _scenarioName(
+                scenarioLabel,
+                'canvas-tile',
+                page: pageIndex,
+              );
+              _startScenario(canvasScenario);
               final warmCanvas = await _render(
                 () => scene.rasterizeRegion(region1, pixelRatio: lod1),
                 pngPath: output == null
                     ? null
                     : '$output/page-$pageIndex-canvas.png',
+              );
+              _finishScenario(
+                canvasScenario,
+                warmCanvas.$1,
+                page: pageIndex,
               );
 
               final lod2 = 2.0;
@@ -163,7 +240,7 @@ void main() {
       }
 
       // ignore: avoid_print
-      print('REAL_GPU_BENCHMARK pages=${_pages()} msaa=$msaa '
+      print('REAL_GPU_BENCHMARK pages=$pages msaa=$msaa '
           'approximateOverprint=$approximateOverprint');
       for (final row in rows) {
         // ignore: avoid_print

@@ -1,10 +1,12 @@
-import 'dart:async' show FutureOr;
+import 'dart:async' show Completer, FutureOr;
 import 'dart:collection';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/painting.dart' show Offset, Rect;
 import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:pdf_document/pdf_document.dart';
@@ -27,9 +29,9 @@ import 'backend_stats.dart';
 /// by the tile shader. Ordinary PDF clip paths are retained as exact stencil
 /// masks (with rectangular clips additionally using the hardware scissor).
 /// Other isolated groups, non-normal blend modes, complex clips *inside* the
-/// special soft-mask-image shortcut, gradients, substituted/stroked text,
-/// tiling cells, unsafe overprint, or missing image pixels reject the whole
-/// scene.
+/// special soft-mask-image shortcut, non-nested radial gradients,
+/// substituted/stroked text, stencil-image tiling cells, unsafe overprint, or
+/// missing image pixels reject the whole scene.
 /// dart_pdf_editor then permanently uses its Canvas session for that scene.
 class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
   FlutterGpuTileRasterBackend({
@@ -37,6 +39,7 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
     this.allowOverprintApproximation = false,
     this.maxTextureBytes = 256 << 20,
     this.maxGeometryBytes = 256 << 20,
+    this.enableProactiveWarmUp,
     FlutterGpuTileBackendStats? stats,
   })  : stats = stats ?? FlutterGpuTileBackendStats(),
         _imageCache = _GpuImageCache(maxTextureBytes),
@@ -69,6 +72,14 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
   /// buffer has completed. A scene that cannot fit falls back to Canvas.
   final int maxGeometryBytes;
 
+  /// Whether the viewer should prepare GPU pipelines and live scenes at idle.
+  ///
+  /// Null (the default) enables proactive work on desktop and leaves mobile
+  /// on-demand. Mobile Impeller contexts can reserve substantial additional
+  /// memory even for a page that later falls back to Canvas; validated hosts
+  /// can opt in explicitly.
+  final bool? enableProactiveWarmUp;
+
   final FlutterGpuTileBackendStats stats;
   final _GpuImageCache _imageCache;
   final _GpuGeometryPool _geometryPool;
@@ -90,9 +101,54 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
   /// reports that runtime reason through [stats].
   bool get isPlatformSupported => true;
 
+  bool get _proactiveWarmUpEnabled =>
+      enableProactiveWarmUp ??
+      switch (defaultTargetPlatform) {
+        TargetPlatform.macOS ||
+        TargetPlatform.windows ||
+        TargetPlatform.linux =>
+          true,
+        _ => false,
+      };
+
+  @override
+  bool get supportsWarmUp => _proactiveWarmUpEnabled;
+
+  @override
+  bool get supportsSessionWarmUp => _proactiveWarmUpEnabled;
+
   /// Drops reusable texture ownership. Active compiled scenes retain the
   /// resources they are currently drawing.
   void clearImageCache() => _imageCache.clear(stats);
+
+  /// Compiles this view's tile pipelines with a one-pixel GPU submission.
+  ///
+  /// The driver otherwise compiles the pipelines on the first deep-zoom tile,
+  /// which can leave the coarse page visible for hundreds of milliseconds.
+  /// This is safe to call repeatedly: work is shared per Impeller context and
+  /// MSAA mode, including between backend instances.
+  @override
+  Future<void> warmUp() async {
+    final clock = Stopwatch()..start();
+    stats.warmUpRequests++;
+    try {
+      final context = gpu.gpuContext;
+      final pipelines = await _GpuPipelines.instance(context);
+      final submitted = await pipelines.warmUp(
+        context,
+        useMsaa: msaa && context.doesSupportOffscreenMSAA,
+      );
+      if (submitted) stats.warmUpSubmissions++;
+      stats.warmUpCompletions++;
+    } catch (error) {
+      stats
+        ..warmUpFailures += 1
+        ..lastWarmUpError = error.toString();
+      rethrow;
+    } finally {
+      stats.warmUpMicros += clock.elapsedMicroseconds;
+    }
+  }
 
   @override
   String get debugLabel => 'flutter_gpu';
@@ -115,7 +171,16 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
       }
       _lastContext = context;
       stats.lastContextIdentity = identityHashCode(context);
-      final unitBuild = _buildGpuUnits(scene.commands);
+      final commandBuild = _buildGpuCommands(scene.commands);
+      final commands = commandBuild.commands;
+      if (commands == null) {
+        _lastSessionRejection = commandBuild.rejection;
+        stats.lastRejection = commandBuild.rejection;
+        stats.lastTileRoute = 'canvas-fallback';
+        stats.sessionsRejected++;
+        return null;
+      }
+      final unitBuild = _buildGpuUnits(commands);
       final units = unitBuild.units;
       if (units == null) {
         _lastSessionRejection = unitBuild.rejection;
@@ -124,8 +189,8 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
         stats.sessionsRejected++;
         return null;
       }
-      final rejection =
-          _unsupportedReason(scene, units, allowOverprintApproximation);
+      final rejection = _unsupportedReason(
+          scene, commands, units, allowOverprintApproximation);
       if (rejection != null) {
         _lastSessionRejection = rejection;
         stats.lastRejection = rejection;
@@ -143,6 +208,7 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
           math.max(stats.peakActiveSessions, stats.activeSessions);
       return _FlutterGpuTileSession(
         scene: scene,
+        commands: commands,
         context: context,
         pipelines: _GpuPipelines.instance(context),
         units: units,
@@ -160,8 +226,11 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
     }
   }
 
-  static String? _unsupportedReason(PdfRetainedScene scene,
-      List<_GpuUnit> units, bool allowOverprintApproximation) {
+  static String? _unsupportedReason(
+      PdfRetainedScene scene,
+      List<PdfRenderCommand> commands,
+      List<_GpuUnit> units,
+      bool allowOverprintApproximation) {
     for (final unit in units) {
       if (unit.blendMode != PdfBlendMode.normal) {
         return 'blend mode ${unit.blendMode.name}';
@@ -174,7 +243,7 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
         }
         continue;
       }
-      final command = scene.commands[unit.commandIndex];
+      final command = commands[unit.commandIndex];
       final overprint = _unsafeOverprint(unit, command);
       if (overprint != null) return overprint;
       if (unit.darken && !allowOverprintApproximation) {
@@ -204,14 +273,22 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
           }
         case PdfDrawTextCommand(:final run):
           if (run.invisible) continue;
-          if (run.glyphs == null ||
-              !run.fill ||
-              run.gradient != null ||
-              run.strokeColor != null) {
-            return 'unsupported text rendering mode';
+          final gradientReason = run.gradient == null
+              ? null
+              : _gradientUnsupportedReason(run.gradient!, run.fillAlpha);
+          final textReasons = <String>[
+            if (run.glyphs == null) 'missing glyph outlines',
+            if (!run.fill) 'fill disabled',
+            if (gradientReason != null) gradientReason,
+            if (run.strokeColor != null) 'stroke',
+          ];
+          if (textReasons.isNotEmpty) {
+            return 'unsupported text: ${textReasons.join(', ')}';
           }
-        case PdfFillPathGradientCommand() || PdfDrawTiledCellCommand():
-          return 'unsupported ${command.runtimeType}';
+        case PdfFillPathGradientCommand():
+          final reason =
+              _gradientUnsupportedReason(command.gradient, command.alpha);
+          if (reason != null) return reason;
         default:
           return 'unsupported ${command.runtimeType}';
       }
@@ -221,15 +298,13 @@ class FlutterGpuTileRasterBackend extends PdfTileRasterBackend {
         if (unit.endCommandIndex > unit.commandIndex)
           for (var i = unit.commandIndex; i <= unit.endCommandIndex; i++) i,
     };
-    for (var i = 0; i < scene.commands.length; i++) {
-      final command = scene.commands[i];
+    for (var i = 0; i < commands.length; i++) {
+      final command = commands[i];
       switch (command) {
         case PdfBeginGroupCommand() ||
               PdfEndGroupCommand() ||
               PdfBeginSoftMaskedCommand() ||
-              PdfEndSoftMaskedCommand() ||
-              PdfFillPathGradientCommand() ||
-              PdfDrawTiledCellCommand():
+              PdfEndSoftMaskedCommand():
           if (covered.contains(i)) break;
           return 'unsafe ${command.runtimeType}';
         case PdfSetBlendModeCommand(:final mode):
@@ -348,6 +423,112 @@ class _SoftMaskImageSpec {
   final double backdropLuminance;
   final double transferScale;
   final double transferOffset;
+}
+
+class _GpuCommandBuild {
+  const _GpuCommandBuild(this.commands, this.rejection);
+
+  final List<PdfRenderCommand>? commands;
+  final String? rejection;
+}
+
+/// Expands retained tiling cells once for the GPU scene.
+///
+/// Canvas can stamp a vector sub-picture for every repeat. flutter_gpu does
+/// not expose a retained sub-pass transform, so keeping the nested command
+/// would otherwise require rebuilding the cell for every tile. Flattening it
+/// here preserves exact tile-major painter order while still compiling the
+/// resulting page-space geometry only once. The hard cap keeps pathological
+/// hatch grids on the existing Canvas sub-picture path instead of trading a
+/// compact transcript for unbounded GPU geometry.
+_GpuCommandBuild _buildGpuCommands(List<PdfRenderCommand> source) {
+  const maxExpandedCommands = 1000000;
+  var hasTiledCell = false;
+  String? tiledRejection;
+
+  int count(List<PdfRenderCommand> commands, Set<Object> active,
+      {bool inTiledCell = false}) {
+    if (!active.add(commands)) return maxExpandedCommands + 1;
+    var total = 0;
+    for (final command in commands) {
+      if (command
+          case PdfDrawTiledCellCommand(
+            :final cellCommands,
+            :final originsX,
+          )) {
+        hasTiledCell = true;
+        final cellCount = count(cellCommands, active, inTiledCell: true);
+        if (cellCount > maxExpandedCommands ||
+            originsX.length > maxExpandedCommands ||
+            (cellCount != 0 &&
+                originsX.length > maxExpandedCommands ~/ cellCount)) {
+          active.remove(commands);
+          return maxExpandedCommands + 1;
+        }
+        total += cellCount * originsX.length;
+      } else {
+        if (inTiledCell &&
+            command is PdfDrawImageCommand &&
+            command.request.isStencil) {
+          // Type 3 bitmap glyphs are retained as one-repeat tiling cells.
+          // Linear texture sampling does not yet match Canvas closely enough
+          // on the Ghent font grid, so do not let flattening accidentally
+          // promote those pages into the exact GPU subset.
+          tiledRejection ??= 'unsupported tiled stencil image';
+        }
+        total++;
+      }
+      if (total > maxExpandedCommands) {
+        active.remove(commands);
+        return total;
+      }
+    }
+    active.remove(commands);
+    return total;
+  }
+
+  final expandedCount = count(source, Set<Object>.identity());
+  if (!hasTiledCell) return _GpuCommandBuild(source, null);
+  if (tiledRejection != null) {
+    return _GpuCommandBuild(null, tiledRejection);
+  }
+  if (expandedCount > maxExpandedCommands) {
+    return const _GpuCommandBuild(
+      null,
+      'expanded tiling cells exceed GPU command cap',
+    );
+  }
+
+  final expanded = <PdfRenderCommand>[];
+  for (final command in source) {
+    if (command
+        case PdfDrawTiledCellCommand(
+          :final cellCommands,
+          :final originsX,
+          :final originsY,
+        )) {
+      final recorder = RecordingPdfDevice();
+      for (var i = 0; i < originsX.length; i++) {
+        // TranslatingPdfDevice intentionally does not implement the native
+        // tiled-cell capability. The generic replay path therefore expands
+        // nested cells too and composes their origins into page-space.
+        replayCommands(
+          cellCommands,
+          TranslatingPdfDevice(recorder, originsX[i], originsY[i]),
+        );
+      }
+      expanded.addAll(recorder.commands);
+    } else {
+      expanded.add(command);
+    }
+  }
+  if (expanded.length > maxExpandedCommands) {
+    return const _GpuCommandBuild(
+      null,
+      'expanded tiling cells exceed GPU command cap',
+    );
+  }
+  return _GpuCommandBuild(List.unmodifiable(expanded), null);
 }
 
 _GpuUnitBuild _buildGpuUnits(List<PdfRenderCommand> commands) {
@@ -671,10 +852,63 @@ String? _unsafeOverprint(_GpuUnit unit, PdfRenderCommand command) {
   switch (command) {
     case PdfFillMeshCommand():
       if (unit.fillOverprint) return 'mesh overprint';
+    case PdfFillPathGradientCommand():
+      if (unit.fillOverprint) return 'gradient overprint';
+    case PdfDrawTextCommand(:final run):
+      if (unit.fillOverprint && run.gradient != null) {
+        return 'gradient text overprint';
+      }
     default:
       // Images do not use CanvasPdfDevice's overprint approximation; the
       // interpreter has already resolved any image-adjacent colorant work.
       break;
+  }
+  return null;
+}
+
+String? _gradientUnsupportedReason(PdfGradient gradient, double alpha) {
+  if (gradient.colors.length < 2 ||
+      gradient.colors.length != gradient.stops.length ||
+      gradient.transform.inverted() == null ||
+      !alpha.isFinite ||
+      ![
+        gradient.transform.a,
+        gradient.transform.b,
+        gradient.transform.c,
+        gradient.transform.d,
+        gradient.transform.e,
+        gradient.transform.f,
+      ].every((value) => value.isFinite)) {
+    return 'invalid axial gradient';
+  }
+  if (gradient.isRadial) {
+    if (gradient.coords.length < 6) return 'invalid radial gradient';
+    final x0 = gradient.coords[0], y0 = gradient.coords[1];
+    final r0 = gradient.coords[2];
+    final x1 = gradient.coords[3], y1 = gradient.coords[4];
+    final r1 = gradient.coords[5];
+    final dx = x1 - x0, dy = y1 - y0, dr = r1 - r0;
+    final centerDistance = math.sqrt(dx * dx + dy * dy);
+    if (![x0, y0, r0, x1, y1, r1].every((value) => value.isFinite) ||
+        r0 < 0 ||
+        r1 < 0 ||
+        dr.abs() <= 1e-9 ||
+        centerDistance > dr.abs() + 1e-6) {
+      return 'unsupported non-nested radial gradient';
+    }
+  } else if (gradient.coords.length < 4) {
+    return 'invalid axial gradient';
+  }
+  if (gradient.isRadial) return null;
+  final dx = gradient.coords[2] - gradient.coords[0];
+  final dy = gradient.coords[3] - gradient.coords[1];
+  if (!dx.isFinite || !dy.isFinite || dx * dx + dy * dy <= 1e-12) {
+    return 'invalid axial gradient';
+  }
+  var previous = double.negativeInfinity;
+  for (final stop in gradient.stops) {
+    if (!stop.isFinite || stop <= previous) return 'invalid axial gradient';
+    previous = stop;
   }
   return null;
 }
@@ -698,9 +932,13 @@ bool _commandNeedsDarken(
 }
 
 class _FlutterGpuTileSession
-    implements PdfTileRasterSession, PdfTileRasterScheduling {
+    implements
+        PdfTileRasterSession,
+        PdfTileRasterScheduling,
+        PdfTileRasterWarmUp {
   _FlutterGpuTileSession({
     required this.scene,
+    required this.commands,
     required this.context,
     required this.pipelines,
     required this.units,
@@ -712,6 +950,7 @@ class _FlutterGpuTileSession
 
   @override
   final PdfRetainedScene scene;
+  final List<PdfRenderCommand> commands;
 
   // This backend already returns a final GPU texture for every raster call.
   // Slab splitting would queue another texture-to-texture copy per tile; those
@@ -734,11 +973,13 @@ class _FlutterGpuTileSession
 
   Future<_CompiledScene>? _compiled;
   _CompiledScene? _ready;
+  Future<void>? _prewarm;
   bool _disposed = false;
   bool _failureReported = false;
 
   Future<_CompiledScene> _compile() => _compiled ??= _CompiledScene.build(
         scene,
+        commands,
         context,
         units,
         stats,
@@ -753,6 +994,56 @@ class _FlutterGpuTileSession
       }).whenComplete(scene.releaseDecodedImagePixels);
 
   @override
+  Future<void> warmUp() => _prewarm ??= _warmUpScene();
+
+  Future<void> _warmUpScene() async {
+    if (_disposed) return;
+    final clock = Stopwatch()..start();
+    stats.sceneWarmUpRequests++;
+    ui.Image? image;
+    try {
+      final compiled = await _compile();
+      final gpuPipelines = await pipelines;
+      await gpuPipelines.warmUp(
+        context,
+        useMsaa: msaa && context.doesSupportOffscreenMSAA,
+      );
+      if (_disposed) throw StateError('flutter_gpu tile session disposed');
+      final size = scene.pageSize;
+      final ratio = 1 / math.max(1.0, math.max(size.width, size.height));
+      image = compiled.render(
+        units,
+        region: Offset.zero & size,
+        pixelRatio: ratio,
+        pipelines: gpuPipelines,
+        useMsaa: msaa,
+      );
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (bytes == null) throw StateError('GPU scene warm-up readback failed');
+      stats.sceneWarmUpCompletions++;
+      PdfPerfLog.log(
+        'tile gpu scene warm commands=${units.length} '
+        'elapsed=${clock.elapsedMilliseconds}ms',
+      );
+    } catch (error) {
+      // A page leaving the cache while this optional idle pass is in flight is
+      // ordinary cancellation, not a backend failure or a reason to report a
+      // Canvas fallback for a scene that no longer has an owner.
+      if (_disposed) {
+        stats.sceneWarmUpCancellations++;
+        return;
+      }
+      stats
+        ..sceneWarmUpFailures += 1
+        ..lastSceneWarmUpError = error.toString();
+      rethrow;
+    } finally {
+      image?.dispose();
+      stats.sceneWarmUpMicros += clock.elapsedMicroseconds;
+    }
+  }
+
+  @override
   Future<ui.Image> rasterizeRegion(
     Rect region, {
     required double pixelRatio,
@@ -760,6 +1051,8 @@ class _FlutterGpuTileSession
   }) async {
     if (_disposed) throw StateError('flutter_gpu tile session disposed');
     try {
+      final prewarm = _prewarm;
+      if (prewarm != null) await prewarm;
       final compiled = await _compile();
       final gpuPipelines = await pipelines;
       if (_disposed) throw StateError('flutter_gpu tile session disposed');
@@ -827,6 +1120,7 @@ class _CompiledScene {
 
   static Future<_CompiledScene> build(
     PdfRetainedScene scene,
+    List<PdfRenderCommand> commands,
     gpu.GpuContext context,
     List<_GpuUnit> units,
     FlutterGpuTileBackendStats stats,
@@ -853,7 +1147,7 @@ class _CompiledScene {
             context,
             geometry,
             scene,
-            scene.commands[unit.commandIndex],
+            commands[unit.commandIndex],
             stats,
             imageCache,
             textureLeases,
@@ -1456,6 +1750,19 @@ FutureOr<_GpuDraw?> _compileCommand(
       ):
       final subs = flattenPath(path, PdfMatrix.identity, tolerance: 0.01);
       return _stencilDraw(geometry, subs, color, alpha, rule, false);
+    case PdfFillPathGradientCommand(
+        :final path,
+        :final rule,
+        :final gradient,
+        :final alpha,
+      ):
+      return _compileGradient(
+        geometry,
+        path,
+        rule,
+        gradient,
+        alpha,
+      );
     case PdfStrokePathCommand(
         :final path,
         :final color,
@@ -1503,8 +1810,18 @@ FutureOr<_GpuDraw?> _compileCommand(
           subs.add(FlatSubpath(mapped, closed: sub.closed));
         }
       }
+      final gradient = run.gradient;
+      if (gradient != null) {
+        return _compileGradientSubpaths(
+          geometry,
+          subs,
+          PdfFillRule.nonzero,
+          gradient,
+          run.fillAlpha,
+        );
+      }
       return _stencilDraw(
-          geometry, subs, run.color, 1, PdfFillRule.nonzero, false);
+          geometry, subs, run.color, run.fillAlpha, PdfFillRule.nonzero, false);
     case PdfFillMeshCommand(:final mesh, :final alpha):
       if (mesh.triangles.isEmpty) return null;
       final vertices = FloatBuilder(mesh.triangles.length * 6);
@@ -1562,6 +1879,279 @@ Future<_GpuDraw> _compileImageCommand(
       offsetInBytes: 0,
       lengthInBytes: info.lengthInBytes,
     ),
+  );
+}
+
+_GradientDraw? _compileGradient(
+  _GpuGeometryArena geometry,
+  PdfPath path,
+  PdfFillRule rule,
+  PdfGradient gradient,
+  double alpha,
+) {
+  if (alpha <= 0 || _gradientUnsupportedReason(gradient, alpha) != null) {
+    return null;
+  }
+  final subpaths = flattenPath(path, PdfMatrix.identity, tolerance: 0.01);
+  return _compileGradientSubpaths(
+    geometry,
+    subpaths,
+    rule,
+    gradient,
+    alpha,
+  );
+}
+
+_GradientDraw? _compileGradientSubpaths(
+  _GpuGeometryArena geometry,
+  List<FlatSubpath> subpaths,
+  PdfFillRule rule,
+  PdfGradient gradient,
+  double alpha,
+) {
+  if (alpha <= 0) return null;
+  if (gradient.isRadial) {
+    return _compileRadialGradientSubpaths(
+      geometry,
+      subpaths,
+      rule,
+      gradient,
+      alpha,
+    );
+  }
+  final stencil = _stencilGeometry(geometry, subpaths);
+  if (stencil == null) return null;
+  final bounds = stencil.$2;
+  final inverse = gradient.transform.inverted()!;
+  final x0 = gradient.coords[0], y0 = gradient.coords[1];
+  final dx = gradient.coords[2] - x0, dy = gradient.coords[3] - y0;
+  final length2 = dx * dx + dy * dy;
+  final nx = -dy, ny = dx;
+  var minT = double.infinity, maxT = double.negativeInfinity;
+  var minU = double.infinity, maxU = double.negativeInfinity;
+  for (final (px, py) in <(double, double)>[
+    (bounds.left, bounds.bottom),
+    (bounds.right, bounds.bottom),
+    (bounds.right, bounds.top),
+    (bounds.left, bounds.top),
+  ]) {
+    final x = inverse.transformX(px, py), y = inverse.transformY(px, py);
+    final gx = x - x0, gy = y - y0;
+    final t = (gx * dx + gy * dy) / length2;
+    final u = (gx * nx + gy * ny) / length2;
+    minT = math.min(minT, t);
+    maxT = math.max(maxT, t);
+    minU = math.min(minU, u);
+    maxU = math.max(maxU, u);
+  }
+  if (![minT, maxT, minU, maxU].every((value) => value.isFinite) ||
+      minT >= maxT ||
+      minU >= maxU) {
+    return null;
+  }
+
+  final cuts = <double>{minT, maxT};
+  for (final stop in <double>[0, ...gradient.stops, 1]) {
+    if (stop > minT && stop < maxT) cuts.add(stop);
+  }
+  final ordered = cuts.toList()..sort();
+  final vertices = FloatBuilder(math.max(36, (ordered.length - 1) * 36));
+  final commandAlpha = alpha.clamp(0.0, 1.0);
+
+  List<double> colorAt(double t) {
+    final sample = t.clamp(0.0, 1.0);
+    var upper = 1;
+    while (upper < gradient.stops.length && gradient.stops[upper] < sample) {
+      upper++;
+    }
+    if (upper >= gradient.stops.length) {
+      return _premul(gradient.colors.last, commandAlpha);
+    }
+    final lower = upper - 1;
+    final lo = gradient.stops[lower], hi = gradient.stops[upper];
+    final mix = hi <= lo ? 1.0 : ((sample - lo) / (hi - lo)).clamp(0.0, 1.0);
+    final a = gradient.colors[lower], b = gradient.colors[upper];
+    return _premul(
+      PdfColor(
+        a.red + (b.red - a.red) * mix,
+        a.green + (b.green - a.green) * mix,
+        a.blue + (b.blue - a.blue) * mix,
+      ),
+      commandAlpha,
+    );
+  }
+
+  (double, double) point(double t, double u) {
+    final x = x0 + dx * t + nx * u;
+    final y = y0 + dy * t + ny * u;
+    return (
+      gradient.transform.transformX(x, y),
+      gradient.transform.transformY(x, y),
+    );
+  }
+
+  for (var i = 0; i + 1 < ordered.length; i++) {
+    final a = ordered[i], b = ordered[i + 1];
+    if (b - a <= 1e-12) continue;
+    final outsideStart = b <= 0;
+    final outsideEnd = a >= 1;
+    final ca = outsideStart && !gradient.extendStart ||
+            outsideEnd && !gradient.extendEnd
+        ? const <double>[0, 0, 0, 0]
+        : colorAt(a);
+    final cb = outsideStart && !gradient.extendStart ||
+            outsideEnd && !gradient.extendEnd
+        ? const <double>[0, 0, 0, 0]
+        : colorAt(b);
+    final p00 = point(a, minU), p01 = point(a, maxU);
+    final p10 = point(b, minU), p11 = point(b, maxU);
+    for (final (point, color) in <((double, double), List<double>)>[
+      (p00, ca),
+      (p10, cb),
+      (p11, cb),
+      (p00, ca),
+      (p11, cb),
+      (p01, ca),
+    ]) {
+      vertices.add6(
+        point.$1,
+        point.$2,
+        color[0],
+        color[1],
+        color[2],
+        color[3],
+      );
+    }
+  }
+  if (vertices.isEmpty) return null;
+  return _GradientDraw(
+    stencil.$1,
+    geometry.add(vertices.bytes, vertices.length ~/ 6),
+    rule,
+  );
+}
+
+_GradientDraw? _compileRadialGradientSubpaths(
+  _GpuGeometryArena geometry,
+  List<FlatSubpath> subpaths,
+  PdfFillRule rule,
+  PdfGradient gradient,
+  double alpha,
+) {
+  final stencil = _stencilGeometry(geometry, subpaths);
+  if (stencil == null) return null;
+  final bounds = stencil.$2;
+  final inverse = gradient.transform.inverted()!;
+  final x0 = gradient.coords[0], y0 = gradient.coords[1];
+  final r0 = gradient.coords[2];
+  final x1 = gradient.coords[3], y1 = gradient.coords[4];
+  final r1 = gradient.coords[5];
+  final dx = x1 - x0, dy = y1 - y0, dr = r1 - r0;
+
+  // Bound the extended, growing side by the fill path. The extra radii and
+  // centre travel are deliberately conservative; the path stencil discards
+  // the excess, while a too-small outer ring would leave a clipped corner
+  // transparent when /Extend asks for the terminal colour.
+  var reach = (math.sqrt(dx * dx + dy * dy) + r0 + r1) * 4 + 1;
+  for (final (px, py) in <(double, double)>[
+    (bounds.left, bounds.bottom),
+    (bounds.right, bounds.bottom),
+    (bounds.right, bounds.top),
+    (bounds.left, bounds.top),
+  ]) {
+    final x = inverse.transformX(px, py), y = inverse.transformY(px, py);
+    final d0 = math.sqrt((x - x0) * (x - x0) + (y - y0) * (y - y0));
+    final d1 = math.sqrt((x - x1) * (x - x1) + (y - y1) * (y - y1));
+    reach = math.max(reach, math.max(d0, d1) + r0 + r1);
+  }
+  if (!reach.isFinite) return null;
+
+  final double tLo;
+  final double tHi;
+  if (dr > 0) {
+    tLo = gradient.extendStart ? -r0 / dr : 0;
+    tHi = gradient.extendEnd ? (reach - r0) / dr : 1;
+  } else {
+    tLo = gradient.extendStart ? (reach - r0) / dr : 0;
+    tHi = gradient.extendEnd ? -r0 / dr : 1;
+  }
+  if (!tLo.isFinite || !tHi.isFinite || tLo >= tHi) return null;
+
+  final cuts = <double>{tLo, tHi};
+  for (final stop in <double>[0, ...gradient.stops, 1]) {
+    if (stop > tLo && stop < tHi) cuts.add(stop);
+  }
+  final ordered = cuts.toList()..sort();
+  const angular = 96;
+  final vertices =
+      FloatBuilder(math.max(angular * 36, (ordered.length - 1) * angular * 36));
+  final commandAlpha = alpha.clamp(0.0, 1.0);
+
+  List<double> colorAt(double t) {
+    final sample = t.clamp(0.0, 1.0);
+    var upper = 1;
+    while (upper < gradient.stops.length && gradient.stops[upper] < sample) {
+      upper++;
+    }
+    if (upper >= gradient.stops.length) {
+      return _premul(gradient.colors.last, commandAlpha);
+    }
+    final lower = upper - 1;
+    final lo = gradient.stops[lower], hi = gradient.stops[upper];
+    final mix = ((sample - lo) / (hi - lo)).clamp(0.0, 1.0);
+    final a = gradient.colors[lower], b = gradient.colors[upper];
+    return _premul(
+      PdfColor(
+        a.red + (b.red - a.red) * mix,
+        a.green + (b.green - a.green) * mix,
+        a.blue + (b.blue - a.blue) * mix,
+      ),
+      commandAlpha,
+    );
+  }
+
+  (double, double) point(double t, int step) {
+    final angle = 2 * math.pi * step / angular;
+    final radius = math.max(0.0, r0 + dr * t);
+    final x = x0 + dx * t + radius * math.cos(angle);
+    final y = y0 + dy * t + radius * math.sin(angle);
+    return (
+      gradient.transform.transformX(x, y),
+      gradient.transform.transformY(x, y),
+    );
+  }
+
+  for (var i = 0; i + 1 < ordered.length; i++) {
+    final a = ordered[i], b = ordered[i + 1];
+    if (b - a <= 1e-12) continue;
+    final ca = colorAt(a), cb = colorAt(b);
+    for (var j = 0; j < angular; j++) {
+      final p00 = point(a, j), p01 = point(a, j + 1);
+      final p10 = point(b, j), p11 = point(b, j + 1);
+      for (final (point, color) in <((double, double), List<double>)>[
+        (p00, ca),
+        (p10, cb),
+        (p11, cb),
+        (p00, ca),
+        (p11, cb),
+        (p01, ca),
+      ]) {
+        vertices.add6(
+          point.$1,
+          point.$2,
+          color[0],
+          color[1],
+          color[2],
+          color[3],
+        );
+      }
+    }
+  }
+  if (vertices.isEmpty) return null;
+  return _GradientDraw(
+    stencil.$1,
+    geometry.add(vertices.bytes, vertices.length ~/ 6),
+    rule,
   );
 }
 
@@ -1814,6 +2404,17 @@ class _StencilDraw implements _GpuDraw {
       encoder.stencil(fan, cover, rule: rule, union: union);
 }
 
+class _GradientDraw implements _GpuDraw {
+  const _GradientDraw(this.fan, this.mesh, this.rule);
+
+  final _GpuBuffer fan;
+  final _GpuBuffer mesh;
+  final PdfFillRule rule;
+
+  @override
+  void encode(_GpuEncoder encoder) => encoder.gradient(fan, mesh, rule);
+}
+
 class _GpuClipDraw {
   const _GpuClipDraw(this.fan, this.cover, this.rule);
 
@@ -2006,6 +2607,32 @@ class _GpuEncoder {
     _drawBuffer(cover);
   }
 
+  void gradient(_GpuBuffer fan, _GpuBuffer mesh, PdfFillRule rule) {
+    _accumulateStencil(
+      fan,
+      rule: rule,
+      union: false,
+      requiredClipBit: _activeClipBit,
+    );
+    pass
+      ..setStencilReference(0)
+      ..setColorBlendEquation(_srcOver)
+      ..setStencilConfig(gpu.StencilConfig(
+        compareFunction: gpu.CompareFunction.notEqual,
+        depthStencilPassOperation: gpu.StencilOperation.zero,
+        stencilFailureOperation: gpu.StencilOperation.keep,
+        readMask: _pathMask,
+        writeMask: _pathMask,
+      ))
+      ..bindPipeline(pipelines.solid)
+      ..bindUniform(pipelines.solidTransform, transform);
+    _drawBuffer(mesh);
+    // The gradient mesh conservatively covers the path bounds, but clearing
+    // the scratch bits explicitly keeps a malformed transform or degenerate
+    // interval from leaking winding state into the next draw.
+    _clearStencil(_pathMask);
+  }
+
   void _accumulateStencil(
     _GpuBuffer fan, {
     required PdfFillRule rule,
@@ -2190,7 +2817,258 @@ class _GpuPipelines {
     );
   }
 
+  final Map<bool, Future<void>> _warmUps = {};
+
+  Future<bool> warmUp(gpu.GpuContext context, {required bool useMsaa}) async {
+    final existing = _warmUps[useMsaa];
+    if (existing != null) {
+      await existing;
+      return false;
+    }
+    final future = _submitWarmUp(context, useMsaa: useMsaa);
+    _warmUps[useMsaa] = future;
+    try {
+      await future;
+      return true;
+    } catch (_) {
+      if (identical(_warmUps[useMsaa], future)) _warmUps.remove(useMsaa);
+      rethrow;
+    }
+  }
+
+  Future<void> _submitWarmUp(
+    gpu.GpuContext context, {
+    required bool useMsaa,
+  }) {
+    final resolve = context.createTexture(
+      gpu.StorageMode.devicePrivate,
+      1,
+      1,
+      format: context.defaultColorFormat,
+    );
+    final color = useMsaa
+        ? context.createTexture(
+            gpu.StorageMode.deviceTransient,
+            1,
+            1,
+            format: context.defaultColorFormat,
+            sampleCount: 4,
+          )
+        : resolve;
+    final stencilTexture = context.createTexture(
+      gpu.StorageMode.deviceTransient,
+      1,
+      1,
+      format: context.defaultStencilFormat,
+      sampleCount: useMsaa ? 4 : 1,
+    );
+    final sample = context.createTexture(
+      gpu.StorageMode.hostVisible,
+      1,
+      1,
+      format: gpu.PixelFormat.r8g8b8a8UNormInt,
+    );
+    sample.overwrite(ByteData.sublistView(Uint8List.fromList(
+      const [255, 255, 255, 255],
+    )));
+
+    final transient = context.createHostBuffer();
+    final transform =
+        transient.emplace(ByteData.sublistView(Float32List.fromList(
+      const [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+      ],
+    )));
+    final stencilVertices = transient.emplace(ByteData.sublistView(
+      Float32List.fromList(const [-1, -1, 3, -1, -1, 3]),
+    ));
+    final solidVertices = transient.emplace(ByteData.sublistView(
+      Float32List.fromList(const [
+        -1,
+        -1,
+        1,
+        1,
+        1,
+        1,
+        3,
+        -1,
+        1,
+        1,
+        1,
+        1,
+        -1,
+        3,
+        1,
+        1,
+        1,
+        1,
+      ]),
+    ));
+    final textureVertices = transient.emplace(ByteData.sublistView(
+      Float32List.fromList(const [
+        -1,
+        -1,
+        0,
+        0,
+        3,
+        -1,
+        1,
+        0,
+        -1,
+        3,
+        0,
+        1,
+      ]),
+    ));
+    final textureInfo = transient.emplace(ByteData.sublistView(
+      Float32List.fromList(const [1, 1, 1, 1, 0, 0, 0, 0]),
+    ));
+    final softMaskInfo = Float32List(36)
+      ..setRange(0, 16, const [
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+      ])
+      ..setRange(16, 20, const [1, 1, 1, 1])
+      ..setRange(20, 24, const [1, 1, 1, 1])
+      ..setRange(24, 28, const [0, 0, 0, 1])
+      ..setRange(28, 32, const [1, 0, 0, 0])
+      ..setRange(32, 36, const [-1, -1, 1, 1]);
+    final softMaskUniform =
+        transient.emplace(ByteData.sublistView(softMaskInfo));
+
+    final commandBuffer = context.createCommandBuffer();
+    final pass = commandBuffer.createRenderPass(gpu.RenderTarget(
+      colorAttachments: [
+        gpu.ColorAttachment(
+          texture: color,
+          resolveTexture: useMsaa ? resolve : null,
+          clearValue: vm.Vector4.zero(),
+          storeAction: useMsaa
+              ? gpu.StoreAction.multisampleResolve
+              : gpu.StoreAction.store,
+        ),
+      ],
+      depthStencilAttachment: gpu.DepthStencilAttachment(
+        texture: stencilTexture,
+        stencilClearValue: 0,
+      ),
+    ));
+    pass
+      ..setCullMode(gpu.CullMode.none)
+      ..setWindingOrder(gpu.WindingOrder.counterClockwise)
+      ..setPrimitiveType(gpu.PrimitiveType.triangle)
+      ..setColorBlendEnable(true)
+      ..setStencilReference(0)
+      ..setColorBlendEquation(_GpuEncoder._noWrite)
+      ..setStencilConfig(gpu.StencilConfig(
+        compareFunction: gpu.CompareFunction.always,
+        depthStencilPassOperation: gpu.StencilOperation.incrementWrap,
+        readMask: 0,
+        writeMask: _GpuEncoder._pathMask,
+      ))
+      ..bindPipeline(stencil)
+      ..bindUniform(stencilTransform, transform);
+    _warmUpDraw(pass, stencilVertices, 3);
+    pass
+      ..setColorBlendEquation(_GpuEncoder._srcOver)
+      ..setStencilConfig(gpu.StencilConfig(
+        compareFunction: gpu.CompareFunction.always,
+        depthStencilPassOperation: gpu.StencilOperation.keep,
+        readMask: 0,
+        writeMask: 0,
+      ))
+      ..bindPipeline(solid)
+      ..bindUniform(solidTransform, transform);
+    _warmUpDraw(pass, solidVertices, 3);
+    pass
+      ..bindPipeline(texture)
+      ..bindUniform(textureTransform, transform)
+      ..bindUniform(this.textureInfo, textureInfo)
+      ..bindTexture(textureSampler, sample);
+    _warmUpDraw(pass, textureVertices, 3);
+    pass
+      ..clearBindings()
+      ..bindPipeline(softMask)
+      ..bindUniform(softMaskTransform, transform)
+      ..bindUniform(this.softMaskInfo, softMaskUniform)
+      ..bindTexture(softMaskContentSampler, sample)
+      ..bindTexture(softMaskMaskSampler, sample);
+    _warmUpDraw(pass, textureVertices, 3);
+    pass.clearBindings();
+
+    final completer = Completer<void>();
+    // Keep every command-buffer resource strongly reachable until Impeller's
+    // completion fence fires. The callback itself is the lifetime owner.
+    final resources = <Object>[
+      resolve,
+      color,
+      stencilTexture,
+      sample,
+      transient,
+      commandBuffer,
+      pass,
+    ];
+    try {
+      commandBuffer.submit(completionCallback: (success) {
+        if (resources.isEmpty) return;
+        if (success) {
+          completer.complete();
+        } else {
+          completer.completeError(StateError('GPU pipeline warm-up failed'));
+        }
+      });
+    } catch (error, stack) {
+      completer.completeError(error, stack);
+    }
+    return completer.future;
+  }
+
+  static void _warmUpDraw(
+    gpu.RenderPass pass,
+    gpu.BufferView vertices,
+    int count,
+  ) {
+    final dynamic dynamicPass = pass;
+    try {
+      dynamicPass.bindVertexBuffer(vertices);
+      dynamicPass.draw(count);
+    } on NoSuchMethodError {
+      dynamicPass.bindVertexBuffer(vertices, count);
+      dynamicPass.draw();
+    }
+  }
+
   static Future<gpu.ShaderLibrary> _loadLibrary() async {
+    final failures = <String, Object>{};
     for (final asset in const [
       'packages/dart_pdf_editor_flutter_gpu/assets/shaders/pdf_tile_gpu.shaderbundle',
       'assets/shaders/pdf_tile_gpu.shaderbundle',
@@ -2202,11 +3080,18 @@ class _GpuPipelines {
           gpu.ShaderLibrary.fromAsset(asset),
         );
         if (library != null) return library;
-      } catch (_) {
+      } catch (error) {
         // Package-prefixed in an app, bare while this package is the test root.
+        // Keep the actual loader error: an incompatible shader bundle must not
+        // be collapsed into the same terminal message as a missing asset.
+        failures[asset] = error;
       }
     }
-    throw StateError('pdf_tile_gpu.shaderbundle asset not found');
+    final detail = failures.entries
+        .map((entry) => '${entry.key}: ${entry.value}')
+        .join('; ');
+    throw StateError('pdf_tile_gpu.shaderbundle failed to load'
+        '${detail.isEmpty ? '' : ': $detail'}');
   }
 
   final gpu.RenderPipeline stencil;

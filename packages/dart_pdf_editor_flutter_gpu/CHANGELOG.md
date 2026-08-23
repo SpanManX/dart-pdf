@@ -1,5 +1,22 @@
 # Changelog
 
+## Next
+
+- Warm every tile shader with a one-pixel idle submission, shared per Impeller
+  context and MSAA mode, then compile and submit each live page's retained
+  scene at one-pixel scale. Both passes wait for useful pixels plus a 750 ms
+  quiet window, so first-use driver, geometry, and upload work does not land on
+  the first deep-zoom tile or contend with immediate navigation. Proactive
+  warm-up defaults to desktop; mobile stays on-demand unless the host opts in,
+  avoiding a large idle context allocation on memory-constrained devices.
+- Benchmark tiling-pattern and radial-shading pipeline warm-up, scene warm-up,
+  first GPU tiles, and Canvas parity three times on the designated macOS
+  Metal CI lane. PRs receive a main comparison with details collapsed beneath
+  the headline, and retain the normalized trace as a downloadable artifact.
+- Accelerate exact vector tiling cells, axial gradients (including embedded
+  outline text), and nested-circle radial gradients while retaining explicit
+  Canvas fallback for unsafe variants.
+
 ## 0.1.6
 
 - Align the experimental Flutter GPU backend with the 3.8.0 package suite. No

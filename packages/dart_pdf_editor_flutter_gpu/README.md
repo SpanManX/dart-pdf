@@ -57,7 +57,8 @@ PDF features return to the Canvas tile backend automatically. Web gets a
 compile-time stub and therefore preserves the all-platform host surface.
 
 The current exact subset is solid paths and strokes, embedded-outline text,
-decoded images/image masks, Gouraud meshes, normal blending, rectangular and
+decoded images/image masks, Gouraud meshes, axial gradients, nested-circle
+radial gradients, vector tiling cells, normal blending, rectangular and
 arbitrary path clips, and the common isolated single-image soft-mask group.
 Rectangles use hardware scissors; other clip stacks compile once into retained
 stencil geometry and preserve nonzero/even-odd plus save/restore semantics. The
@@ -76,8 +77,29 @@ after their scene is disposed and every submitted command buffer completes.
 This keeps command-heavy CAD navigation bounded without relying on delayed
 native finalizers; a scene that cannot lease enough geometry also falls back.
 
+After useful page pixels land and foreground work stays quiet for 750 ms, the
+viewer asks the backend to warm its context. The backend submits one transparent
+pixel through each tile pipeline, moving Impeller/driver compilation out of the
+first deep-zoom interaction without delaying initial document paint or
+competing with an immediate scroll. This work is coalesced per native view and
+MSAA mode, even when several readers share the same process.
+
+Proactive warm-up defaults on for macOS, Windows, and Linux. Android and iOS
+stay on-demand by default because merely creating an Impeller GPU context can
+reserve significant memory before a page is known to be GPU-compatible. A host
+that has validated its mobile device range can opt in with
+`enableProactiveWarmUp: true`; normal on-demand GPU tiles remain available when
+the option is false.
+
+The same idle gate then prepares the live page's retained tile session: scene
+geometry and decoded-image uploads are compiled once and every scene pipeline
+is submitted at one-pixel page scale. The real first tile reuses those retained
+resources. Starting new foreground work cancels and restarts both delays; page
+disposal releases the prepared resources through the ordinary scene lifecycle.
+
 `backend.stats` reports accepted/rejected/active sessions, the latest actual
-tile route, runtime fallback reasons, scene compile and tile-submit time,
+tile route, runtime fallback reasons, context and scene warm-up outcomes,
+scene compile and tile-submit time,
 spatially selected command counts, upload/readback paths, cache hits and
 evictions, budget fallbacks, retained bytes, and live resource leases.
 Clip diagnostics separately report paths compiled and tile-mask rebuilds.
@@ -86,9 +108,10 @@ instance alive when comparing pages so those counters and cross-page caches
 describe the real workload rather than one page at a time.
 
 Pages with other transparency groups or soft masks, non-normal blends,
-gradients, tiling cells, unsafe overprint, complex clips nested inside the
-single-image soft-mask shortcut, substituted/stroked text, hairlines, or
-missing image pixels are rejected as a whole rather than approximated.
+non-nested radial gradients, gradient overprint, stencil-image tiling cells,
+unsafe overprint, complex clips nested inside the single-image soft-mask
+shortcut, substituted/stroked text, hairlines, or missing image pixels are
+rejected as a whole rather than approximated.
 `allowOverprintApproximation` exists only for controlled experiments and
 defaults to false.
 
@@ -139,6 +162,15 @@ settle, Canvas parity, upload/cache counters, and RSS. It is opt-in via
 `PDF_GPU_BENCHMARK_PAGES`. Set `PDF_GPU_BENCHMARK_OUT` to a directory to save
 the center 512 px GPU and Canvas tiles for visual comparison, or
 `PDF_GPU_BENCHMARK_MSAA=0` to isolate multisample antialiasing differences.
+Set `PDF_GPU_BENCHMARK_WARMUP=1` to measure the viewer's pipeline warm-up before
+the first real tile.
+Set `PDF_GPU_BENCHMARK_SCENE_WARMUP=1` to additionally compile and submit the
+retained scene before measuring that tile.
+Set `PDF_GPU_BENCHMARK_SCENARIO` to emit normalized `PdfPerfLog` scenario
+markers for each pipeline/scene/tile phase. CI uses those markers to run the
+checked-in tiling-pattern and radial-shading pages three times on macOS Metal,
+compare PR medians with the latest `main` artifact, and publish both a concise
+PR headline and a collapsed detailed trace.
 Set `PDF_GPU_BENCHMARK_OVERPRINT=0` to exercise the production-default exact
 fallback policy; the benchmark otherwise enables its documented source-over
 approximation so more of a corpus can be measured on the GPU.

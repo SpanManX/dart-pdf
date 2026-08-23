@@ -1144,6 +1144,13 @@ typedef PdfScrollIndicatorBuilder = Widget Function(BuildContext context,
 /// search with highlights. Pages re-rasterize at the settled zoom; past the
 /// full-page raster caps a detail patch keeps the visible region sharp.
 class PdfViewer extends StatefulWidget {
+  /// Quiet time after foreground page rendering settles before an optional
+  /// tile backend compiles reusable process- or view-scoped GPU resources.
+  ///
+  /// A delayed idle pass avoids putting shader compilation into the GPU queue
+  /// while the reader is already starting their next scroll or zoom gesture.
+  static const Duration tileBackendWarmIdleDelay = Duration(milliseconds: 750);
+
   /// Test hook for delaying annotation appearance rendering across lifecycle
   /// transitions. Null uses [PdfPageRenderer.renderAnnotationPicture].
   @visibleForTesting
@@ -2339,6 +2346,64 @@ class _PdfViewerState extends State<PdfViewer>
     // preview reach the worker queue first during cold open.
     _schedulePreviewPrerender();
     _scheduleRasterWarm();
+    _scheduleTileBackendWarmUp();
+  }
+
+  PdfTileRasterBackend? _pendingTileBackendWarmUp;
+  bool _tileBackendWarmUpFramePending = false;
+  Timer? _tileBackendWarmUpTimer;
+
+  void _scheduleTileBackendWarmUp() {
+    final backend = widget.tileRasterBackend;
+    if (!widget.active || !backend.supportsWarmUp) {
+      _pendingTileBackendWarmUp = null;
+      _tileBackendWarmUpTimer?.cancel();
+      _tileBackendWarmUpTimer = null;
+      return;
+    }
+    if (!identical(_pendingTileBackendWarmUp, backend)) {
+      _tileBackendWarmUpTimer?.cancel();
+      _tileBackendWarmUpTimer = null;
+    }
+    _pendingTileBackendWarmUp = backend;
+    _armTileBackendWarmUp();
+  }
+
+  void _armTileBackendWarmUp() {
+    if (_tileBackendWarmUpFramePending) return;
+    _tileBackendWarmUpFramePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _tileBackendWarmUpFramePending = false;
+      final backend = _pendingTileBackendWarmUp;
+      if (!mounted || backend == null || !widget.active) return;
+      if (!identical(widget.tileRasterBackend, backend)) {
+        _scheduleTileBackendWarmUp();
+        return;
+      }
+      // First frame is not the same as first useful pixels. Let the focused
+      // page finish its initial record/replay before a driver-compilation pass
+      // enters the GPU queue; the scheduler's idle edge re-arms this callback.
+      if (_renderScheduler.busy) return;
+      _tileBackendWarmUpTimer ??= Timer(PdfViewer.tileBackendWarmIdleDelay, () {
+        _tileBackendWarmUpTimer = null;
+        if (!mounted ||
+            !widget.active ||
+            !identical(widget.tileRasterBackend, backend) ||
+            !identical(_pendingTileBackendWarmUp, backend)) {
+          return;
+        }
+        if (_renderScheduler.busy) return;
+        _pendingTileBackendWarmUp = null;
+        unawaited(backend.warmUp().catchError((Object error) {
+          // Acceleration is optional. A failed warm-up leaves createSession's
+          // normal conservative Canvas fallback in charge of the first tile.
+          PdfPerfLog.log(
+            'tile backend warm-up failed backend=${backend.debugLabel} '
+            'error=$error',
+          );
+        }));
+      });
+    });
   }
 
   /// The platform is short of memory (iOS/Android send this; the web never
@@ -2398,7 +2463,13 @@ class _PdfViewerState extends State<PdfViewer>
   /// that notification as the wake-up edge instead.
   void _onRenderSchedulerActivity() {
     _scheduleRasterWarm();
-    if (!_renderScheduler.busy) _schedulePreviewPrerender();
+    if (_renderScheduler.busy) {
+      _tileBackendWarmUpTimer?.cancel();
+      _tileBackendWarmUpTimer = null;
+    } else {
+      _schedulePreviewPrerender();
+      if (_pendingTileBackendWarmUp != null) _armTileBackendWarmUp();
+    }
   }
 
   void _onPerformanceTimings(List<FrameTiming> timings) {
@@ -3696,6 +3767,9 @@ class _PdfViewerState extends State<PdfViewer>
     if (oldWidget.active != widget.active) {
       _renderScheduler.parked = !widget.active;
       if (!widget.active) {
+        _pendingTileBackendWarmUp = null;
+        _tileBackendWarmUpTimer?.cancel();
+        _tileBackendWarmUpTimer = null;
         _commandWarmAnchor = null;
         _commandWarmGeneration++;
         _cancelPreviewPrerenderSchedule();
@@ -3703,10 +3777,15 @@ class _PdfViewerState extends State<PdfViewer>
       } else {
         _renderScheduler.holding = false;
         _schedulePreviewPrerender();
+        _scheduleTileBackendWarmUp();
       }
       // a parked viewer does no background full-raster work; a foregrounded
       // one restarts its idle countdown
       _scheduleRasterWarm();
+    }
+    if (!identical(oldWidget.tileRasterBackend, widget.tileRasterBackend) &&
+        oldWidget.active == widget.active) {
+      _scheduleTileBackendWarmUp();
     }
   }
 
@@ -4551,6 +4630,7 @@ class _PdfViewerState extends State<PdfViewer>
     _gestureQuietTimer?.cancel();
     _previewIdleTimer?.cancel();
     _rasterWarmTimer?.cancel();
+    _tileBackendWarmUpTimer?.cancel();
     // when the host recreates the viewer element (e.g. a panel appearing
     // shifts it to a new slot in a Row), the replacement state attaches in
     // initState BEFORE this deferred dispose runs - only detach if the

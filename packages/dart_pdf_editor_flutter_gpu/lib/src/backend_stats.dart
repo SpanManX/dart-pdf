@@ -5,6 +5,18 @@ class FlutterGpuTileBackendStats {
   int? lastContextIdentity;
   int contextsSeen = 0;
   int contextSwitches = 0;
+  int warmUpRequests = 0;
+  int warmUpSubmissions = 0;
+  int warmUpCompletions = 0;
+  int warmUpFailures = 0;
+  int warmUpMicros = 0;
+  String? lastWarmUpError;
+  int sceneWarmUpRequests = 0;
+  int sceneWarmUpCompletions = 0;
+  int sceneWarmUpFailures = 0;
+  int sceneWarmUpCancellations = 0;
+  int sceneWarmUpMicros = 0;
+  String? lastSceneWarmUpError;
   int sessionsCreated = 0;
   int sessionsRejected = 0;
   int sessionsDisposed = 0;
@@ -50,6 +62,18 @@ class FlutterGpuTileBackendStats {
         'lastContextIdentity': lastContextIdentity,
         'contextsSeen': contextsSeen,
         'contextSwitches': contextSwitches,
+        'warmUpRequests': warmUpRequests,
+        'warmUpSubmissions': warmUpSubmissions,
+        'warmUpCompletions': warmUpCompletions,
+        'warmUpFailures': warmUpFailures,
+        'warmUpMicros': warmUpMicros,
+        'lastWarmUpError': lastWarmUpError,
+        'sceneWarmUpRequests': sceneWarmUpRequests,
+        'sceneWarmUpCompletions': sceneWarmUpCompletions,
+        'sceneWarmUpFailures': sceneWarmUpFailures,
+        'sceneWarmUpCancellations': sceneWarmUpCancellations,
+        'sceneWarmUpMicros': sceneWarmUpMicros,
+        'lastSceneWarmUpError': lastSceneWarmUpError,
         'sessionsCreated': sessionsCreated,
         'sessionsRejected': sessionsRejected,
         'sessionsDisposed': sessionsDisposed,
@@ -100,6 +124,18 @@ class FlutterGpuTileBackendStats {
     sessionsDisposed = 0;
     rasterFallbacks = 0;
     contextSwitches = 0;
+    warmUpRequests = 0;
+    warmUpSubmissions = 0;
+    warmUpCompletions = 0;
+    warmUpFailures = 0;
+    warmUpMicros = 0;
+    lastWarmUpError = null;
+    sceneWarmUpRequests = 0;
+    sceneWarmUpCompletions = 0;
+    sceneWarmUpFailures = 0;
+    sceneWarmUpCancellations = 0;
+    sceneWarmUpMicros = 0;
+    lastSceneWarmUpError = null;
     peakActiveSessions = activeSessions;
     overprintApproximationSessions = 0;
     scenesCompiled = 0;
@@ -134,6 +170,14 @@ class FlutterGpuTileBackendStats {
   String toString() => 'sessions=$sessionsCreated rejected=$sessionsRejected '
       'disposed=$sessionsDisposed rasterFallbacks=$rasterFallbacks '
       'contexts=$contextsSeen contextSwitches=$contextSwitches '
+      'warmUpRequests=$warmUpRequests warmUpSubmissions=$warmUpSubmissions '
+      'warmUpCompletions=$warmUpCompletions warmUpFailures=$warmUpFailures '
+      'warmUpUs=$warmUpMicros '
+      'sceneWarmUpRequests=$sceneWarmUpRequests '
+      'sceneWarmUpCompletions=$sceneWarmUpCompletions '
+      'sceneWarmUpFailures=$sceneWarmUpFailures '
+      'sceneWarmUpCancellations=$sceneWarmUpCancellations '
+      'sceneWarmUpUs=$sceneWarmUpMicros '
       'lastContext=$lastContextIdentity '
       'activeSessions=$activeSessions peakActiveSessions=$peakActiveSessions '
       'overprintApprox=$overprintApproximationSessions '
