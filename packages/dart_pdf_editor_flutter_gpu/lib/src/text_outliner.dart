@@ -12,8 +12,17 @@ abstract interface class FlutterGpuTextOutliner {
   PdfTextRun? outline(PdfTextRun run);
 }
 
-/// A parsed TrueType face used by [FlutterGpuTrueTypeTextOutliner].
-class FlutterGpuTrueTypeFontFace {
+/// A parsed outline font face used by [FlutterGpuTrueTypeTextOutliner].
+abstract interface class FlutterGpuFontFace {
+  int gidForUnicode(int codePoint);
+
+  PdfPath? outlineForGlyph(int glyphId);
+
+  double? advanceForGlyph(int glyphId);
+}
+
+/// A parsed TrueType `glyf` face used by [FlutterGpuTrueTypeTextOutliner].
+class FlutterGpuTrueTypeFontFace implements FlutterGpuFontFace {
   FlutterGpuTrueTypeFontFace._(this.font);
 
   /// Parses [bytes], throwing when the selected face cannot provide TrueType
@@ -35,6 +44,47 @@ class FlutterGpuTrueTypeFontFace {
   }
 
   final TrueTypeFont font;
+
+  @override
+  int gidForUnicode(int codePoint) => font.gidForUnicode(codePoint);
+
+  @override
+  PdfPath? outlineForGlyph(int glyphId) => font.outlineForGlyph(glyphId);
+
+  @override
+  double? advanceForGlyph(int glyphId) => font.advanceForGlyph(glyphId);
+}
+
+/// A parsed CFF-flavoured OpenType face, including one TTC collection entry.
+class FlutterGpuOpenTypeCffFontFace implements FlutterGpuFontFace {
+  FlutterGpuOpenTypeCffFontFace._(this.font);
+
+  factory FlutterGpuOpenTypeCffFontFace(
+    Uint8List bytes, {
+    int collectionIndex = 0,
+  }) {
+    final font = OpenTypeCffFont.parse(
+      bytes,
+      collectionIndex: collectionIndex,
+    );
+    if (font == null) {
+      throw FormatException(
+        'font face $collectionIndex has no usable OpenType CFF outlines',
+      );
+    }
+    return FlutterGpuOpenTypeCffFontFace._(font);
+  }
+
+  final OpenTypeCffFont font;
+
+  @override
+  int gidForUnicode(int codePoint) => font.gidForUnicode(codePoint);
+
+  @override
+  PdfPath? outlineForGlyph(int glyphId) => font.outlineForGlyph(glyphId);
+
+  @override
+  double? advanceForGlyph(int glyphId) => font.advanceForGlyph(glyphId);
 }
 
 /// Resolves the exact substitute face for one recorded text run.
@@ -42,11 +92,11 @@ class FlutterGpuTrueTypeFontFace {
 /// The resolver should return null when it cannot prove that its bytes match
 /// the face Flutter Canvas selects. In particular, bold/italic synthesis and
 /// complex-script fallback should not be guessed.
-typedef FlutterGpuFontFaceResolver = FlutterGpuTrueTypeFontFace? Function(
+typedef FlutterGpuFontFaceResolver = FlutterGpuFontFace? Function(
   PdfTextRun run,
 );
 
-/// Converts simple horizontal substituted text to retained TrueType outlines.
+/// Converts simple horizontal substituted text to retained font outlines.
 ///
 /// PDF character offsets remain authoritative. Glyph shapes receive one
 /// uniform horizontal scale—the same copy-fitting rule used by
@@ -68,7 +118,7 @@ class FlutterGpuTrueTypeTextOutliner implements FlutterGpuTextOutliner {
         !_isPlaceableText(text)) {
       return null;
     }
-    final face = resolveFace(run)?.font;
+    final face = resolveFace(run);
     if (face == null) return null;
 
     final resolved = <_ResolvedGlyph>[];
