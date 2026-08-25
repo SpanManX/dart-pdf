@@ -2049,6 +2049,84 @@ void main() {
       expect(backend.stats.lastRejection,
           'unsupported text: missing glyph outlines');
 
+      final face = FlutterGpuTrueTypeFontFace(buildTestTrueTypeFont());
+      final outliner = FlutterGpuTrueTypeTextOutliner((_) => face);
+      const substituteRun = PdfTextRun(
+        text: 'AB',
+        transform: PdfMatrix(80, 0, 0, 80, 80, 180),
+        color: PdfColor(0.1, 0.2, 0.7),
+        width: 1.6,
+        fontName: 'Helvetica',
+        fontSize: 80,
+        charOffsets: [0, 0.6, 1.6],
+      );
+      final substituteScene = await PdfRetainedScene.fromCommands(page, const [
+        PdfDrawTextCommand(substituteRun),
+      ]);
+      addTearDown(substituteScene.dispose);
+      final throwingBackend = FlutterGpuTileRasterBackend(
+        textOutliner: FlutterGpuTrueTypeTextOutliner(
+          (_) => throw StateError('broken host resolver'),
+        ),
+      );
+      expect(throwingBackend.createSession(substituteScene), isNull);
+      expect(
+        throwingBackend.stats.lastRejection,
+        'unsupported text: missing glyph outlines',
+      );
+      final outlinedRun = outliner.outline(substituteRun)!;
+      final outlineControl = await PdfRetainedScene.fromCommands(page, [
+        PdfDrawTextCommand(outlinedRun),
+      ]);
+      addTearDown(outlineControl.dispose);
+      final outlineBackend = FlutterGpuTileRasterBackend(
+        textOutliner: outliner,
+      );
+      final outlineSession = outlineBackend.createSession(substituteScene);
+      expect(outlineSession, isNotNull,
+          reason: outlineBackend.lastSessionRejection);
+      addTearDown(outlineSession!.dispose);
+      const textRegion = Rect.fromLTWH(60, 560, 180, 160);
+      final textExpected =
+          await outlineControl.rasterizeRegion(textRegion, pixelRatio: 1);
+      final textActual = await outlineSession.rasterizeRegion(
+        textRegion,
+        pixelRatio: 1,
+      );
+      addTearDown(textExpected.dispose);
+      addTearDown(textActual.dispose);
+      final expectedPixels = await _pixels(textExpected);
+      final actualPixels = await _pixels(textActual);
+      var textDifference = 0;
+      for (var i = 0; i < expectedPixels.length; i++) {
+        textDifference += (expectedPixels[i] - actualPixels[i]).abs();
+      }
+      expect(textDifference / expectedPixels.length, lessThan(8));
+      expect(outlineBackend.stats.analyticTextRuns, 1);
+      expect(outlineBackend.stats.analyticGlyphQuads, 2);
+      expect(outlineBackend.stats.analyticGlyphSlots, 2);
+      expect(outlineBackend.stats.analyticAtlasBytes, greaterThan(0));
+      expect(outlineBackend.stats.analyticTextFallbackRuns, 0);
+
+      final flattenedBackend = FlutterGpuTileRasterBackend(
+        textOutliner: outliner,
+        analyticText: false,
+      );
+      final flattenedSession = flattenedBackend.createSession(substituteScene);
+      expect(flattenedSession, isNotNull,
+          reason: flattenedBackend.lastSessionRejection);
+      addTearDown(flattenedSession!.dispose);
+      final flattened = await flattenedSession.rasterizeRegion(
+        textRegion,
+        pixelRatio: 1,
+      );
+      addTearDown(flattened.dispose);
+      expect(
+        outlineBackend.stats.geometryVertices,
+        lessThan(flattenedBackend.stats.geometryVertices),
+        reason: 'retained glyph quads must replace outline stencil fans',
+      );
+
       final radial = await PdfRetainedScene.fromCommands(page, [
         PdfFillPathGradientCommand(
           _rect(40, 40, 300, 300),
