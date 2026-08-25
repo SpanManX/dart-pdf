@@ -36,6 +36,14 @@ class FlutterGpuTileBackendStats {
   int analyticTextFallbackRuns = 0;
   int clipPathsCompiled = 0;
   int clipMaskRebuilds = 0;
+  int advancedBlendPasses = 0;
+  int advancedBlendAllocatedBytes = 0;
+  int peakAdvancedBlendBytes = 0;
+  int advancedBlendBudgetFallbacks = 0;
+  int offscreenGroupPasses = 0;
+  int offscreenGroupAllocatedBytes = 0;
+  int peakOffscreenGroupBytes = 0;
+  int offscreenGroupBudgetFallbacks = 0;
   int geometryBudgetFallbacks = 0;
   int activeGeometryLeases = 0;
   int geometryBytes = 0;
@@ -99,6 +107,14 @@ class FlutterGpuTileBackendStats {
         'analyticTextFallbackRuns': analyticTextFallbackRuns,
         'clipPathsCompiled': clipPathsCompiled,
         'clipMaskRebuilds': clipMaskRebuilds,
+        'advancedBlendPasses': advancedBlendPasses,
+        'advancedBlendAllocatedBytes': advancedBlendAllocatedBytes,
+        'peakAdvancedBlendBytes': peakAdvancedBlendBytes,
+        'advancedBlendBudgetFallbacks': advancedBlendBudgetFallbacks,
+        'offscreenGroupPasses': offscreenGroupPasses,
+        'offscreenGroupAllocatedBytes': offscreenGroupAllocatedBytes,
+        'peakOffscreenGroupBytes': peakOffscreenGroupBytes,
+        'offscreenGroupBudgetFallbacks': offscreenGroupBudgetFallbacks,
         'geometryBudgetFallbacks': geometryBudgetFallbacks,
         'activeGeometryLeases': activeGeometryLeases,
         'geometryBytes': geometryBytes,
@@ -161,6 +177,14 @@ class FlutterGpuTileBackendStats {
     analyticTextFallbackRuns = 0;
     clipPathsCompiled = 0;
     clipMaskRebuilds = 0;
+    advancedBlendPasses = 0;
+    advancedBlendAllocatedBytes = 0;
+    peakAdvancedBlendBytes = 0;
+    advancedBlendBudgetFallbacks = 0;
+    offscreenGroupPasses = 0;
+    offscreenGroupAllocatedBytes = 0;
+    peakOffscreenGroupBytes = 0;
+    offscreenGroupBudgetFallbacks = 0;
     geometryBudgetFallbacks = 0;
     peakGeometryBytes = geometryBytes;
     texturesUploaded = 0;
@@ -206,6 +230,14 @@ class FlutterGpuTileBackendStats {
       'analyticAtlasFallbacks=$analyticAtlasFallbacks '
       'analyticFallbackRuns=$analyticTextFallbackRuns '
       'clips=$clipPathsCompiled clipRebuilds=$clipMaskRebuilds '
+      'advancedBlendPasses=$advancedBlendPasses '
+      'advancedBlendAllocatedBytes=$advancedBlendAllocatedBytes '
+      'peakAdvancedBlendBytes=$peakAdvancedBlendBytes '
+      'advancedBlendBudgetFallbacks=$advancedBlendBudgetFallbacks '
+      'groupPasses=$offscreenGroupPasses '
+      'groupAllocatedBytes=$offscreenGroupAllocatedBytes '
+      'peakGroupBytes=$peakOffscreenGroupBytes '
+      'groupBudgetFallbacks=$offscreenGroupBudgetFallbacks '
       'geometryBudgetFallbacks=$geometryBudgetFallbacks '
       'activeGeometryLeases=$activeGeometryLeases '
       'geometryBytes=$geometryBytes peakGeometryBytes=$peakGeometryBytes '

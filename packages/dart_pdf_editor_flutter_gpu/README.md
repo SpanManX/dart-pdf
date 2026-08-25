@@ -75,11 +75,14 @@ PDF features return to the Canvas tile backend automatically. Web gets a
 compile-time stub and therefore preserves the all-platform host surface.
 
 The current exact subset is solid paths and strokes (including zero-width PDF
-hairlines that stay one device pixel at every LoD), embedded-outline text,
-simple substituted text when an exact `FlutterGpuTextOutliner` resolves it,
+hairlines that stay one device pixel at every LoD), filled and stroked
+embedded-outline text, simple substituted text when an exact
+`FlutterGpuTextOutliner` resolves it,
 decoded images/image masks, Gouraud meshes, axial gradients, nested-circle
 radial gradients, vector and stencil-image tiling cells, normal/Multiply/Screen
-blending,
+blending, and exact destination-sampling Overlay, Darken, Lighten, ColorDodge,
+ColorBurn, HardLight, SoftLight, Difference, Exclusion, Hue, Saturation, Color,
+and Luminosity blending,
 rectangular and arbitrary path clips, and the common isolated single-image
 soft-mask group. Isolated transparency groups containing a single vector fill
 or stroke also stay on the GPU: their group alpha and page blend mode are folded
@@ -94,6 +97,11 @@ image soft mask directly through retained stencil geometry. Rectangular vector
 soft-mask fills, including alpha or luminosity backdrops and linearized
 transfer functions, are partitioned into constant-mask stencil cover cells and
 need no intermediate texture.
+Advanced blend paints use bounded ping-pong tile attachments. Paints whose
+bounds prove they cannot affect one another share one destination-sampling
+pass; overlapping paints replay sequentially to preserve PDF painter order.
+The route rejects before allocating when its temporary attachments would
+exceed 256 MiB.
 Rectangles use hardware scissors; other clip stacks compile once into retained
 stencil geometry and preserve nonzero/even-odd plus save/restore semantics. The
 mask case keeps the base and mask as two GPU textures and combines them during
@@ -147,16 +155,18 @@ scene compile and tile-submit time,
 spatially selected command counts, upload/readback paths, cache hits and
 evictions, budget fallbacks, retained bytes, and live resource leases.
 Clip diagnostics separately report paths compiled and tile-mask rebuilds.
+Advanced-blend diagnostics report destination-sampling passes, allocated and
+peak temporary bytes, and budget fallbacks.
 `backend.stats.toJson()` is suitable for benchmark artifacts. Keep the backend
 instance alive when comparing pages so those counters and cross-page caches
 describe the real workload rather than one page at a time.
 
-Pages with other transparency groups or soft masks, blend modes other than
-Multiply and Screen,
-non-nested radial gradients, gradient overprint, unsafe overprint, complex
+Pages with other transparency groups or soft masks, scenes that combine
+advanced blend paints with offscreen transparency groups, non-nested radial
+gradients, gradient overprint, unsafe overprint, complex
 clips nested inside the single-image soft-mask shortcut, unresolved
-substituted text, stroked text, or missing image pixels are rejected as a whole
-rather than approximated.
+substituted text, or missing image pixels are rejected as a whole rather than
+approximated.
 `allowOverprintApproximation` exists only for controlled experiments and
 defaults to false.
 
@@ -213,10 +223,12 @@ Set `PDF_GPU_BENCHMARK_SCENE_WARMUP=1` to additionally compile and submit the
 retained scene before measuring that tile.
 Set `PDF_GPU_BENCHMARK_SCENARIO` to emit normalized `PdfPerfLog` scenario
 markers for each pipeline/scene/tile phase. CI uses those markers to run the
-checked-in tiling-pattern, radial-shading, hairline, vector-mask transfer,
-GWG168/169 vector soft-mask, and GWG1610/1611 text soft-mask pages plus the
-PDF.js system-font outline page and deterministic deferred-mask fixture six
-times on macOS Metal, compare the exact
+checked-in tiling-pattern, radial-shading, hairline, advanced-blend,
+vector-mask transfer, PDF.js knockout soft-mask and isolated-knockout overlap,
+GWG168/169 vector
+soft-mask, and GWG1610/1611 text soft-mask pages plus the PDF.js system-font
+outline page and deterministic deferred-mask fixture six times on macOS Metal,
+compare the exact
 PR base and candidate on the same runner with balanced execution order, and
 publish both a concise PR headline and a collapsed detailed trace.
 Set `PDF_GPU_BENCHMARK_FIXTURE=deferred-mask` instead of a PDF path to exercise
@@ -230,13 +242,14 @@ reference warm on both the accepted and fallback routes without warming the
 cold first-tile measurement.
 Set `PDF_GPU_BENCHMARK_ROUTE_CHANGE=1` for the same normalization when a PDF
 path, rather than the built-in fixture, changes from Canvas fallback to direct
-GPU. CI uses it for the checked-in vector-mask transfer, hairline, and GWG
-vector/text soft-mask pages.
+GPU. CI uses it for the checked-in vector-mask transfer, knockout soft-mask,
+isolated-knockout overlap, hairline, advanced-blend, and GWG vector/text
+soft-mask pages.
 Set `PDF_GPU_BENCHMARK_SYSTEM_TEXT=1` to enable the native system-font outline
 adapter. For a like-for-like macOS parity control,
 `PDF_GPU_BENCHMARK_REGISTER_SYSTEM_FONTS=1` registers those same font bytes
 under Canvas's substitution-family names; CI combines both settings for the
-system-font route-change scenario.
+system-font and advanced-blend route-change scenarios.
 The corpus equivalents are `GPU_CORPUS_SYSTEM_TEXT=1` and
 `GPU_CORPUS_REGISTER_SYSTEM_FONTS=1`; the designated macOS GPU lane runs that
 full parity matrix on every change.
