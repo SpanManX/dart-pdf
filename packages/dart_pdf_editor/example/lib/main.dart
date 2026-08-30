@@ -234,7 +234,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
   /// decline their session and transparently keep using the Canvas backend.
   /// Keeping one instance also makes its diagnostics meaningful app-wide.
   late final FlutterGpuTileRasterBackend _tileRasterBackend =
-      FlutterGpuTileRasterBackend();
+      FlutterGpuTileRasterBackend(systemTextOutlines: true);
 
   /// App-wide on-disk caches sharing one persistent backend (filesystem on
   /// native, IndexedDB on web - see persistent_cache.dart). The raster
@@ -691,6 +691,18 @@ class _ViewerScreenState extends State<ViewerScreen> {
             title: _horizontalLayout
                 ? appL10n(context).exVerticalLayout
                 : appL10n(context).exHorizontalLayout,
+          ),
+        ),
+        PopupMenuItem(
+          key: const ValueKey('dartpdf-gpu-route-devtool'),
+          value: () => pdfDebugShowGpuRasterRoutes.value =
+              !pdfDebugShowGpuRasterRoutes.value,
+          enabled: tab?.session != null,
+          child: _appMenuTile(
+            icon: Icons.developer_mode,
+            title: pdfDebugShowGpuRasterRoutes.value
+                ? 'Hide GPU rendering overlay'
+                : 'Show GPU rendering overlay',
           ),
         ),
         PopupMenuItem(

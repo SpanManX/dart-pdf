@@ -11,7 +11,8 @@ void main(List<String> arguments) {
   if (arguments.isEmpty || arguments.contains('--help')) {
     stdout.writeln(
       'Usage: dart tool/patrol_perf_summary.dart <patrol-log> '
-      '--output <directory> [--markdown <file>] [--baseline <json>]',
+      '--output <directory> [--markdown <file>] [--baseline <json>] '
+      '[--label <platform>] [--require-scenario-runs <name>=<count>]',
     );
     exit(arguments.contains('--help') ? 0 : 64);
   }
@@ -20,6 +21,8 @@ void main(List<String> arguments) {
   String? output;
   String? markdownOutput;
   String? baselineInput;
+  var label = 'web';
+  final requiredScenarioRuns = <String, int>{};
   for (var i = 1; i < arguments.length; i++) {
     switch (arguments[i]) {
       case '--output':
@@ -28,6 +31,21 @@ void main(List<String> arguments) {
         markdownOutput = _nextArgument(arguments, ++i, '--markdown');
       case '--baseline':
         baselineInput = _nextArgument(arguments, ++i, '--baseline');
+      case '--label':
+        label = _nextArgument(arguments, ++i, '--label');
+      case '--require-scenario-runs':
+        final raw = _nextArgument(arguments, ++i, '--require-scenario-runs');
+        final separator = raw.lastIndexOf('=');
+        final name = separator < 0 ? '' : raw.substring(0, separator);
+        final count =
+            separator < 0 ? null : int.tryParse(raw.substring(separator + 1));
+        if (name.isEmpty || count == null || count < 1) {
+          stderr.writeln(
+            '--require-scenario-runs expects <name>=<positive-count>: $raw',
+          );
+          exit(64);
+        }
+        requiredScenarioRuns[name] = count;
       default:
         stderr.writeln('Unknown argument: ${arguments[i]}');
         exit(64);
@@ -49,10 +67,12 @@ void main(List<String> arguments) {
   File('${directory.path}/patrol-perf.log').writeAsStringSync(
     trace.lines.isEmpty ? '' : '${trace.lines.join('\n')}\n',
   );
+  final current = trace.toJson();
   File('${directory.path}/patrol-perf.json').writeAsStringSync(
-    '${const JsonEncoder.withIndent('  ').convert(trace.toJson())}\n',
+    '${const JsonEncoder.withIndent('  ').convert(current)}\n',
   );
-  var markdown = trace.toMarkdown();
+  var headline = trace.toHeadlineMarkdown(label: label);
+  var markdown = trace.toMarkdown(label: label);
   if (baselineInput != null) {
     final baselineFile = File(baselineInput);
     if (!baselineFile.existsSync()) {
@@ -64,19 +84,58 @@ void main(List<String> arguments) {
       stderr.writeln('Patrol baseline is not a JSON object: $baselineInput');
       exit(65);
     }
-    markdown += PatrolPerfComparison(
+    final comparison = PatrolPerfComparison(
       baseline: decoded,
-      current: trace.toJson(),
-    ).toMarkdown();
+      current: current,
+    );
+    headline = comparison.toHeadlineMarkdown(label: label);
+    markdown += comparison.toMarkdown(label: label);
   }
+  File('${directory.path}/patrol-perf-headline.md').writeAsStringSync(headline);
   File('${directory.path}/patrol-perf.md').writeAsStringSync(markdown);
   if (markdownOutput != null) {
     File(markdownOutput).writeAsStringSync(markdown, mode: FileMode.append);
   }
 
+  final shortfalls = patrolPerfScenarioRunShortfalls(
+    current,
+    requiredScenarioRuns,
+  );
+  if (shortfalls.isNotEmpty) {
+    for (final entry in shortfalls.entries) {
+      stderr.writeln(
+        'Scenario ${entry.key} produced ${entry.value} complete run(s); '
+        'required ${requiredScenarioRuns[entry.key]}.',
+      );
+    }
+    exit(65);
+  }
+
   stdout.writeln(
     'Collected ${trace.lines.length} Patrol perf events in ${directory.path}',
   );
+}
+
+/// Returns the observed run count for every required scenario that did not
+/// produce enough complete start/end pairs.
+///
+/// CI uses this after writing the report artifacts: a flaky Patrol invocation
+/// remains diagnosable, but cannot silently reduce a repeated comparison to a
+/// sparse result.
+Map<String, int> patrolPerfScenarioRunShortfalls(
+  Map<String, Object?> trace,
+  Map<String, int> required,
+) {
+  final shortfalls = <String, int>{};
+  for (final entry in required.entries) {
+    final actual = _jsonNumber(
+          trace,
+          ['scenarioMetrics', entry.key, 'runs'],
+        )?.round() ??
+        0;
+    if (actual < entry.value) shortfalls[entry.key] = actual;
+  }
+  return shortfalls;
 }
 
 String _nextArgument(List<String> arguments, int index, String option) {
@@ -274,7 +333,7 @@ class PatrolPerfTrace {
   final Map<String, _ScenarioMetrics> _scenarioMetrics;
 
   Map<String, Object?> toJson() => {
-        'schema': 7,
+        'schema': 9,
         'build': buildTag,
         'events': lines.length,
         'journeys': journeys,
@@ -318,15 +377,85 @@ class PatrolPerfTrace {
         },
       };
 
-  String toMarkdown() {
+  String toHeadlineMarkdown({String label = 'web'}) {
+    final heading =
+        label.toLowerCase() == 'web' ? '### Headline' : '### $label headline';
+    final json = toJson();
+    final headline =
+        _gpuTileSpeedupHeadline(json) ?? _scenarioElapsedHeadline(json);
+    final buffer = StringBuffer()..writeln(heading);
+    if (headline != null) {
+      buffer
+        ..writeln()
+        ..writeln(headline);
+    }
+    buffer
+      ..writeln()
+      ..writeln(
+        lines.isEmpty
+            ? 'No `PdfPerfLog` events were captured.'
+            : 'Current Patrol $label trace. Lower timing is better.',
+      );
+    if (lines.isEmpty) return '${buffer.toString()}\n';
+    buffer
+      ..writeln()
+      ..writeln('<details>')
+      ..writeln('<summary>View performance samples and signals</summary>')
+      ..writeln();
+    if (_scenarioMetrics.isNotEmpty) {
+      buffer
+        ..writeln()
+        ..writeln(
+          'Scenario elapsed uses p50 across repeated runs; phase and tail '
+          'signals remain p95.',
+        );
+    }
+    buffer
+      ..writeln()
+      ..writeln('| Signal | Result |')
+      ..writeln('| --- | ---: |');
+    for (final name in _scenarioMetrics.keys.toList()..sort()) {
+      final elapsed = _scenarioMetrics[name]!.elapsedMs;
+      buffer.writeln('| Scenario ${_code(name)} elapsed p50 '
+          '(${elapsed.length} ${elapsed.length == 1 ? 'run' : 'runs'}) | '
+          '${_p50Text(elapsed)} |');
+    }
+    buffer
+      ..writeln('| Jank frames | ${jankTotalMs.length} |')
+      ..writeln('| Jank total p95 | ${_p95Text(jankTotalMs)} |')
+      ..writeln('| Reconcile p95 | ${_p95Text(reconcileElapsedMs)} |')
+      ..writeln('| Raster p95 | ${_p95Text(rasterElapsedMs)} |');
+    if (workerPhases.totalMs.isNotEmpty) {
+      buffer.writeln('| Worker phase total p95 | '
+          '${_p95Text(workerPhases.totalMs)} |');
+    }
+    if (tiles.replayMs.isNotEmpty) {
+      buffer.writeln('| Tile replay p95 | ${_p95Text(tiles.replayMs)} |');
+    }
+    buffer
+      ..writeln('| Reconcile fallbacks | '
+          '${_sum(reconcileFallbackReasons.values)} |')
+      ..writeln('| Page-raster rejects | '
+          '${pageRasterOutcomes['reject'] ?? 0} |')
+      ..writeln('| Web-worker fatal fallbacks | '
+          '${webWorkerOutcomes['fallback'] ?? 0} |');
+    buffer
+      ..writeln()
+      ..writeln('</details>')
+      ..writeln();
+    return buffer.toString();
+  }
+
+  String toMarkdown({String label = 'web'}) {
+    final journeyKind = label.toLowerCase() == 'web' ? 'browser' : 'device';
     final buffer = StringBuffer()
-      ..writeln('## Patrol web performance')
+      ..writeln('## Patrol $label performance')
       ..writeln()
       ..writeln(
         lines.isEmpty
             ? 'No `PdfPerfLog` events were captured. The Patrol result '
                 'artifact still contains the empty trace for diagnosis.'
-            : 'Observational trace from the real Patrol browser journey. '
+            : 'Observational trace from the real Patrol $journeyKind journey. '
                 'Use it for PR comparisons; wall-clock values are not a CI gate.',
       )
       ..writeln()
@@ -375,8 +504,18 @@ class PatrolPerfTrace {
       ..writeln('| Tile slice classes | ${tiles.sliceClassText} |')
       ..writeln('| Tile rung/class batches | '
           '${_mapText(tiles.sliceBatchesByRungClass)} |')
-      ..writeln('| Tile retained peak | ${tiles.retainedPeakText} |')
-      ..writeln();
+      ..writeln('| Tile retained peak | ${tiles.retainedPeakText} |');
+    if (tiles.policySamples > 0) {
+      buffer
+        ..writeln('| Tile policy snapshots | ${tiles.policySamples} |')
+        ..writeln(
+            '| Tile budget peak | ${_formatBytes(tiles.peakBudgetBytes)} |')
+        ..writeln('| Tile scheduled / landed / discarded | '
+            '${tiles.scheduled} / ${tiles.landed} / ${tiles.discarded} |')
+        ..writeln('| Tile discard rate | ${tiles.discardRateText} |')
+        ..writeln('| Static-view reschedules | ${tiles.staticRescheduled} |');
+    }
+    buffer.writeln();
     if (_scenarioMetrics.isNotEmpty) {
       buffer
         ..writeln('### Scenario breakdown')
@@ -414,7 +553,9 @@ class PatrolPerfTrace {
     buffer
       ..writeln(
         'Artifacts: `patrol-perf.log` (normalized raw trace), '
-        '`patrol-perf.json` (machine comparison), and this Markdown summary.',
+        '`patrol-perf.json` (machine comparison), '
+        '`patrol-perf-headline.md` (visible PR headline), and this full '
+        'Markdown summary.',
       )
       ..writeln();
     return buffer.toString();
@@ -433,21 +574,178 @@ class PatrolPerfComparison {
   final Map<String, dynamic> baseline;
   final Map<String, Object?> current;
 
-  String toMarkdown() {
+  String toHeadlineMarkdown({String? label}) {
     final baselineScenarios = _jsonCountMap(baseline, const ['scenarios']);
     final currentScenarios = _jsonCountMap(current, const ['scenarios']);
-    final sameCoverage = _sameCountMap(baselineScenarios, currentScenarios);
+    final sameCoverage = _sameMapKeys(baselineScenarios, currentScenarios);
     final measuredScenarios = <String>{
       ..._jsonMapKeys(baseline, const ['scenarioMetrics']),
       ..._jsonMapKeys(current, const ['scenarioMetrics']),
     }.toList()
       ..sort();
+    final sparseSamples = measuredScenarios.any((scenario) {
+      final before = _jsonNumber(
+        baseline,
+        ['scenarioMetrics', scenario, 'runs'],
+      );
+      final after = _jsonNumber(
+        current,
+        ['scenarioMetrics', scenario, 'runs'],
+      );
+      return before == null || after == null || before < 3 || after < 3;
+    });
+    final heading = label == null || label.toLowerCase() == 'web'
+        ? '### Headline comparison with `main`'
+        : '### $label comparison with `main`';
+    final headline = _gpuTileSpeedupHeadline(current, baseline: baseline) ??
+        _scenarioElapsedHeadline(current, baseline: baseline);
+    final buffer = StringBuffer()..writeln(heading);
+    if (headline != null) {
+      buffer
+        ..writeln()
+        ..writeln(headline);
+    }
+    buffer
+      ..writeln()
+      ..writeln(
+        'Lower timing is better. Structural counts should stay stable unless '
+        'the PR intentionally changes the exercised path.',
+      );
+    if (sparseSamples) {
+      buffer
+        ..writeln()
+        ..writeln(
+          '⚠️ At least one scenario has fewer than three samples; treat '
+          'its timing delta as provisional.',
+        );
+    }
+    if (!sameCoverage) {
+      buffer
+        ..writeln()
+        ..writeln(
+          '⚠️ Scenario coverage differs from `main`; timing deltas are not '
+          'like-for-like.',
+        );
+    }
+    buffer
+      ..writeln()
+      ..writeln('<details>')
+      ..writeln('<summary>View comparison samples and signals</summary>')
+      ..writeln();
+    if (measuredScenarios.isNotEmpty) {
+      final samples = measuredScenarios.map((scenario) {
+        final before = _jsonNumber(
+          baseline,
+          ['scenarioMetrics', scenario, 'runs'],
+        );
+        final after = _jsonNumber(
+          current,
+          ['scenarioMetrics', scenario, 'runs'],
+        );
+        return '${_code(scenario)} ${_numberText(before)} / '
+            '${_numberText(after)}';
+      }).join(', ');
+      buffer
+        ..writeln()
+        ..writeln(
+          'Scenario elapsed uses p50 across repeated runs; phase and tail '
+          'signals remain p95. Samples (main / PR): $samples.',
+        )
+        ..writeln()
+        ..writeln(
+          'When both cohorts have at least four samples, overlapping '
+          'interquartile ranges are labelled `within run spread` instead '
+          'of showing a misleading percentage.',
+        );
+    }
+    buffer
+      ..writeln()
+      ..writeln('| Signal | Main | PR | Change |')
+      ..writeln('| --- | ---: | ---: | ---: |');
+
+    void countRow(
+      String label,
+      List<String> path, {
+      bool absentIsZero = false,
+    }) {
+      final before = _jsonNumber(baseline, path, absentIsZero: absentIsZero);
+      final after = _jsonNumber(current, path, absentIsZero: absentIsZero);
+      buffer.writeln('| $label | ${_numberText(before)} | '
+          '${_numberText(after)} | ${_countDelta(before, after)} |');
+    }
+
+    void timingRow(String label, List<String> path) {
+      final before = _jsonNumber(baseline, path);
+      final after = _jsonNumber(current, path);
+      if (before == null && after == null) return;
+      buffer.writeln('| $label | ${_timingText(before)} | '
+          '${_timingText(after)} | ${_percentDelta(before, after)} |');
+    }
+
+    for (final scenario in measuredScenarios) {
+      final path = ['scenarioMetrics', scenario, 'elapsedMs', 'p50'];
+      final before = _jsonNumber(baseline, path);
+      final after = _jsonNumber(current, path);
+      if (before == null && after == null) continue;
+      buffer.writeln('| Scenario ${_code(scenario)} elapsed p50 | '
+          '${_timingText(before)} | ${_timingText(after)} | '
+          '${_scenarioElapsedDelta(baseline, current, scenario)} |');
+    }
+    timingRow('Jank total p95', const ['jank', 'totalMs', 'p95']);
+    timingRow('Reconcile p95', const ['reconciliation', 'elapsedMs', 'p95']);
+    timingRow('Raster p95', const ['rasters', 'elapsedMs', 'p95']);
+    timingRow(
+      'Worker phase total p95',
+      const ['webWorker', 'phases', 'totalMs', 'p95'],
+    );
+    timingRow('Tile replay p95', const ['tiles', 'replayMs', 'p95']);
+    countRow('Jank frames', const ['jank', 'count']);
+    countRow(
+      'Reconcile fallbacks',
+      const ['reconciliation', 'fallbackReasons', '*'],
+      absentIsZero: true,
+    );
+    countRow(
+      'Page-raster rejects',
+      const ['pageRasters', 'outcomes', 'reject'],
+      absentIsZero: true,
+    );
+    countRow(
+      'Web-worker fatal fallbacks',
+      const ['webWorker', 'outcomes', 'fallback'],
+      absentIsZero: true,
+    );
+    buffer
+      ..writeln()
+      ..writeln('</details>')
+      ..writeln();
+    return buffer.toString();
+  }
+
+  String toMarkdown({String? label}) {
+    final baselineScenarios = _jsonCountMap(baseline, const ['scenarios']);
+    final currentScenarios = _jsonCountMap(current, const ['scenarios']);
+    final sameCoverage = _sameMapKeys(baselineScenarios, currentScenarios);
+    final measuredScenarios = <String>{
+      ..._jsonMapKeys(baseline, const ['scenarioMetrics']),
+      ..._jsonMapKeys(current, const ['scenarioMetrics']),
+    }.toList()
+      ..sort();
+    final platform =
+        label == null || label.toLowerCase() == 'web' ? '' : ' $label';
+    final artifactKind = label == null ? 'web' : label;
     final buffer = StringBuffer()
-      ..writeln('## Patrol comparison with `main`')
+      ..writeln('## Patrol$platform comparison with `main`')
       ..writeln()
       ..writeln(
         'Advisory only: timing changes do not fail CI. The baseline is the '
-        'newest usable web artifact from `Patrol E2E` on `main`.',
+        'newest usable $artifactKind artifact from `Patrol E2E` on `main`.',
+      )
+      ..writeln()
+      ..writeln(
+        'Scenario elapsed p50 changes are labelled `within run spread` when '
+        'both cohorts have at least four samples and their interquartile '
+        'ranges overlap.',
       )
       ..write(
         sameCoverage
@@ -470,11 +768,16 @@ class PatrolPerfComparison {
           '${_numberText(after)} | ${_countDelta(before, after)} |');
     }
 
-    void timingRow(String label, List<String> path) {
+    void timingRow(
+      String label,
+      List<String> path, {
+      String? change,
+    }) {
       final before = _jsonNumber(baseline, path);
       final after = _jsonNumber(current, path);
       buffer.writeln('| $label | ${_timingText(before)} | '
-          '${_timingText(after)} | ${_percentDelta(before, after)} |');
+          '${_timingText(after)} | '
+          '${change ?? _percentDelta(before, after)} |');
     }
 
     countRow('Journey segments', const ['journeys']);
@@ -534,6 +837,11 @@ class PatrolPerfComparison {
       countRow(
         'Scenario $scenario runs',
         ['scenarioMetrics', scenario, 'runs'],
+      );
+      timingRow(
+        'Scenario $scenario elapsed p50',
+        ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
+        change: _scenarioElapsedDelta(baseline, current, scenario),
       );
       timingRow(
         'Scenario $scenario elapsed p95',
@@ -667,6 +975,9 @@ class _ScenarioMetrics {
   Map<String, Object?> toJson() => {
         'runs': elapsedMs.length,
         'elapsedMs': _distribution(elapsedMs),
+        // Retain the small per-scenario sample set so PR comparisons can
+        // distinguish a shifted distribution from overlapping runner noise.
+        'elapsedSamplesMs': List<double>.unmodifiable(elapsedMs),
         'jank': {
           'count': jankTotalMs.length,
           'totalMs': _distribution(jankTotalMs),
@@ -795,6 +1106,12 @@ class _TileMetrics {
   final sliceBatchesByRungClass = <String, int>{};
   final retainedBytes = <int>[];
   final retainedEntries = <int>[];
+  final budgetBytes = <int>[];
+  var policySamples = 0;
+  var scheduled = 0;
+  var landed = 0;
+  var discarded = 0;
+  var staticRescheduled = 0;
 
   int get prefetchBatches => sliceBatchesByClass['prefetch'] ?? 0;
 
@@ -804,6 +1121,13 @@ class _TileMetrics {
   int get peakRetainedEntries => retainedEntries.isEmpty
       ? 0
       : retainedEntries.reduce((a, b) => a > b ? a : b);
+
+  int get peakBudgetBytes =>
+      budgetBytes.isEmpty ? 0 : budgetBytes.reduce((a, b) => a > b ? a : b);
+
+  String get discardRateText => scheduled == 0
+      ? 'n/a'
+      : '${(discarded * 100 / scheduled).toStringAsFixed(1)}%';
 
   String get sliceClassText {
     if (sliceBatchesByClass.isEmpty) return 'none';
@@ -827,6 +1151,20 @@ class _TileMetrics {
       replayRequests++;
       _addMilliseconds(replayMs, fields['replay']);
       _addMilliseconds(rasterMs, fields['raster']);
+      return;
+    }
+    if (message.startsWith('tile stats ')) {
+      policySamples++;
+      final budget = int.tryParse(fields['budget'] ?? '');
+      if (budget != null) budgetBytes.add(budget);
+      scheduled += int.tryParse(fields['scheduled'] ?? '') ?? 0;
+      landed += int.tryParse(fields['landed'] ?? '') ?? 0;
+      discarded += int.tryParse(fields['discarded'] ?? '') ?? 0;
+      staticRescheduled += int.tryParse(fields['staticRescheduled'] ?? '') ?? 0;
+      final retained = int.tryParse(fields['retained'] ?? '');
+      if (retained != null) retainedBytes.add(retained);
+      final entries = int.tryParse(fields['entries'] ?? '');
+      if (entries != null) retainedEntries.add(entries);
       return;
     }
     if (!message.startsWith('tile slice ')) return;
@@ -866,6 +1204,17 @@ class _TileMetrics {
         'retainedEntries': {
           'samples': retainedEntries.length,
           'max': peakRetainedEntries,
+        },
+        'policy': {
+          'samples': policySamples,
+          'budgetBytes': {
+            'samples': budgetBytes.length,
+            'max': peakBudgetBytes,
+          },
+          'scheduled': scheduled,
+          'landed': landed,
+          'discarded': discarded,
+          'staticRescheduled': staticRescheduled,
         },
       };
 }
@@ -958,6 +1307,11 @@ String _p95Text(List<double> values) {
   return distribution == null ? 'n/a' : _formatMs(distribution['p95']!);
 }
 
+String _p50Text(List<double> values) {
+  final distribution = _distribution(values);
+  return distribution == null ? 'n/a' : _formatMs(distribution['p50']!);
+}
+
 String _mapText(Map<String, int> values) {
   if (values.isEmpty) return 'none';
   final entries = values.entries.toList()
@@ -1018,9 +1372,196 @@ Set<String> _jsonMapKeys(Object? root, List<String> path) {
       : const {};
 }
 
-bool _sameCountMap(Map<String, int> a, Map<String, int> b) =>
-    a.length == b.length &&
-    a.entries.every((entry) => b[entry.key] == entry.value);
+List<double> _jsonNumberList(Object? root, List<String> path) {
+  Object? value = root;
+  for (final part in path) {
+    if (value is! Map || !value.containsKey(part)) return const [];
+    value = value[part];
+  }
+  if (value is! List) return const [];
+  return [
+    for (final item in value)
+      if (item is num) item.toDouble(),
+  ];
+}
+
+String _scenarioElapsedDelta(
+  Object? baseline,
+  Object? current,
+  String scenario,
+) {
+  final before = _jsonNumber(
+    baseline,
+    ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
+  );
+  final after = _jsonNumber(
+    current,
+    ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
+  );
+  final beforeSamples = _jsonNumberList(
+    baseline,
+    ['scenarioMetrics', scenario, 'elapsedSamplesMs'],
+  );
+  final afterSamples = _jsonNumberList(
+    current,
+    ['scenarioMetrics', scenario, 'elapsedSamplesMs'],
+  );
+  if (_interquartileRangesOverlap(beforeSamples, afterSamples)) {
+    return 'within run spread';
+  }
+  return _percentDelta(before, after);
+}
+
+bool _interquartileRangesOverlap(List<double> a, List<double> b) {
+  if (a.length < 4 || b.length < 4) return false;
+  final sortedA = List<double>.of(a)..sort();
+  final sortedB = List<double>.of(b)..sort();
+  final aLow = _percentile(sortedA, 0.25);
+  final aHigh = _percentile(sortedA, 0.75);
+  final bLow = _percentile(sortedB, 0.25);
+  final bHigh = _percentile(sortedB, 0.75);
+  return aLow <= bHigh && bLow <= aHigh;
+}
+
+typedef _GpuTileSpeedup = ({
+  double firstTileMs,
+  double canvasTileMs,
+  double? pairedSpeedup,
+});
+
+String? _scenarioElapsedHeadline(
+  Object? current, {
+  Object? baseline,
+}) {
+  final scenarios = <String>{
+    if (baseline != null) ..._jsonMapKeys(baseline, const ['scenarioMetrics']),
+    ..._jsonMapKeys(current, const ['scenarioMetrics']),
+  }.toList()
+    ..sort();
+  // A large specialized matrix (the GPU benchmark currently has dozens of
+  // scenarios) already supplies its own compact headline. Keep this generic
+  // fallback for the small web/native Patrol journeys where every scenario
+  // fits on one readable line.
+  if (scenarios.isEmpty || scenarios.length > 8) return null;
+
+  if (baseline != null) {
+    final values = <String>[];
+    for (final scenario in scenarios) {
+      final before = _jsonNumber(
+        baseline,
+        ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
+      );
+      final after = _jsonNumber(
+        current,
+        ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
+      );
+      if (before == null && after == null) continue;
+      values.add(
+        '${_code(scenario)} **${_timingText(before)} → '
+        '${_timingText(after)} '
+        '(${_scenarioElapsedDelta(baseline, current, scenario)})**',
+      );
+    }
+    return values.isEmpty
+        ? null
+        : '**Scenario elapsed p50 (main → PR):** ${values.join('; ')}.';
+  }
+
+  final values = <String>[];
+  for (final scenario in scenarios) {
+    final elapsed = _jsonNumber(
+      current,
+      ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
+    );
+    if (elapsed != null) {
+      values.add('${_code(scenario)} **${_timingText(elapsed)}**');
+    }
+  }
+  return values.isEmpty
+      ? null
+      : '**Scenario elapsed p50:** ${values.join('; ')}.';
+}
+
+Map<String, _GpuTileSpeedup> _gpuTileSpeedups(Object? trace) {
+  const suffix = '-first-tile';
+  final result = <String, _GpuTileSpeedup>{};
+  final scenarios = _jsonMapKeys(trace, const ['scenarioMetrics']).toList()
+    ..sort();
+  for (final scenario in scenarios) {
+    if (!scenario.startsWith('gpu-') || !scenario.endsWith(suffix)) continue;
+    final prefix = scenario.substring(0, scenario.length - suffix.length);
+    final firstTile = _jsonNumber(
+      trace,
+      ['scenarioMetrics', scenario, 'elapsedMs', 'p50'],
+    );
+    final canvasTile = _jsonNumber(
+      trace,
+      ['scenarioMetrics', '$prefix-canvas-tile', 'elapsedMs', 'p50'],
+    );
+    if (firstTile == null || canvasTile == null || firstTile <= 0) continue;
+    final firstTileSamples = _jsonNumberList(
+      trace,
+      ['scenarioMetrics', scenario, 'elapsedSamplesMs'],
+    );
+    final canvasTileSamples = _jsonNumberList(
+      trace,
+      ['scenarioMetrics', '$prefix-canvas-tile', 'elapsedSamplesMs'],
+    );
+    final pairedRatios = <double>[];
+    if (firstTileSamples.length == canvasTileSamples.length) {
+      for (var i = 0; i < firstTileSamples.length; i++) {
+        final first = firstTileSamples[i];
+        if (first > 0) pairedRatios.add(canvasTileSamples[i] / first);
+      }
+    }
+    final sortedRatios = List<double>.of(pairedRatios)..sort();
+    result[prefix.substring('gpu-'.length).replaceAll('-', ' ')] = (
+      firstTileMs: firstTile.toDouble(),
+      canvasTileMs: canvasTile.toDouble(),
+      pairedSpeedup:
+          sortedRatios.isEmpty ? null : _percentile(sortedRatios, 0.50),
+    );
+  }
+  return result;
+}
+
+String? _gpuTileSpeedupHeadline(
+  Object? current, {
+  Object? baseline,
+}) {
+  final before = baseline == null
+      ? const <String, _GpuTileSpeedup>{}
+      : _gpuTileSpeedups(baseline);
+  final after = _gpuTileSpeedups(current);
+  final workloads = <String>{...before.keys, ...after.keys}.toList()..sort();
+  if (workloads.isEmpty) return null;
+
+  String speedup(_GpuTileSpeedup? value) => value == null
+      ? 'n/a'
+      : '${_ratioText(value.pairedSpeedup ?? value.canvasTileMs / value.firstTileMs)}×';
+
+  if (baseline != null) {
+    final values = workloads.map(
+        (workload) => '${_code(workload)} **${speedup(before[workload])} → '
+            '${speedup(after[workload])}**');
+    return '**First tile vs Canvas (p50, main → PR):** '
+        '${values.join('; ')}.';
+  }
+
+  final values = workloads.map((workload) {
+    final value = after[workload]!;
+    return '${_code(workload)} **${speedup(value)}** '
+        '(${_formatMs(value.firstTileMs)} vs '
+        '${_formatMs(value.canvasTileMs)})';
+  });
+  return '**First tile vs Canvas (p50):** ${values.join('; ')}.';
+}
+
+String _ratioText(double value) =>
+    value < 1 ? value.toStringAsFixed(2) : value.toStringAsFixed(1);
+
+bool _sameMapKeys(Map<String, int> a, Map<String, int> b) =>
+    a.length == b.length && a.keys.every(b.containsKey);
 
 String _mapComparisonRow(
   String label,
