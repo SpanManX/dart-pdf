@@ -28,6 +28,7 @@ import 'editing_form_style.dart';
 import 'editing_measure.dart';
 import 'editing_panel.dart';
 import 'editing_value_field.dart';
+import 'editing_preferences.dart';
 import 'editing_takeoff.dart';
 import 'line_style.dart';
 import 'editing_signature.dart';
@@ -43,6 +44,103 @@ typedef PdfEditingToolbarWidgetBuilder = Widget Function(
   PdfEditingController controller,
   PdfViewerController viewerController,
 );
+
+/// Opens the stock cursor-guide and grid-snap settings.
+///
+/// The switches update [preferences] live and persist through
+/// [PdfEditingPreferences]. They are display/interaction settings only; no
+/// guide or grid is written into the PDF.
+Future<void> showPdfEditingGuidesDialog(
+  BuildContext context, {
+  required PdfEditingPreferences preferences,
+}) async {
+  String spacingLabel(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(1);
+
+  await showPdfDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Cursor guides and grid'),
+      contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      content: SizedBox(
+        width: 360,
+        child: ListenableBuilder(
+          listenable: preferences,
+          builder: (context, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                key: const ValueKey('pdf-cursor-guide-vertical'),
+                secondary: const Icon(Icons.vertical_align_center),
+                title: const Text('Vertical cursor line'),
+                value: preferences.showVerticalCursorGuide,
+                onChanged: (value) =>
+                    preferences.showVerticalCursorGuide = value,
+              ),
+              SwitchListTile(
+                key: const ValueKey('pdf-cursor-guide-horizontal'),
+                secondary: const Icon(Icons.horizontal_rule),
+                title: const Text('Horizontal cursor line'),
+                value: preferences.showHorizontalCursorGuide,
+                onChanged: (value) =>
+                    preferences.showHorizontalCursorGuide = value,
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                key: const ValueKey('pdf-grid-snap'),
+                secondary: const Icon(Icons.grid_4x4),
+                title: const Text('Snap to grid'),
+                subtitle: const Text('Hold Alt to bypass snapping'),
+                value: preferences.snapToGrid,
+                onChanged: (value) => preferences.snapToGrid = value,
+              ),
+              SwitchListTile(
+                key: const ValueKey('pdf-grid-visible'),
+                secondary: const Icon(Icons.grid_on_outlined),
+                title: const Text('Show grid lines'),
+                subtitle: const Text('Display only; not added to the PDF'),
+                value: preferences.showSnapGrid,
+                onChanged: (value) => preferences.showSnapGrid = value,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Row(children: [
+                  const Text('Grid spacing'),
+                  Expanded(
+                    child: Slider(
+                      key: const ValueKey('pdf-grid-spacing'),
+                      value: preferences.gridSpacing.clamp(1, 144),
+                      min: 1,
+                      max: 144,
+                      divisions: 143,
+                      label: '${spacingLabel(preferences.gridSpacing)} pt',
+                      onChanged: (value) => preferences.gridSpacing = value,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      '${spacingLabel(preferences.gridSpacing)} pt',
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                ]),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          key: const ValueKey('pdf-guides-done'),
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(pdfL10n(context).done),
+        ),
+      ],
+    ),
+  );
+}
 
 /// A ready-made toolbar for [PdfEditingController].
 ///
@@ -1593,11 +1691,9 @@ class _PdfEditingToolbarState extends State<PdfEditingToolbar> {
           onHand: _activateHandMode,
           onSelect: _activateSelectMode,
         ),
-        if (editingGroups.isNotEmpty ||
-            widget.onSave != null ||
-            widget.trailing.isNotEmpty)
-          _DockDivider(axis: axis),
       ],
+      if (showNavigationModes && editingGroups.isNotEmpty)
+        _DockDivider(axis: axis),
       for (final group in editingGroups)
         _GroupChip(
           key: ValueKey('pdf-group-${group.id}'),
