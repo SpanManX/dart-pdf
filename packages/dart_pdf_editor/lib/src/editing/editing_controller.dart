@@ -17,8 +17,9 @@ import 'editing_preferences.dart';
 import 'editing_signature.dart';
 import 'editing_snapshot_clipboard.dart';
 import 'editing_tool_behavior.dart';
-import 'line_style.dart';
 import 'editing_stamps.dart';
+import 'line_style.dart';
+import 'saved_annotation.dart';
 import 'text_prompt.dart';
 import 'thumbnail_cache.dart';
 
@@ -64,6 +65,18 @@ Map<String, String> _normalizeStampTemplateValues(Map<String, String> values) {
     normalized[key] = entry.value;
   }
   return Map.unmodifiable(normalized);
+}
+
+String _nextSavedName(
+    String? requested, String fallback, Iterable<String> existing) {
+  final trimmed = requested?.trim() ?? '';
+  if (trimmed.isNotEmpty) return trimmed;
+  final used = existing.toSet();
+  var number = 1;
+  while (used.contains('$fallback $number')) {
+    number++;
+  }
+  return '$fallback $number';
 }
 
 /// The annotation tools a [PdfEditingController] can arm.
@@ -1478,7 +1491,12 @@ class PdfEditingController extends ChangeNotifier {
   set tool(PdfEditTool? value) {
     // Assigning null while a markup tool is armed is an intentional clear
     // (Escape and the mobile tool switcher's Clear both use this path).
-    if (value == _tool && _markupTool == null && !_handMode) return;
+    if (value == _tool &&
+        _markupTool == null &&
+        !_handMode &&
+        _activeSavedAnnotationId == null) {
+      return;
+    }
     preferences.snapshotActiveStyleScope(lockedFields: _lockedStyleFields);
     // leaving an ink-like tool commits the drawing, like lifting the pen.
     //
@@ -1501,6 +1519,7 @@ class PdfEditingController extends ChangeNotifier {
     _tool = value;
     _markupTool = null;
     _handMode = false;
+    _activeSavedAnnotationId = null;
     if (value != PdfEditTool.select) _selected.clear();
     if (value != PdfEditTool.content) _selectedElement = null;
     _cropModeArmed = false;
@@ -1563,6 +1582,7 @@ class PdfEditingController extends ChangeNotifier {
     if (_tool != null || _handMode) tool = null;
     preferences.snapshotActiveStyleScope(lockedFields: _lockedStyleFields);
     _markupTool = value;
+    _activeSavedAnnotationId = null;
     _selected.clear();
     _selectedElement = null;
     _cropModeArmed = false;
@@ -3182,6 +3202,86 @@ class PdfEditingController extends ChangeNotifier {
 
   // ---------------------------------------------------------------------
   // signature
+
+  /// The user's persisted signature library.
+  List<PdfSavedSignature> get savedSignatures => preferences.savedSignatures;
+
+  /// The signature currently used by [placeSignature].
+  PdfSavedSignature? get activeSavedSignature =>
+      preferences.activeSavedSignature;
+
+  /// Selects [signature] for repeated placement. The creation colour and pen
+  /// follow the signature's saved drawing style, and remain editable through
+  /// the normal toolbar controls afterwards.
+  void selectSavedSignature(PdfSavedSignature signature) {
+    final index =
+        savedSignatures.indexWhere((entry) => entry.id == signature.id);
+    if (index == -1) return;
+    final current = savedSignatures[index];
+    preferences.activeSavedSignature = current;
+    color = Color(0xFF000000 | current.signature.color);
+    preferences.strokeWidth = current.signature.strokeWidth;
+  }
+
+  /// Adds [signature] to the library and makes it active.
+  PdfSavedSignature addSavedSignature(PdfInkSignature signature,
+      {String? name}) {
+    final entry = PdfSavedSignature.create(
+      name: _nextSavedName(
+          name, 'Signature', savedSignatures.map((entry) => entry.name)),
+      signature: signature,
+    );
+    preferences.savedSignatures = [...savedSignatures, entry];
+    selectSavedSignature(entry);
+    return entry;
+  }
+
+  /// Renames a saved signature without changing its active identity.
+  bool renameSavedSignature(PdfSavedSignature signature, String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return false;
+    final index =
+        savedSignatures.indexWhere((entry) => entry.id == signature.id);
+    if (index == -1) return false;
+    final next = savedSignatures[index].copyWith(name: trimmed);
+    preferences.savedSignatures = [
+      for (var i = 0; i < savedSignatures.length; i++)
+        i == index ? next : savedSignatures[i],
+    ];
+    return true;
+  }
+
+  /// Replaces a saved signature's drawing while retaining its name and id.
+  bool redrawSavedSignature(
+      PdfSavedSignature signature, PdfInkSignature drawing) {
+    final index =
+        savedSignatures.indexWhere((entry) => entry.id == signature.id);
+    if (index == -1) return false;
+    final next = savedSignatures[index].copyWith(signature: drawing);
+    preferences.savedSignatures = [
+      for (var i = 0; i < savedSignatures.length; i++)
+        i == index ? next : savedSignatures[i],
+    ];
+    if (preferences.activeSavedSignature?.id == signature.id) {
+      selectSavedSignature(next);
+    }
+    return true;
+  }
+
+  /// Removes a saved signature. If it was active, the next remaining entry
+  /// becomes active automatically.
+  void removeSavedSignature(PdfSavedSignature signature) {
+    final wasActive = activeSavedSignature?.id == signature.id;
+    preferences.savedSignatures = [
+      for (final entry in savedSignatures)
+        if (entry.id != signature.id) entry,
+    ];
+    // Preferences chooses the replacement identity. Seed the creation style
+    // as well, just as an explicit picker selection does, so deleting the
+    // active row cannot leave the next signature using the deleted ink style.
+    final replacement = activeSavedSignature;
+    if (wasActive && replacement != null) selectSavedSignature(replacement);
+  }
 
   /// The layout [placeSignature] would commit for a tap at ([x], [y]):
   /// the page-space strokes, pressures, ink color, and stroke width -
@@ -5222,6 +5322,223 @@ class PdfEditingController extends ChangeNotifier {
   // ---------------------------------------------------------------------
   // clipboard
 
+  String? _activeSavedAnnotationId;
+
+  /// The persisted reusable-annotation library shared through
+  /// [preferences].
+  List<PdfSavedAnnotation> get savedAnnotations => preferences.savedAnnotations;
+
+  /// The library item currently riding the pointer, ready to drop onto a
+  /// page. It resolves by id on every read so renames/group moves update in
+  /// place and deleting the item cancels placement automatically.
+  PdfSavedAnnotation? get activeSavedAnnotation {
+    final id = _activeSavedAnnotationId;
+    if (id == null) return null;
+    for (final entry in savedAnnotations) {
+      if (entry.id == id) return entry;
+    }
+    return null;
+  }
+
+  /// Distinct, alphabetized group names currently used by library items.
+  List<String> get savedAnnotationGroups {
+    final groups = <String>{
+      for (final entry in savedAnnotations)
+        if (entry.group != null) entry.group!,
+    }.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return List.unmodifiable(groups);
+  }
+
+  /// Whether the single selected annotation can be captured into the
+  /// reusable library. Links, widgets, and popups are intentionally excluded
+  /// because their targets belong to the source document.
+  bool get canSaveSelectedAnnotation {
+    if (_selected.length != 1) return false;
+    final annotation = selectedAnnotation;
+    return annotation != null &&
+        !const {'Link', 'Widget', 'Popup'}.contains(annotation.subtype);
+  }
+
+  /// Captures the selected annotation into the device-side library.
+  /// Returns null when the selection is unsupported.
+  PdfSavedAnnotation? saveSelectedAnnotation(String name) {
+    if (!canSaveSelectedAnnotation) return null;
+    final slot = _selected.single;
+    final annotation = _annotationAt(slot);
+    if (annotation == null) return null;
+    final snapshot = PdfAnnotationSnapshot.capture(
+      _document,
+      annotation,
+      sourcePageRotation: _page(slot.$1).rotation,
+    );
+    if (snapshot == null) return null;
+    final entry = PdfSavedAnnotation.create(
+      name: _nextSavedName(
+        name,
+        annotation.subtype,
+        savedAnnotations.map((entry) => entry.name),
+      ),
+      snapshot: snapshot,
+    );
+    preferences.savedAnnotations = [...savedAnnotations, entry];
+    return entry;
+  }
+
+  /// Renames a library item. Returns false for stale entries or blank names.
+  bool renameSavedAnnotation(PdfSavedAnnotation annotation, String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return false;
+    final index =
+        savedAnnotations.indexWhere((entry) => entry.id == annotation.id);
+    if (index == -1) return false;
+    preferences.savedAnnotations = [
+      for (var i = 0; i < savedAnnotations.length; i++)
+        i == index
+            ? savedAnnotations[index].copyWith(name: trimmed)
+            : savedAnnotations[i],
+    ];
+    return true;
+  }
+
+  /// Moves a library item into [group], or to Ungrouped when null/blank.
+  /// Returns false for a stale item.
+  bool groupSavedAnnotation(PdfSavedAnnotation annotation, String? group) {
+    final index =
+        savedAnnotations.indexWhere((entry) => entry.id == annotation.id);
+    if (index == -1) return false;
+    final normalized = group?.trim();
+    final nextGroup =
+        normalized == null || normalized.isEmpty ? null : normalized;
+    if (savedAnnotations[index].group == nextGroup) return true;
+    preferences.savedAnnotations = [
+      for (var i = 0; i < savedAnnotations.length; i++)
+        i == index
+            ? savedAnnotations[index].copyWith(group: (nextGroup,))
+            : savedAnnotations[i],
+    ];
+    return true;
+  }
+
+  /// Renames a group across all of its entries. Renaming to an existing
+  /// group merges them; a blank name is rejected.
+  bool renameSavedAnnotationGroup(String group, String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return false;
+    if (!savedAnnotations.any((entry) => entry.group == group)) return false;
+    final next = [
+      for (final entry in savedAnnotations)
+        if (entry.group == group) ...[
+          entry.copyWith(group: (trimmed,)),
+        ] else ...[
+          entry,
+        ],
+    ];
+    preferences.savedAnnotations = next;
+    return true;
+  }
+
+  /// Removes a group without deleting its annotations; its entries become
+  /// ungrouped.
+  bool removeSavedAnnotationGroup(String group) {
+    if (!savedAnnotations.any((entry) => entry.group == group)) return false;
+    preferences.savedAnnotations = [
+      for (final entry in savedAnnotations)
+        entry.group == group ? entry.copyWith(group: (null,)) : entry,
+    ];
+    return true;
+  }
+
+  /// Deletes a library item without touching annotations already placed in a
+  /// document.
+  void removeSavedAnnotation(PdfSavedAnnotation annotation) {
+    if (_activeSavedAnnotationId == annotation.id) {
+      _activeSavedAnnotationId = null;
+    }
+    preferences.savedAnnotations = [
+      for (final entry in savedAnnotations)
+        if (entry.id != annotation.id) entry,
+    ];
+  }
+
+  /// Arms a reusable annotation as a placement tool. The snapshot also fills
+  /// the ordinary annotation clipboard, so keyboard/menu Paste remains an
+  /// alternative and works across document tabs.
+  bool beginSavedAnnotationPlacement(PdfSavedAnnotation annotation) {
+    final current = savedAnnotations
+        .where((entry) => entry.id == annotation.id)
+        .firstOrNull;
+    if (current == null) return false;
+    // A library placement is its own mutually-exclusive interaction mode.
+    // Going through the normal setter commits pending ink and clears markup,
+    // hand mode, selections, and any previously active library item.
+    tool = null;
+    clearAnnotationSelection();
+    clearElementSelection();
+    _activeSavedAnnotationId = current.id;
+    annotationClipboard.set(
+      [current.snapshot],
+      owner: current,
+      sourcePage: -1,
+    );
+    snapshotClipboard.clear();
+    notifyListeners();
+    return true;
+  }
+
+  /// Cancels the pointer-following library placement mode.
+  void cancelSavedAnnotationPlacement() {
+    if (_activeSavedAnnotationId == null) return;
+    _activeSavedAnnotationId = null;
+    notifyListeners();
+  }
+
+  /// Drops the active library item centered on ([x], [y]) and keeps it armed
+  /// for repeat placement until Escape or another tool is chosen.
+  bool placeActiveSavedAnnotation(int pageIndex, double x, double y) {
+    final annotation = activeSavedAnnotation;
+    if (annotation == null) {
+      cancelSavedAnnotationPlacement();
+      return false;
+    }
+    // Refill defensively: another tab may have replaced the shared clipboard
+    // since this item was armed.
+    annotationClipboard.set(
+      [annotation.snapshot],
+      owner: annotation,
+      sourcePage: -1,
+    );
+    snapshotClipboard.clear();
+    return pasteAnnotations(pageIndex, at: (x, y), selectPasted: false);
+  }
+
+  /// Loads [annotation] into the ordinary annotation clipboard. The existing
+  /// Paste command can then place it repeatedly in this or another document.
+  bool activateSavedAnnotation(PdfSavedAnnotation annotation) {
+    if (!savedAnnotations.any((entry) => entry.id == annotation.id)) {
+      return false;
+    }
+    annotationClipboard.set(
+      [annotation.snapshot],
+      owner: annotation,
+      sourcePage: -1,
+    );
+    snapshotClipboard.clear();
+    notifyListeners();
+    return true;
+  }
+
+  /// Places one saved item and leaves it on the clipboard for repeat Paste.
+  /// Every call materializes a new snapshot and therefore gets a fresh /NM.
+  bool placeSavedAnnotation(
+    PdfSavedAnnotation annotation,
+    int pageIndex, {
+    (double, double)? at,
+  }) {
+    if (!activateSavedAnnotation(annotation)) return false;
+    return pasteAnnotations(pageIndex, at: at);
+  }
+
   /// Whether [pasteAnnotations] has anything to paste - including a copy
   /// made in another document tab, since [annotationClipboard] is shared.
   bool get hasAnnotationClipboard => annotationClipboard.isNotEmpty;
@@ -5273,7 +5590,11 @@ class PdfEditingController extends ChangeNotifier {
   /// page; the cascade, which has no point the user aimed at, stays
   /// tethered to the page ([_tetherShift]). Returns whether anything was
   /// pasted.
-  bool pasteAnnotations(int pageIndex, {(double, double)? at}) {
+  bool pasteAnnotations(
+    int pageIndex, {
+    (double, double)? at,
+    bool selectPasted = true,
+  }) {
     final clipboard = annotationClipboard.snapshots;
     if (clipboard.isEmpty) return false;
     if (pageIndex < 0 || pageIndex >= _document.pageCount) return false;
@@ -5316,13 +5637,15 @@ class PdfEditingController extends ChangeNotifier {
     );
     if (!pasted) return false;
     annotationClipboard.markPasted();
-    // pasted entries appended to /Annots - select them, like any editor
-    tool = PdfEditTool.select;
-    final total = _page(pageIndex).annotations.length;
-    _selected
-      ..clear()
-      ..addAll([for (var i = total - count; i < total; i++) (pageIndex, i)]);
-    notifyListeners();
+    if (selectPasted) {
+      // pasted entries appended to /Annots - select them, like any editor
+      tool = PdfEditTool.select;
+      final total = _page(pageIndex).annotations.length;
+      _selected
+        ..clear()
+        ..addAll([for (var i = total - count; i < total; i++) (pageIndex, i)]);
+      notifyListeners();
+    }
     return true;
   }
 
