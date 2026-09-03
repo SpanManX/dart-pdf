@@ -26,6 +26,13 @@ on:
       - 'pdf_ocr_vlm-v*'
       - 'pdf_ocr_ondevice-v*'
 
+# GitHub can occasionally deliver the same tag push more than once. Serialize
+# each immutable tag so a duplicate waits, observes the published version in
+# check-publish-needed, and exits as a successful no-op.
+concurrency:
+  group: pub-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   check-publish-needed:
     runs-on: ubuntu-latest
@@ -146,7 +153,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/pdf_cos
@@ -157,7 +164,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/pdf_test_fixtures
@@ -168,7 +175,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/pdf_document
@@ -179,7 +186,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/pdf_graphics
@@ -190,7 +197,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/dart_pdf_cli
@@ -201,7 +208,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/dart_pdf_editor
@@ -220,7 +227,7 @@ jobs:
           persist-credentials: false
       # Provision pub.dev's OIDC token before Flutter's SDK shadows `dart`;
       # this is the ordering used by dart-lang/setup-dart's publish workflow.
-      - uses: dart-lang/setup-dart@7654d458321ee25acccccfdb86cd48bd95768ff1
+      - uses: dart-lang/setup-dart@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.0
@@ -245,7 +252,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/dart_pdf_editor_flutter_gpu
@@ -256,7 +263,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/pdf_ocr_vlm
@@ -267,7 +274,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    uses: dart-lang/setup-dart/.github/workflows/publish.yml@7654d458321ee25acccccfdb86cd48bd95768ff1
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@6afc89df92d6eb3834022f73cd65adc8cdfcb92d
     with:
       environment: pub.dev
       working-directory: packages/pdf_ocr_ondevice
