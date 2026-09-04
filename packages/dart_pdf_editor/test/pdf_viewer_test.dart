@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart' show kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pdf_cos/pdf_cos.dart';
 import 'package:pdf_cos/perf.dart';
 import 'package:pdf_document/pdf_document.dart';
 import 'package:dart_pdf_editor/dart_pdf_editor.dart';
@@ -73,6 +74,26 @@ Uint8List buildUriLinkPdf(String url) {
 Uint8List buildPlainAnnotationPdf() {
   final editor = PdfEditor(PdfDocument.open(buildClassicPdf()))
     ..addNote(0, 100, 700, 'Host action');
+  return editor.save();
+}
+
+Uint8List buildDisjointHighlightPdf({bool rotated = false}) {
+  final document = PdfDocument.open(buildClassicPdf());
+  final editor = PdfEditor(document)
+    ..addHighlight(0, const [
+      PdfRect(80, 680, 140, 700),
+      PdfRect(220, 680, 280, 700),
+      PdfRect(330, 680, 390, 700),
+    ]);
+  if (rotated) {
+    final annotation = document.page(0).annotations.single;
+    editor.rotateAnnotation(0, annotation, 20);
+    // One malformed group must not discard the two usable rotated groups and
+    // reinstate the broad /Rect hit target.
+    final points = document.cos.resolve(annotation.dict['QuadPoints']);
+    (points as CosArray).items[16] = const CosName('broken');
+    editor.setAnnotationContents(0, annotation, 'rotated fixture');
+  }
   return editor.save();
 }
 
@@ -1101,6 +1122,69 @@ void main() {
     expect(tap.pagePoint.dy, closeTo(690, 0.5));
     expect(tap.pageViewPosition.dx, closeTo(annotView(110, 690).dx, 0.5));
     expect(tap.pageViewPosition.dy, closeTo(annotView(110, 690).dy, 0.5));
+  });
+
+  testWidgets('text markup callback and click cursor only hit visible quads',
+      (tester) async {
+    final taps = <PdfAnnotationTapDetails>[];
+    await pumpViewer(
+      tester,
+      bytes: buildDisjointHighlightPdf(),
+      onAnnotationTap: taps.add,
+    );
+
+    MouseRegion region() => tester.widget<MouseRegion>(find
+        .descendant(
+          of: find.byType(PdfViewer),
+          matching: find.byType(MouseRegion),
+        )
+        .first);
+    final gesture =
+        await tester.createGesture(kind: PointerDeviceKind.mouse, pointer: 13);
+    await gesture.addPointer(location: annotView(170, 690));
+    addTearDown(gesture.removePointer);
+    await tester.pump();
+    await gesture.moveTo(annotView(171, 690));
+    await tester.pump();
+    expect(region().cursor, SystemMouseCursors.grab,
+        reason: 'the invisible gap inside a markup /Rect is not clickable');
+
+    await tester.tapAt(annotView(170, 690));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(taps, isEmpty);
+
+    await gesture.moveTo(annotView(110, 690));
+    await tester.pump();
+    expect(region().cursor, SystemMouseCursors.click);
+
+    await tester.tapAt(annotView(110, 690));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(taps, hasLength(1));
+    expect(taps.single.annotation.subtype, 'Highlight');
+  });
+
+  testWidgets(
+      'rotated markup uses valid quadrilaterals despite a malformed group',
+      (tester) async {
+    final taps = <PdfAnnotationTapDetails>[];
+    await pumpViewer(
+      tester,
+      bytes: buildDisjointHighlightPdf(rotated: true),
+      onAnnotationTap: taps.add,
+    );
+
+    // All source points turn 20 degrees around the annotation centre
+    // (235,690). This point is the turned centre of the whitespace between
+    // the first two colored runs: inside /Rect, outside both usable quads.
+    await tester.tapAt(annotView(183.32, 671.19));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(taps, isEmpty);
+
+    // Turned centre of the first run.
+    await tester.tapAt(annotView(117.54, 647.25));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(taps, hasLength(1));
+    expect(taps.single.annotation.subtype, 'Highlight');
   });
 
   testWidgets('tapping an http link opens it via the default launcher',
