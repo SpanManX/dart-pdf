@@ -365,6 +365,91 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   });
 
+  testWidgets('mouse drag between text lines grab-pans the page',
+      (tester) async {
+    final controller = await pumpViewer(
+      tester,
+      bytes: buildTextLinesPdf(const ['First line', 'Second line']),
+    );
+    const scale = 800 / 612;
+    Offset view(double x, double y) => Offset(x * scale, (792 - y) * scale);
+
+    // The 12pt runs occupy y=717..729 and y=693..705. A press at y=711 is
+    // visibly between them but was within the old 14pt nearest-text radius.
+    final before = controller.visiblePageRegion(0)!;
+    final gesture = await tester.startGesture(view(100, 711),
+        kind: PointerDeviceKind.mouse);
+    await gesture.moveBy(const Offset(0, -20)); // cross drag slop over line 1
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, -80));
+    await tester.pump();
+    await gesture.up();
+    await tester.pump();
+
+    final after = controller.visiblePageRegion(0)!;
+    expect(after.bottom, greaterThan(before.bottom),
+        reason: 'inter-line whitespace should start grab-pan, not selection');
+    expect(controller.hasSelection, isFalse);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('inter-line gap shows the grab cursor', (tester) async {
+    await pumpViewer(
+      tester,
+      bytes: buildTextLinesPdf(const ['First line', 'Second line']),
+    );
+    const scale = 800 / 612;
+    Offset view(double x, double y) => Offset(x * scale, (792 - y) * scale);
+    MouseRegion region() => tester.widget<MouseRegion>(find
+        .descendant(
+            of: find.byType(PdfViewer), matching: find.byType(MouseRegion))
+        .first);
+
+    final hover =
+        await tester.createGesture(kind: PointerDeviceKind.mouse, pointer: 77);
+    await hover.addPointer(location: view(100, 711));
+    await tester.pump();
+    await hover.moveTo(view(101, 711));
+    await tester.pump();
+    expect(region().cursor, SystemMouseCursors.grab);
+    await hover.removePointer();
+    await tester.pump();
+  });
+
+  testWidgets('mouse double-click between text lines does not select',
+      (tester) async {
+    final controller = await pumpViewer(
+      tester,
+      bytes: buildTextLinesPdf(const ['First line', 'Second line']),
+    );
+    const scale = 800 / 612;
+    final gap = Offset(100 * scale, (792 - 711) * scale);
+    await tester.tapAt(gap, kind: PointerDeviceKind.mouse);
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.tapAt(gap, kind: PointerDeviceKind.mouse);
+    await tester.pump();
+    expect(controller.hasSelection, isFalse);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('right-click between text lines does not select adjacent text',
+      (tester) async {
+    final controller = await pumpViewer(
+      tester,
+      bytes: buildTextLinesPdf(const ['First line', 'Second line']),
+    );
+    const scale = 800 / 612;
+    final gap = Offset(100 * scale, (792 - 711) * scale);
+    await tester.tapAt(
+      gap,
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryButton,
+    );
+    await tester.pumpAndSettle();
+    expect(controller.hasSelection, isFalse);
+    expect(controller.selectedText, isEmpty);
+  });
+
   testWidgets('explicit Hand mode pans over text instead of selecting it',
       (tester) async {
     final bytes = buildMultiPagePdf(5);
