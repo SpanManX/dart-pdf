@@ -7,7 +7,7 @@ app:
   root: app
   version_file: pubspec.yaml
   require_clean_git: true
-  isolate_worktree: true
+  isolate_worktree: false
   metadata: fastlane/metadata
   release_notes: release-notes
   metadata_checks:
