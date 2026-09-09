@@ -114,7 +114,13 @@ jobs:
         if: always()
         with:
           name: storeflight-ledger-microsoft_store-${{ github.run_id }}
-          path: '**/.storeflight/{plans,releases,progress,certifications}/**'
+          # upload-artifact globs through @actions/glob, which has no brace
+          # expansion: a {a,b} pattern matches nothing at all, and only warns.
+          path: |
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 90
@@ -123,7 +129,11 @@ jobs:
         with:
           name: storeflight-state-microsoft_store-${{ github.run_id }}
           path: |
-            **/.storeflight/{plans,releases,progress,certifications,artifacts}/**
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
+            **/.storeflight/artifacts/**
             **/*.aab
             **/*.ipa
             **/*.pkg
@@ -210,7 +220,13 @@ jobs:
         if: always()
         with:
           name: storeflight-ledger-snap-${{ github.run_id }}
-          path: '**/.storeflight/{plans,releases,progress,certifications}/**'
+          # upload-artifact globs through @actions/glob, which has no brace
+          # expansion: a {a,b} pattern matches nothing at all, and only warns.
+          path: |
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 90
@@ -219,7 +235,11 @@ jobs:
         with:
           name: storeflight-state-snap-${{ github.run_id }}
           path: |
-            **/.storeflight/{plans,releases,progress,certifications,artifacts}/**
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
+            **/.storeflight/artifacts/**
             **/*.aab
             **/*.ipa
             **/*.pkg
@@ -305,7 +325,13 @@ jobs:
         if: always()
         with:
           name: storeflight-ledger-github_release_windows-${{ github.run_id }}
-          path: '**/.storeflight/{plans,releases,progress,certifications}/**'
+          # upload-artifact globs through @actions/glob, which has no brace
+          # expansion: a {a,b} pattern matches nothing at all, and only warns.
+          path: |
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 90
@@ -314,7 +340,11 @@ jobs:
         with:
           name: storeflight-state-github_release_windows-${{ github.run_id }}
           path: |
-            **/.storeflight/{plans,releases,progress,certifications,artifacts}/**
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
+            **/.storeflight/artifacts/**
             **/*.aab
             **/*.ipa
             **/*.pkg
@@ -401,7 +431,13 @@ jobs:
         if: always()
         with:
           name: storeflight-ledger-github_release_snap-${{ github.run_id }}
-          path: '**/.storeflight/{plans,releases,progress,certifications}/**'
+          # upload-artifact globs through @actions/glob, which has no brace
+          # expansion: a {a,b} pattern matches nothing at all, and only warns.
+          path: |
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 90
@@ -410,7 +446,11 @@ jobs:
         with:
           name: storeflight-state-github_release_snap-${{ github.run_id }}
           path: |
-            **/.storeflight/{plans,releases,progress,certifications,artifacts}/**
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
+            **/.storeflight/artifacts/**
             **/*.aab
             **/*.ipa
             **/*.pkg
@@ -495,7 +535,13 @@ jobs:
         if: always()
         with:
           name: storeflight-ledger-github_release_flatpak-${{ github.run_id }}
-          path: '**/.storeflight/{plans,releases,progress,certifications}/**'
+          # upload-artifact globs through @actions/glob, which has no brace
+          # expansion: a {a,b} pattern matches nothing at all, and only warns.
+          path: |
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 90
@@ -504,7 +550,11 @@ jobs:
         with:
           name: storeflight-state-github_release_flatpak-${{ github.run_id }}
           path: |
-            **/.storeflight/{plans,releases,progress,certifications,artifacts}/**
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
+            **/.storeflight/artifacts/**
             **/*.aab
             **/*.ipa
             **/*.pkg
@@ -588,7 +638,13 @@ jobs:
         if: always()
         with:
           name: storeflight-ledger-flatpak_flatpak-${{ github.run_id }}
-          path: '**/.storeflight/{plans,releases,progress,certifications}/**'
+          # upload-artifact globs through @actions/glob, which has no brace
+          # expansion: a {a,b} pattern matches nothing at all, and only warns.
+          path: |
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
           if-no-files-found: warn
           include-hidden-files: true
           retention-days: 90
@@ -597,7 +653,11 @@ jobs:
         with:
           name: storeflight-state-flatpak_flatpak-${{ github.run_id }}
           path: |
-            **/.storeflight/{plans,releases,progress,certifications,artifacts}/**
+            **/.storeflight/plans/**
+            **/.storeflight/releases/**
+            **/.storeflight/progress/**
+            **/.storeflight/certifications/**
+            **/.storeflight/artifacts/**
             **/*.aab
             **/*.ipa
             **/*.pkg
