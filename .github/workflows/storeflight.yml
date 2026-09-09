@@ -172,7 +172,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libjsoncpp-dev
           sudo snap install snapcraft --classic
       - name: Restore resumable release state
         if: inputs.resume_run_id != ''
@@ -364,7 +364,7 @@ jobs:
       - name: Install Snapcraft and Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libjsoncpp-dev
           sudo snap install snapcraft --classic
       - name: Restore resumable release state
         if: inputs.resume_run_id != ''
@@ -459,7 +459,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libjsoncpp-dev
       - name: Restore resumable release state
         if: inputs.resume_run_id != ''
         uses: actions/download-artifact@v8
@@ -552,7 +552,7 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          sudo apt-get install --yes clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libjsoncpp-dev
       - name: Restore resumable release state
         if: inputs.resume_run_id != ''
         uses: actions/download-artifact@v8
