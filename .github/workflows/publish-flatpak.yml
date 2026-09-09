@@ -4,8 +4,9 @@ name: Publish Flatpak repository
 # published app release is the source of truth: drafts are not distributed,
 # and the release asset digest is checked before any package is signed.
 on:
-  release:
-    types: [published]
+  # The release trigger is retired: Storeflight's flatpak delivery
+  # dispatches this workflow explicitly with the release's own source sha,
+  # so a release-published trigger would publish the same version twice.
   workflow_dispatch:
     inputs:
       version:
