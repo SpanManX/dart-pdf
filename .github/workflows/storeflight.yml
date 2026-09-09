@@ -35,7 +35,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  STOREFLIGHT_CONFIG: ../storeflight.yaml
+  STOREFLIGHT_CONFIG: storeflight.yaml
 
 jobs:
   microsoft_store:
