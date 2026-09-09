@@ -678,6 +678,15 @@ jobs:
         run: >-
           flutter test --platform chrome --no-cross-origin-isolation
           test/render_worker_sparse_web_test.dart test/compression_worker_test.dart
+          test/render_worker_text_reuse_test.dart
+          --reporter expanded
+      - name: Test high-zoom tiles and atomic region replay in Chrome
+        working-directory: packages/dart_pdf_editor
+        run: >-
+          flutter test --platform chrome --no-cross-origin-isolation
+          test/high_zoom_tiles_test.dart test/high_zoom_range_test.dart
+          test/atomic_region_replay_test.dart test/atomic_tile_budget_test.dart
+          test/tile_pacing_test.dart
           --reporter expanded
       - name: Test high-zoom tiles and atomic region replay in Chrome
         working-directory: packages/dart_pdf_editor
