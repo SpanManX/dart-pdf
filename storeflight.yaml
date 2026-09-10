@@ -175,8 +175,10 @@ profiles:
           - workflow
           - run
           - publish-flatpak.yml
+          # gh workflow run needs a named ref: the API rejects a raw sha with
+          # "No ref found". The release tag points at the release commit.
           - --ref
-          - "{source_sha}"
+          - "app-v{version}"
           - -f
           - version={version}
         idempotency_check: >-
