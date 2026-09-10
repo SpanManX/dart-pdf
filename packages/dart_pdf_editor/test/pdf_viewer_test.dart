@@ -381,6 +381,8 @@ void main() {
       view(358, 720 + 0.875 * 24),
       kind: PointerDeviceKind.mouse,
     );
+    await gesture.moveBy(const Offset(-20, 0)); // pass the drag slop
+    await tester.pump();
     await gesture.moveTo(view(330, 720 + 0.875 * 24));
     await tester.pump();
     await gesture.up();
