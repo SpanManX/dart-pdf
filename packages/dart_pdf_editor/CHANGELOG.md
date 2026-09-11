@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+- Group the view-options menu around what its rows actually do. Reflow text
+  and the page grid each REPLACE the page viewer, but they were drawn as two
+  independent checkmarks among the display overlays, and each silently cleared
+  the other - so leaving a mode meant unticking the one you ticked, and plain
+  pages existed only as the absence of both. They are now one `SegmentedButton`
+  at the top of the menu, with `Pages` as a real destination, over a
+  `PdfEditingPreferences.viewMode` (`PdfViewMode`) that owns the exclusivity
+  the callers kept re-implementing - including the command palette, which
+  toggled the two bools independently and could show both at once. On compact
+  layouts the modes move up into the Controls sheet's View section, one tap
+  from the document: Reflow already had a tile there, and the page grid needed
+  Controls -> Settings -> scroll -> tick. The Settings sheet keeps only
+  settings, and `showPdfShellViewOptionsSheet` no longer takes `reflow` /
+  `pageGrid`.
+
+- Draw unembedded standard-14 text in the metric-compatible TeX Gyre faces
+  bundled by `dart_pdf_editor_assets` - Heros for Helvetica/Arial, Termes for
+  Times, Cursor for Courier - ahead of any host font. Substituting a face with
+  different advances opened white space inside words, because each character is
+  placed at the PDF's own pen offset: DejaVu Sans, the previous fallback, drew
+  `J` at 295/1000 em where Helvetica's table reserves 500, leaving ~2.7pt of air
+  after every capital J at 12pt. Without the assets package the renderer now
+  names the host's metric equivalents (Arial, Liberation Sans, Nimbus Sans and
+  their serif/mono counterparts) before falling back further.
+- Load only the substitute weights and slants a page actually shows in the
+  canvas2d web worker, and none for an invisible OCR layer.
+- Export the substitution policy (`PdfBundledSubstitute`,
+  `pdfBundledSubstituteFor`) so a host can resolve the same faces the renderer
+  does.
+
 ## 4.4.0
 
 - Reach at least 10000% actual size independently of viewport width, with
